@@ -212,7 +212,8 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
 
         unsigned int i = edgeI;
         if(i >= edge_num) break;
-        
+       
+       // for edge in E
         v0 = edge_from[i];
         v1 = edge[i];
 
@@ -226,7 +227,7 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
         re = vertex[v1+1];
         rn = re - rb;
 
-        intersection(tmp + tmp1_begin, edge + lb, edge + rb, ln, rn, &tmp1_size);
+        intersection(tmp + tmp1_begin, edge + lb, edge + rb, ln, rn, &tmp1_size); // v3's set = tmp1 = N(v0) & N(v1)
         __syncthreads();
         
         if(tmp1_size == 0) continue;
@@ -234,14 +235,14 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
         loop_begin = vertex[v1];
         loop_limit = vertex[v1+1];
         for(uint32_t j = loop_begin; j < loop_limit; ++j) {
-            v2 = edge[j];
+            v2 = edge[j]; // for v2 in N(v1)
             if(v0==v2) continue;
 
             rb = vertex[v2];
             re = vertex[v2+1];
             rn = re - rb;
 
-            intersection(tmp + tmp2_begin, edge + lb, edge + rb, ln, rn, &tmp2_size);
+            intersection(tmp + tmp2_begin, edge + lb, edge + rb, ln, rn, &tmp2_size); // v4's set = tmp2 = N(v0) & N(v2)
             __syncthreads();
 
             if(tmp2_size <= 1) continue;
@@ -251,12 +252,12 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
             }
             __syncthreads();
 
-            detect_v2(tmp + tmp1_begin, tmp1_size, v2, &have_v2);
+            detect_v2(tmp + tmp1_begin, tmp1_size, v2, &have_v2); // notice that v2 may belong to tmp1, but we want tmp1 - {v2}
 
-            upd_ans(tmp + tmp1_begin, tmp + tmp2_begin, tmp1_size, tmp2_size, &mysum);
+            upd_ans(tmp + tmp1_begin, tmp + tmp2_begin, tmp1_size, tmp2_size, &mysum); // ans -= (tmp1 & tmp2).size
             __syncthreads();
 
-            if(threadIdx.x == 0) {
+            if(threadIdx.x == 0) { // ans += tmp1.size * tmp2.size, notice that v1 always exist in tmp2, so we use tmp2_size-1
                 if(have_v2) mysum += (tmp1_size - 1) * (tmp2_size - 1);
                 else mysum += tmp1_size * (tmp2_size - 1);
             }

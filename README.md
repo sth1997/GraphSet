@@ -1,13 +1,7 @@
-# GraphMining
+# GraphMining-GPU
 
-single thread and multi thread triangle counting 
+gpu codes are in `gpu/`
 
-./test/input_file is an example input
+Please `source env.sh` first.
 
-gorgon0 path : /home/zms/patents_input
-
-run like this:
-
-./graph_mining_test < input_file
-
-Use "module load openmpi-3.0.0" before compiling and running MPI.
+Run like this `./gpu_house Wiki-Vote ~zms/wiki-vote_input`
