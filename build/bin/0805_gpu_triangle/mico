@@ -1,9 +1,0 @@
-Load begin in /home/zms/mico_input
-load 1000000 edges
-Load time cost: 3 s 282446 us.
-HostToDevice time cost: 0 s 867256 us.
-96638 1080156
-achieve here
-Counting time cost: 2 s 386720 us.
-triangle count : 12534960
-Total time cost: 6 s 536635 us.

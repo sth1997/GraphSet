@@ -1,1 +1,0 @@
-mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/performance_test.dir/performance_test.cpp.o  -o ../bin/performance_test -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 

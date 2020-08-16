@@ -1,1 +1,0 @@
-mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/schedule_printer.dir/schedule_printer.cpp.o  -o ../bin/schedule_printer -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 

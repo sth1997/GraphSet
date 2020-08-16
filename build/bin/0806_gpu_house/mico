@@ -1,9 +1,0 @@
-Load begin in /home/zms/mico_input
-load 1000000 edges
-load 2000000 edges
-Success! There are 96638 nodes and 2160312 edges.
-Load data success!
-Prepare time cost: 0 s 848226 us.
-house count 1655449692098
-Counting time cost: 3 s 407741 us.
-Total time cost: 4 s 270768 us.

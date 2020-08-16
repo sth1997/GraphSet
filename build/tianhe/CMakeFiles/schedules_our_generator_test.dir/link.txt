@@ -1,1 +1,0 @@
-mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/schedules_our_generator_test.dir/schedules_our_generator_test.cpp.o  -o ../bin/schedules_our_generator_test -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 

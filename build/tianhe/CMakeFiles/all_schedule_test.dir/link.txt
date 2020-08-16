@@ -1,1 +1,0 @@
-mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/all_schedule_test.dir/all_schedule_test.cpp.o  -o ../bin/all_schedule_test -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 

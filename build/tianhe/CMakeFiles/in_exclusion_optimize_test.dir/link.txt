@@ -1,1 +1,0 @@
-mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/in_exclusion_optimize_test.dir/in_exclusion_optimize_test.cpp.o  -o ../bin/in_exclusion_optimize_test -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 
