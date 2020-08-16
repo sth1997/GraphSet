@@ -1,0 +1,1 @@
+mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/baseline_test.dir/baseline_test.cpp.o  -o ../bin/baseline_test -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 

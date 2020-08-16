@@ -1,0 +1,1 @@
+mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/sigmod2020_test.dir/sigmod2020_test.cpp.o  -o ../bin/sigmod2020_test -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 

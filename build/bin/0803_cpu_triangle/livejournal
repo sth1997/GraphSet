@@ -1,0 +1,81 @@
+Load begin in /home/zms/livejournal_input
+load 1000000 edges
+load 2000000 edges
+load 3000000 edges
+load 4000000 edges
+load 5000000 edges
+load 6000000 edges
+load 7000000 edges
+load 8000000 edges
+load 9000000 edges
+load 10000000 edges
+load 11000000 edges
+load 12000000 edges
+load 13000000 edges
+load 14000000 edges
+load 15000000 edges
+load 16000000 edges
+load 17000000 edges
+load 18000000 edges
+load 19000000 edges
+load 20000000 edges
+load 21000000 edges
+load 22000000 edges
+load 23000000 edges
+load 24000000 edges
+load 25000000 edges
+load 26000000 edges
+load 27000000 edges
+load 28000000 edges
+load 29000000 edges
+load 30000000 edges
+load 31000000 edges
+load 32000000 edges
+load 33000000 edges
+load 34000000 edges
+load 35000000 edges
+load 36000000 edges
+load 37000000 edges
+load 38000000 edges
+load 39000000 edges
+load 40000000 edges
+load 41000000 edges
+load 42000000 edges
+load 43000000 edges
+load 44000000 edges
+load 45000000 edges
+load 46000000 edges
+load 47000000 edges
+load 48000000 edges
+load 49000000 edges
+load 50000000 edges
+load 51000000 edges
+load 52000000 edges
+load 53000000 edges
+load 54000000 edges
+load 55000000 edges
+load 56000000 edges
+load 57000000 edges
+load 58000000 edges
+load 59000000 edges
+load 60000000 edges
+load 61000000 edges
+load 62000000 edges
+load 63000000 edges
+load 64000000 edges
+load 65000000 edges
+load 66000000 edges
+load 67000000 edges
+load 68000000 edges
+load 69000000 edges
+Success! There are 3997962 nodes and 69362378 edges.
+Load data success!
+max intersection size 12870
+Can not use in_exclusion_optimize with this schedule
+ans 177820130
+time 4.995304
+Schedule:
+011
+101
+110
+2 (1,2)(0,1)

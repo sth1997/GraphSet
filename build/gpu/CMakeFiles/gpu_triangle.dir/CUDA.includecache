@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/zms/GPU_GraphMining/GraphMining/gpu/gpu_triangle.cu
+assert.h
+-
+iostream
+-
+string
+-
+map
+-
+vector
+-
+algorithm
+-
+cuda_runtime.h
+-
+device_launch_parameters.h
+-
+sys/time.h
+-
+

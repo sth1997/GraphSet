@@ -1,0 +1,1 @@
+mpicxx    -fopenmp  -O0 -Wall -g -ggdb  -fopenmp    CMakeFiles/restricts_printer.dir/restricts_printer.cpp.o  -o ../bin/restricts_printer -Wl,-rpath,/home/zms/GPU_GraphMining/GraphMining/build/libs ../libs/libgraph_mining.so 

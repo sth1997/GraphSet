@@ -1,0 +1,1 @@
+/usr/local/cuda-8.0/bin/nvcc   -arch=sm_50 -Xcompiler="-fopenmp" -Xcompiler=-fPIC -Wno-deprecated-gpu-targets -shared -dlink CMakeFiles/gpu_house.dir/gpu_house.cu.o -o CMakeFiles/gpu_house.dir/cmake_device_link.o  -lgomp  -L"/usr/local/cuda-8.0/lib64"

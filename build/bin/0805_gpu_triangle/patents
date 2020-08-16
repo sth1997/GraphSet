@@ -1,0 +1,25 @@
+Load begin in /home/zms/patents_input
+load 1000000 edges
+load 2000000 edges
+load 3000000 edges
+load 4000000 edges
+load 5000000 edges
+load 6000000 edges
+load 7000000 edges
+load 8000000 edges
+load 9000000 edges
+load 10000000 edges
+load 11000000 edges
+find self circle
+load 12000000 edges
+load 13000000 edges
+load 14000000 edges
+load 15000000 edges
+load 16000000 edges
+Load time cost: 78 s 182221 us.
+HostToDevice time cost: 1 s 420311 us.
+3774768 16518947
+achieve here
+Counting time cost: 0 s 21617 us.
+triangle count : 7515023
+Total time cost: 79 s 624652 us.
