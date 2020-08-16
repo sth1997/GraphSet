@@ -1,282 +1,343 @@
 // This program can only count House pattern using GPU.
-#include <../include/graph.h>
-#include <../include/dataloader.h>
-#include "../include/pattern.h"
-#include "../include/schedule.h"
-#include "../include/common.h"
-#include "../include/motif_generator.h"
-#include "../include/vertex_set.h"
+#include <graph.h>
+#include <dataloader.h>
+#include <vertex_set.h>
+#include <common.h>
 
 #include <assert.h>
 #include <iostream>
 #include <string>
 #include <algorithm>
-#include <omp.h>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
-#define THREAD_NUM 32
+#include <sys/time.h>
+class TimeInterval{
+public:
+    TimeInterval(){
+        check();
+    }
 
-struct device_pointer {
-    int *device_tmp_1;
-    int *device_tmp_2;
+    void check(){
+        gettimeofday(&tp, NULL);
+    }
 
-    int *device_size_1; // size of tmp1
-    int *device_size_2; // size of tmp2
-
-    int *device_node; // array of 3 int : v0,v1,v2
-
-    int *device_status;
-
-    unsigned long long *device_ans; // local ans
-
-    int *device_edge;
-    unsigned int *device_vertex;
+    void print(const char* title){
+        struct timeval tp_end, tp_res;
+        gettimeofday(&tp_end, NULL);
+        timersub(&tp_end, &tp, &tp_res);
+        std::cout << title << ": " << tp_res.tv_sec << " s " << tp_res.tv_usec << " us.\n";
+    }
+private:
+    struct timeval tp;
 };
 
-Graph *g;
+TimeInterval allTime;
+TimeInterval tmpTime;
 
-__device__ void swap(int &a, int &b) {
-    int t = a;
-    a = b;
-    b = t;
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
 }
 
-// get the tmp1/2
-__global__ void intersection(int *tmp, int *status, unsigned int *vertex, int *edge) {
-    int my_rank = blockIdx.x * blockDim.x + threadIdx.x;
+#define THREADS_PER_BLOCK 32
 
-    int l0 = status[0];
-    int r0 = status[1];
+__device__ unsigned long long dev_sum;
+__device__ unsigned int dev_nowEdge;
 
-    if(my_rank >= r0 - l0) return;
+__device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size) {
+    __shared__ uint32_t lblock[THREADS_PER_BLOCK];
+    __shared__ uint32_t rblock[THREADS_PER_BLOCK];
 
-    int l = status[2];
-    int r = status[3];
-//    int v0 = status[4];
+    __shared__ uint32_t cur_thread;
 
-  //  assert(vertex[v0] == l0);
+    uint32_t i = 0, j = 0;
+    uint32_t lsize = THREADS_PER_BLOCK, rsize = THREADS_PER_BLOCK;
 
-    int my_id = edge[l0 + my_rank];
-    while( l < r - 1) {
-        int mid = (l + r) >> 1;
-        int cur_id = edge[mid];
-        if(my_id >= cur_id) l = mid;
-        else r = mid;
+    bool hit;
+
+    if( threadIdx.x == 0 ) {
+        *p_tmp_size = 0;
     }
-    tmp[my_rank] = (my_id == edge[l]) ? 1 : 0; // hit or not
-}
+    __syncthreads();
 
-__global__ void upd_ans(unsigned long long *ans, int *tmp1, int *tmp2, int *size1, int *size2, int *node) {
-    int my_rank = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < ln && j < rn) {
 
-    if( my_rank >= *size1 || my_rank >= *size2) return;
+        lsize = min(ln - i, THREADS_PER_BLOCK);
+        rsize = min(rn - j, THREADS_PER_BLOCK);
 
-    if(my_rank == 0) {
-        int id = node[2];
-        int l = 0;
-        int r = *size1;
-        while( l < r - 1) {
-            int mid = (l + r) >> 1;
-            if(id >= tmp1[mid]) l = mid;
-            else r = mid;
+        if(i + threadIdx.x < ln) lblock[threadIdx.x] = lbases[i + threadIdx.x];
+        if(j + threadIdx.x < rn) rblock[threadIdx.x] = rbases[j + threadIdx.x];
+
+        __threadfence_block();
+
+        hit = false;
+        for(int k = 0; k < rsize; ++k)
+            hit |= (threadIdx.x < lsize) & (lblock[threadIdx.x] == rblock[k]);
+
+        if( threadIdx.x == 0) {
+            cur_thread = 0;
         }
-        if( id == tmp1[l]) atomicAdd(ans, (unsigned long long)(*size1 - 1) * (*size2));
-        else atomicAdd(ans, (unsigned long long) (*size1) * (*size2));
-    }
+        __syncthreads();
 
-    if(*size1 < *size2) {
-        int my_id = tmp1[my_rank];
-        int l = 0;
-        int r = *size2;
-        while( l < r - 1) {
-            int mid = (l + r) >> 1;
-            int cur_id = tmp2[mid];
-            if(my_id >= cur_id) l = mid;
-            else r = mid;
+        while( cur_thread < THREADS_PER_BLOCK) {
+            if(cur_thread == threadIdx.x) {
+                if(hit && i + threadIdx.x < ln) tmp[(*p_tmp_size)++] = lblock[threadIdx.x];
+                ++cur_thread;
+            }
+            __syncthreads();
         }
-        if( my_id == tmp2[l]) atomicAdd(ans, (unsigned long long)-1);
-    }
-    else {
-        int my_id = tmp2[my_rank];
-        int l = 0;
-        int r = *size1;
-        while( l < r - 1) {
-            int mid = (l + r) >> 1;
-            int cur_id = tmp1[mid];
-            if(my_id >= cur_id) l = mid;
-            else r = mid;
-        }
-        if( my_id == tmp1[l]) atomicAdd(ans, (unsigned long long)-1);
-    }
-}
-
-__global__ void calculate_ans(unsigned int *pos, unsigned int *e_cnt, int *v_cnt, int *edge, unsigned int *vertex, int *tmp_1, int *tmp_2, int *size_1, int *size_2, int *node, int *status, unsigned long long *ans) {
-    unsigned int my_pos = atomicAdd(pos, 1); //which edge is mine
-    if(my_pos >= *e_cnt) return;
-    int s_l,s_r;
-    s_l = 0;
-    s_r = *v_cnt;
-    while(s_l < s_r - 1) {
-        int mid = (s_l + s_r) >> 1;
-        if(my_pos >= vertex[mid]) s_l = mid;
-        else s_r = mid;
-    }
-
-    node[0] = s_l;
-    node[1] = edge[my_pos];
-
-    if(node[0] < node[1]) return; // optimize 
-
-    int l0 = vertex[node[0]];
-    int r0 = vertex[node[0] + 1];
-    int l1 = vertex[node[1]];
-    int r1 = vertex[node[1] + 1];
-    int v0 = node[0];
-    int v1 = node[1];
-
-    if(r0 - l0 > r1 - l1) {
-        swap(v0,v1);
-        swap(l0,l1);
-        swap(r0,r1);
-    }
-
-    int BLOCK_NUM = (r0 - l0 + THREAD_NUM - 1) / THREAD_NUM;
-
-    status[0] = l0;
-    status[1] = r0;
-    status[2] = l1;
-    status[3] = r1;
-    status[4] = v0;
-    status[5] = v1;
-
-    intersection<<<BLOCK_NUM,THREAD_NUM>>>(tmp_1, status, vertex, edge); // intersection N(v0) & N(v1)
-    cudaDeviceSynchronize();
-    
-    *size_1=0;
-    for(int pos = 0; pos < r0 - l0; ++pos)
-        if(tmp_1[pos]) tmp_1[(*size_1)++] = edge[l0 + pos]; 
-
-    if(*size_1 == 0) return;
-
-    for(int j = vertex[node[0]]; j < vertex[node[0] + 1]; ++j) {
-        node[2] = edge[j];
-        if(node[1] == node[2]) continue;
-        l0 = vertex[node[1]];
-        r0 = vertex[node[1] + 1];
-        l1 = vertex[node[2]];
-        r1 = vertex[node[2] + 1];
-        v0 = node[1];
-        v1 = node[2];
-
-        if(r0 - l0 > r1 - l1) {
-            swap(v0,v1);
-            swap(l0,l1);
-            swap(r0,r1);
-        }
-
-        int BLOCK_NUM = (r0 - l0 + THREAD_NUM - 1) / THREAD_NUM;
-
-        status[0] = l0;
-        status[1] = r0;
-        status[2] = l1;
-        status[3] = r1;
-        status[4] = v0;
-        status[5] = node[0];
-
-        intersection<<<BLOCK_NUM,THREAD_NUM>>>(tmp_2, status, vertex, edge); // N(v1) & N(v2)
-        cudaDeviceSynchronize();
         
-        *size_2=0;
-        for(int pos = 0; pos < r0 - l0; ++pos)
-            if(tmp_2[pos] && edge[l0 + pos] != node[0]) tmp_2[(*size_2)++] = edge[l0 + pos];
+        uint32_t llast = lblock[lsize - 1];
+        uint32_t rlast = rblock[rsize - 1];
 
-        if(*size_2 == 0) continue;
-
-        BLOCK_NUM = ( min(*size_1,*size_2) + THREAD_NUM - 1) / THREAD_NUM; 
-
-        upd_ans<<<BLOCK_NUM,THREAD_NUM>>>(ans, tmp_1, tmp_2, size_1, size_2, node); // ans += tmp1.size * tmp2.size - (tmp1&tmp2).size
-        cudaDeviceSynchronize();
+        if(llast >= rlast) j += rsize;
+        if(llast <= rlast) i += lsize;
     }
 
+/*    i = 0;
+    j = 0;
+    int size = 0;
+    while(i < ln && j < rn) {
+        if(lbases[i]==rbases[j]) {
+            assert(lbases[i]==tmp[size]);
+            ++size;
+        }
+        int u = lbases[i],v=rbases[j];
+        i+=u<=v;
+        j+=v<=u;
+    }
+    assert(size==*p_tmp_size);*/
 }
 
-void gpu_pattern_matching(Graph *g, int thread_count) {
-
-    int size_edge = g->e_cnt;
-    int size_vertex = g->v_cnt + 1;
-    int size_tmp  = VertexSet::max_intersection_size;
-
-    unsigned long long global_ans = 0;
-
-    unsigned int *device_pos;
-    unsigned int *device_e_cnt;
-    int *device_v_cnt;
-
-    cudaMalloc((void**)&device_pos, sizeof(int));
-    cudaMalloc((void**)&device_e_cnt, sizeof(unsigned int));
-    cudaMalloc((void**)&device_v_cnt, sizeof(int));
-    cudaMemcpy(device_e_cnt,&g->e_cnt,sizeof(unsigned int),cudaMemcpyHostToDevice);
-    cudaMemcpy(device_v_cnt,&g->v_cnt,sizeof(int),cudaMemcpyHostToDevice);
-    cudaMemset(device_pos,0,sizeof(unsigned int));
-
-    double t3,t4;
-#pragma omp parallel num_threads(thread_count) reduction(+:global_ans)
-    {
-        printf("%d %d\n",omp_get_thread_num(), omp_get_num_threads());
-
-        cudaStream_t my_stream;
-        cudaStreamCreate(&my_stream);
-
-        device_pointer d_ptr;
-
-        cudaMalloc((void**) &d_ptr.device_edge, sizeof(int) * size_edge);
-        cudaMalloc((void**) &d_ptr.device_vertex, sizeof(unsigned int) * size_vertex);
-
-        cudaMemcpyAsync(d_ptr.device_edge, g->edge, sizeof(int) * size_edge, cudaMemcpyHostToDevice, my_stream);
-        cudaMemcpyAsync(d_ptr.device_vertex, g->vertex, sizeof(unsigned int) * size_vertex, cudaMemcpyHostToDevice, my_stream);
-
-        cudaMalloc((void**) &d_ptr.device_tmp_1, sizeof(int) * size_tmp);
-        cudaMalloc((void**) &d_ptr.device_tmp_2, sizeof(int) * size_tmp);
-
-        cudaMalloc((void**) &d_ptr.device_size_1, sizeof(int));
-        cudaMalloc((void**) &d_ptr.device_size_2, sizeof(int));
-
-        cudaMalloc((void**) &d_ptr.device_node, sizeof(int) * 3);
-
-        cudaMalloc((void**) &d_ptr.device_status, sizeof(int) * 6);
-
-        cudaMalloc((void**) &d_ptr.device_ans, sizeof(unsigned long long));
-        cudaMemset(d_ptr.device_ans, 0, sizeof(unsigned long long));
-
-        if(omp_get_thread_num() == 0) t3 = get_wall_time();
-
-        unsigned long long local_ans;
-        unsigned int for_limit = g->e_cnt;
-#pragma omp for schedule(dynamic) 
-        for(unsigned int i = 0; i < for_limit; ++i) {
-            //  printf("for %d %u\n", omp_get_thread_num(), i); fflush(stdout);
-
-            //cudaMemcpyAsync(d_ptr.device_node, &i, sizeof(int), cudaMemcpyHostToDevice, my_stream);
-
-            calculate_ans<<<1,1,0,my_stream>>>(device_pos,device_e_cnt,device_v_cnt,d_ptr.device_edge, d_ptr.device_vertex, d_ptr.device_tmp_1, d_ptr.device_tmp_2, d_ptr.device_size_1, d_ptr.device_size_2, d_ptr.device_node, d_ptr.device_status, d_ptr.device_ans);
-
-            cudaStreamSynchronize(my_stream);
-        }
-        cudaMemcpyAsync(&local_ans, d_ptr.device_ans, sizeof(unsigned long long), cudaMemcpyDeviceToHost, my_stream);
-        cudaStreamSynchronize(my_stream);
-
-        printf("%d ans is %llu\n", omp_get_thread_num(), local_ans);
-        global_ans += local_ans;
+__device__ void detect_v2(uint32_t *tmp, uint32_t size, uint32_t v2, bool *p_hit) {
+    uint32_t i = 0;
+    bool hit = false;
+    while(i + threadIdx.x < size) {
+        hit |= tmp[i+threadIdx.x] == v2;
+        i += THREADS_PER_BLOCK;
     }
-    t4 = get_wall_time();
-    printf("ans %llu\ninner time %.6lf\n", global_ans, t4 - t3);
+    if(hit) *p_hit = true;
+}
+
+__device__ void upd_ans(uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, unsigned long long *p_sum) {
+    __shared__ uint32_t lblock[THREADS_PER_BLOCK];
+    __shared__ uint32_t rblock[THREADS_PER_BLOCK];
+
+    uint32_t i = 0, j = 0;
+    unsigned long long sum = 0;
+    uint32_t lsize = THREADS_PER_BLOCK, rsize = THREADS_PER_BLOCK;
+
+    while (i < ln && j < rn) {
+
+        lsize = min(ln - i, THREADS_PER_BLOCK);
+        rsize = min(rn - j, THREADS_PER_BLOCK);
+
+        if(i + threadIdx.x < ln) lblock[threadIdx.x] = lbases[i + threadIdx.x];
+        if(j + threadIdx.x < rn) rblock[threadIdx.x] = rbases[j + threadIdx.x];
+
+        __threadfence_block();
+    
+        for(int k = 0; k < rsize; ++k)
+            sum += (threadIdx.x < lsize) & (lblock[threadIdx.x] == rblock[k]);
+
+        uint32_t llast = lblock[lsize - 1];
+        uint32_t rlast = rblock[rsize - 1];
+
+        if(llast >= rlast) j += rsize;
+        if(llast <= rlast) i += lsize;
+    }
+
+    (*p_sum) -= sum;
+/*    i = 0;
+    j = 0;
+    unsigned long long size = 0;
+    while(i < ln && j < rn) {
+        if(lbases[i]==rbases[j] && i % 32 == threadIdx.x) {
+            ++size;
+        }
+        int u = lbases[i],v=rbases[j];
+        i+=u<=v;
+        j+=v<=u;
+    }
+    assert(size==sum);*/
+    
+}
+
+__global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp) {
+    __shared__ unsigned int edgeI;
+    __shared__ unsigned int edgeEnd;
+    __shared__ unsigned long long sdata[THREADS_PER_BLOCK];
+
+    unsigned long long mysum = 0;
+
+    uint32_t tmp1_begin = buffer_size * 2 * blockIdx.x;
+    uint32_t tmp2_begin = tmp1_begin + buffer_size;
+    
+    if(threadIdx.x == 0) {
+        edgeI = edgeEnd = 0;
+    }
+
+    __syncthreads();
+    
+    assert( edgeI == edgeEnd);
+
+    uint32_t v0,v1,v2;
+    __shared__ uint32_t tmp1_size;
+    __shared__ uint32_t tmp2_size;
+
+    uint32_t lb,le,ln;
+    uint32_t rb,re,rn;
+
+    uint32_t loop_begin, loop_limit;
+
+    __shared__ bool have_v2;
+
+    while(true) {
+        if(threadIdx.x == 0) {
+            //printf("%d at %u\n", blockIdx.x, edgeI);
+            if(++edgeI >= edgeEnd) {
+                edgeI = atomicAdd(&dev_nowEdge, 1);
+                edgeEnd = min(edge_num, edgeI + 1);
+            }
+        }
+
+        __syncthreads();
+
+        unsigned int i = edgeI;
+        if(i >= edge_num) break;
+        
+        v0 = edge_from[i];
+        v1 = edge[i];
+
+        if(v0 > v1) continue; // optimize
+
+        lb = vertex[v0];
+        le = vertex[v0+1];
+        ln = le - lb;
+
+        rb = vertex[v1];
+        re = vertex[v1+1];
+        rn = re - rb;
+
+        intersection(tmp + tmp1_begin, edge + lb, edge + rb, ln, rn, &tmp1_size);
+        __syncthreads();
+        
+        if(tmp1_size == 0) continue;
+
+        loop_begin = vertex[v1];
+        loop_limit = vertex[v1+1];
+        for(uint32_t j = loop_begin; j < loop_limit; ++j) {
+            v2 = edge[j];
+            if(v0==v2) continue;
+
+            rb = vertex[v2];
+            re = vertex[v2+1];
+            rn = re - rb;
+
+            intersection(tmp + tmp2_begin, edge + lb, edge + rb, ln, rn, &tmp2_size);
+            __syncthreads();
+
+            if(tmp2_size <= 1) continue;
+
+            if(threadIdx.x == 0) {
+                have_v2 = false;
+            }
+            __syncthreads();
+
+            detect_v2(tmp + tmp1_begin, tmp1_size, v2, &have_v2);
+
+            upd_ans(tmp + tmp1_begin, tmp + tmp2_begin, tmp1_size, tmp2_size, &mysum);
+            __syncthreads();
+
+            if(threadIdx.x == 0) {
+                if(have_v2) mysum += (tmp1_size - 1) * (tmp2_size - 1);
+                else mysum += tmp1_size * (tmp2_size - 1);
+            }
+        }
+    }
+
+    sdata[threadIdx.x] = mysum;
+    __syncthreads();
+
+    for (int s=1; s < blockDim.x; s *=2){
+        int index = 2 * s * threadIdx.x;
+
+        if (index < blockDim.x){
+            sdata[index] += sdata[index + s];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        atomicAdd(&dev_sum, sdata[0]);
+    }
+    
+}
+
+void gpu_pattern_matching(Graph *g) {
+    uint32_t *edge_from = new uint32_t[g->e_cnt];
+    for(uint32_t i = 0; i < g->v_cnt; ++i)
+        for(uint32_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
+            edge_from[j] = i;
+
+    uint32_t *edge = new uint32_t[g->e_cnt];
+    uint32_t *vertex = new uint32_t[g->v_cnt + 1];
+
+    for(uint32_t i = 0;i < g->e_cnt; ++i) edge[i] = g->edge[i];
+    for(uint32_t i = 0;i <= g->v_cnt; ++i) vertex[i] = g->vertex[i];
+
+    tmpTime.check(); 
+    int numBlocks = 4096;
+
+    uint32_t size_edge = g->e_cnt * sizeof(uint32_t);
+    uint32_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
+    uint32_t size_tmp  = VertexSet::max_intersection_size * sizeof(uint32_t) * numBlocks * (1 + 1);
+
+    uint32_t *dev_edge;
+    uint32_t *dev_edge_from;
+    uint32_t *dev_vertex;
+    uint32_t *dev_tmp;
+
+    gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
+    gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
+    gpuErrchk( cudaMalloc((void**)&dev_vertex, size_vertex));
+    gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
+
+    gpuErrchk( cudaMemcpy(dev_edge, edge, size_edge, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpy(dev_vertex, vertex, size_vertex, cudaMemcpyHostToDevice));
+
+    unsigned long long sum = 0;
+
+    gpuErrchk( cudaMemcpyToSymbol(dev_sum, &sum, sizeof(unsigned long long), 0, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpyToSymbol(dev_nowEdge, &sum, sizeof(unsigned int), 0, cudaMemcpyHostToDevice));
+
+    tmpTime.print("Prepare time cost");
+    tmpTime.check();
+
+    uint32_t edge_num = g->e_cnt;
+    uint32_t buffer_size = VertexSet::max_intersection_size;
+    __dfs<<<numBlocks, THREADS_PER_BLOCK>>>(edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp);
+
+    gpuErrchk( cudaPeekAtLastError() );
+    gpuErrchk( cudaDeviceSynchronize() );
+    gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
+
+    printf("house count %llu\n", sum);
+    tmpTime.print("Counting time cost");
 }
 
 int main(int argc,char *argv[]) {
+    Graph *g;
     DataLoader D;
-/*
+
     const std::string type = argv[1];
     const std::string path = argv[2];
 
@@ -288,16 +349,18 @@ int main(int argc,char *argv[]) {
         printf("Dataset not found!\n");
         return 0;
     }
-*/
-    //assert(D.load_data(g,my_type,path.c_str())==true); 
-    assert(D.load_data(g,100));
+
+    assert(D.load_data(g,my_type,path.c_str())==true); 
+
+ //   assert(D.load_data(g,10));
     printf("Load data success!\n");
     fflush(stdout);
 
-    double t1 = get_wall_time();
-    gpu_pattern_matching(g,24);
-    double t2 = get_wall_time();
-    printf("time %.6lf\n", t2 - t1);
+    allTime.check();
 
-    delete g;
+    gpu_pattern_matching(g);
+
+    allTime.print("Total time cost");
+
+    return 0;
 }
