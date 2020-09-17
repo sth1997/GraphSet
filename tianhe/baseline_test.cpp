@@ -65,8 +65,11 @@ int main(int argc,char *argv[]) {
     printf("Load data success!\n");
     fflush(stdout);
 
-    Pattern p(PatternType::House);
+    char tmpbuf[100] = "011110101101110000110000100001010010";
+    //Pattern p(PatternType::House);
+    Pattern p(6, tmpbuf);
     test_pattern(g, p, 1, 1, true);
+    //test_pattern(g, p, 0, 1, true);
 
 /*
     Pattern p1(PatternType::sigmod2020_guo_q1);
@@ -89,3 +92,4 @@ int main(int argc,char *argv[]) {
 */
     delete g;
 }
+
