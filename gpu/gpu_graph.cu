@@ -15,6 +15,27 @@
 
 #define THREADS_PER_BLOCK 32
 
+#define size_type 2
+static __device__ inline uint64_t GlobalTimer64(void) {
+    // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
+    // around after the upper bits have already been read. Work around this by
+    // reading the high bits a second time. Use the second value to detect a
+    // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
+    // would be valid, it's passed over during the duration of the reading. If no
+    // rollover occurred, just return the initial reading.
+    volatile uint64_t first_reading;
+    volatile uint32_t second_reading;
+    uint32_t high_bits_first;
+    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
+    high_bits_first = first_reading >> 32;
+    asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
+    if (high_bits_first == second_reading) {
+        return first_reading;
+    }
+    // Return the value with the updated high bits, but the low bits set to 0.
+    return ((uint64_t) second_reading) << 32;
+}
+
 class TimeInterval{
 public:
     TimeInterval(){
@@ -126,7 +147,7 @@ public:
     int k_val;
 };
 
-__device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
+__device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size, uint64_t *timer);
 
 class GPUVertexSet
 {
@@ -162,7 +183,7 @@ public:
         for (int i = 0; i < input_size; ++i)
             data[i] = input_data[i];
     }
-    __device__ void build_vertex_set(const GPUSchedule* schedule, const GPUVertexSet* vertex_set, uint32_t* input_data, uint32_t input_size, int prefix_id)
+    __device__ void build_vertex_set(const GPUSchedule* schedule, const GPUVertexSet* vertex_set, uint32_t* input_data, uint32_t input_size, int prefix_id, uint64_t *timer)
     {
         int father_id = schedule->get_father_prefix_id(prefix_id);
         if (father_id == -1)
@@ -174,12 +195,13 @@ public:
         {
             if(threadIdx.x == 0)
                 init();
-            intersection(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &(this->size));
+            intersection(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &(this->size), timer);
             __syncthreads();
         }
     }
 
-    __device__ void intersection_with(uint32_t *input_data, uint32_t input_size) {
+    __device__ void intersection_with(uint32_t *input_data, uint32_t input_size, uint64_t *timer) {
+        uint64_t t_begin = GlobalTimer64();
         __shared__ uint32_t lblock[THREADS_PER_BLOCK], rblock[THREADS_PER_BLOCK], tmp_size;//每次都申请会不会比较浪费时间？
     
         __shared__ uint32_t cur_thread;
@@ -233,6 +255,11 @@ public:
         if( threadIdx.x == 0 ) {
             size = tmp_size;
         }
+        uint64_t t_end = GlobalTimer64();
+
+        if( threadIdx.x == 0) {
+            timer[blockIdx.x * size_type] += t_end - t_begin;
+        }
     }
 
 private:
@@ -243,7 +270,8 @@ private:
 __device__ unsigned long long dev_sum;
 __device__ unsigned int dev_nowEdge;
 
-__device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size) {
+__device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size, uint64_t *timer) {
+    uint64_t t_begin = GlobalTimer64();
     __shared__ uint32_t lblock[THREADS_PER_BLOCK];//每次都申请会不会比较浪费时间？
     __shared__ uint32_t rblock[THREADS_PER_BLOCK];
 
@@ -306,6 +334,10 @@ __device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, 
         j+=v<=u;
     }
     assert(size==*p_tmp_size);*/
+    uint64_t t_end = GlobalTimer64();
+    if(threadIdx.x == 0) {
+        timer[blockIdx.x * size_type + 1] += t_end - t_begin;
+    }
 }
 
 //set0 - set1
@@ -351,7 +383,7 @@ __device__ int unorderd_subtraction_size(const GPUVertexSet& set0, const GPUVert
     return ret;
 }
 
-__device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set, GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, uint32_t *vertex)
+__device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set, GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, uint32_t *vertex, uint64_t *timer)
 {
     int loop_set_prefix_id = schedule->get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -399,7 +431,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
 
                     for(int i = 1; i < cur_graph.data[cur_graph_rank].size; ++i) {
                         int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[i]];
-                        tmp_set.intersection_with(vertex_set[id].get_data_ptr(), vertex_set[id].get_size());
+                        tmp_set.intersection_with(vertex_set[id].get_data_ptr(), vertex_set[id].get_size(), timer);
                     }
                     /*if (threadIdx.x == 0 && subtraction_set.get_data(0) == 2 && subtraction_set.get_data(1) == 1 && subtraction_set.get_data(2) == 4)
                     {
@@ -471,7 +503,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
         bool is_zero = false;
         for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
             if (vertex_set[prefix_id].get_size() == 0) {
                 is_zero = true;
                 break;
@@ -482,14 +514,14 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
         if(threadIdx.x == 0)
             subtraction_set.push_back(v);
         __syncthreads();
-        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, edge, vertex);
+        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, edge, vertex, timer);
         if(threadIdx.x == 0)
             subtraction_set.pop_back();
         __syncthreads();
     }
 }
 
-__global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule, uint64_t *timer) {
     __shared__ unsigned int edgeI;
     __shared__ unsigned int edgeEnd;
     __shared__ unsigned long long sdata[THREADS_PER_BLOCK]; 
@@ -558,7 +590,7 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
         bool is_zero = false;
         get_edge_index(v0, l, r);
         for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
 
         //目前只考虑pattern size>2的情况
         //start v1, depth = 1
@@ -570,7 +602,7 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
         get_edge_index(v1, l, r);
         for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
             if (vertex_set[prefix_id].get_size() == 0) {
                 is_zero = true;
                 break;
@@ -579,7 +611,7 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
         if (is_zero)
             continue;
         
-        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
+        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex, timer);
 
         /*
 
@@ -666,6 +698,16 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     uint32_t *dev_edge_from;
     uint32_t *dev_vertex;
     uint32_t *dev_tmp;
+
+    uint64_t *dev_timer;
+    uint64_t size_timer = numBlocks * size_type;
+
+    uint64_t *local_timer = new uint64_t[size_timer];
+    for(int i = 0; i < size_timer; ++i)
+        local_timer[i] = 0;
+
+    gpuErrchk( cudaMalloc((void**)&dev_timer, size_timer * sizeof(uint64_t)));
+    gpuErrchk( cudaMemcpy(dev_timer, local_timer, size_timer * sizeof(uint64_t), cudaMemcpyHostToDevice));
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
     gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
@@ -762,15 +804,28 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     uint32_t edge_num = g->e_cnt;
     uint32_t buffer_size = VertexSet::max_intersection_size;
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
-    gpu_pattern_patching<<<numBlocks, THREADS_PER_BLOCK, (schedule.get_total_prefix_num() + 2) * sizeof(GPUVertexSet)>>>(edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
+    gpu_pattern_patching<<<numBlocks, THREADS_PER_BLOCK, (schedule.get_total_prefix_num() + 2) * sizeof(GPUVertexSet)>>>(edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule, dev_timer);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
+    gpuErrchk( cudaMemcpy(local_timer, dev_timer, size_timer * sizeof(uint64_t), cudaMemcpyDeviceToHost));
+
     printf("house count %llu\n", sum);
     tmpTime.print("Counting time cost");
     //之后需要加上cudaFree
+
+    uint64_t t[size_type];
+    for(int i = 0; i < size_type; ++i)
+        t[i] = 0;
+    for(int i = 0; i < numBlocks; ++i)
+        for(int j = 0; j < size_type; ++j)
+            t[j] += local_timer[i * size_type + j];
+
+    printf("timer info\n");
+    for(int i = 0; i < size_type; ++i)
+        printf("%d : %lu\n", i, t[i]);
 }
 
 int main(int argc,char *argv[]) {
