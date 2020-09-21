@@ -853,15 +853,16 @@ int main(int argc,char *argv[]) {
     allTime.check();
 
     //Pattern p(PatternType::Cycle_6_Tri);
-    char tmpbuf[100] = "011110101101110000110000100001010010";
-    Pattern p(6, tmpbuf); //house pattern with the best schedule
+    //char tmpbuf[100] = "011110101101110000110000100001010010";
+    char tmpbuf[100] = "0101110110010011100010100";
+    Pattern p(5, tmpbuf); //house pattern with the best schedule
     printf("pattern = \n");
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);
     bool is_pattern_valid;
     bool use_in_exclusion_optimize = true;
-    Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
-    //Schedule schedule(p, is_pattern_valid, 0, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // use the best schedule
+    //Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule schedule(p, is_pattern_valid, 0, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // use the best schedule
     assert(is_pattern_valid);
 
     pattern_matching_init(g, schedule);
