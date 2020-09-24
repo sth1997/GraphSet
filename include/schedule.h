@@ -22,17 +22,24 @@ public:
     ~Schedule();
     inline int get_total_prefix_num() const { return total_prefix_num;}
     inline int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
+    inline int* get_father_prefix_id_ptr() const { return father_prefix_id;}
     inline int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
+    inline int* get_loop_set_prefix_id_ptr() const { return loop_set_prefix_id;}
     inline int get_size() const { return size;}
     inline int get_last(int i) const { return last[i];}
+    inline int* get_last_ptr() const { return last;}
     inline int get_next(int i) const { return next[i];}
+    inline int* get_next_ptr() const {return next;}
     inline int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
     int get_in_exclusion_optimize_num_when_not_optimize();
     void add_restrict(const std::vector< std::pair<int, int> >& restricts);
     inline int get_total_restrict_num() const { return total_restrict_num;}
     inline int get_restrict_last(int i) const { return restrict_last[i];}
+    inline int* get_restrict_last_ptr() const { return restrict_last;}
     inline int get_restrict_next(int i) const { return restrict_next[i];}
+    inline int* get_restrict_next_ptr() const { return restrict_next;}
     inline int get_restrict_index(int i) const { return restrict_index[i];}
+    inline int* get_restrict_index_ptr() const { return restrict_index;}
     inline int get_k_val() const { return k_val;} // see below (the k_val's definition line) before using this function
     int get_max_degree() const;
     int get_multiplicity() const;
@@ -92,3 +99,4 @@ private:
 
     void remove_invalid_permutation(std::vector< std::vector<int> > &candidate_permutations);
 };
+
