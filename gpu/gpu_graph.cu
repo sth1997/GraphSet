@@ -3,7 +3,7 @@
 #include <vertex_set.h>
 #include <common.h>
 
-#include <assert.h>
+#include <cassert>
 #include <iostream>
 #include <string>
 #include <algorithm>
@@ -12,9 +12,11 @@
 #include <device_launch_parameters.h>
 
 #include <sys/time.h>
+#include <chrono>
 
 #define THREADS_PER_BLOCK 32
 
+// 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
 public:
     TimeInterval(){
@@ -52,6 +54,14 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
     l = vertex[v]; \
     r = vertex[v + 1]; \
 } while(0)
+
+template <typename T>
+__device__ inline void swap(T& a, T& b)
+{
+    T t(std::move(a));
+    a = std::move(b);
+    b = std::move(t);
+}
 
 struct GPUGroupDim2 {
     int* data;
@@ -127,6 +137,8 @@ public:
 };
 
 __device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
+__device__ void intersection2(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
+static __device__ uint32_t do_intersection(uint32_t*, uint32_t*, uint32_t*, uint32_t, uint32_t);
 
 class GPUVertexSet
 {
@@ -174,11 +186,17 @@ public:
         {
             if(threadIdx.x == 0)
                 init();
-            intersection(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &(this->size));
+            // intersection(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &(this->size));
+            intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
             __syncthreads();
         }
     }
 
+    __device__ void intersection_with(uint32_t *input_data, uint32_t input_size)
+    {
+        size = do_intersection(data, data, input_data, size, input_size);
+    }
+    /*
     __device__ void intersection_with(uint32_t *input_data, uint32_t input_size) {
         __shared__ uint32_t lblock[THREADS_PER_BLOCK], rblock[THREADS_PER_BLOCK], tmp_size;//每次都申请会不会比较浪费时间？
     
@@ -234,6 +252,7 @@ public:
             size = tmp_size;
         }
     }
+    */
 
 private:
     uint32_t size;
@@ -243,6 +262,9 @@ private:
 __device__ unsigned long long dev_sum;
 __device__ unsigned int dev_nowEdge;
 
+/**
+ * merge-based set intersection
+ */
 __device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size) {
     __shared__ uint32_t lblock[THREADS_PER_BLOCK];//每次都申请会不会比较浪费时间？
     __shared__ uint32_t rblock[THREADS_PER_BLOCK];
@@ -306,6 +328,86 @@ __device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, 
         j+=v<=u;
     }
     assert(size==*p_tmp_size);*/
+}
+
+/**
+ * search-based intersection
+ * 
+ * returns the size of the intersection set
+ */
+__device__ uint32_t do_intersection(uint32_t* out, uint32_t* a, uint32_t* b, uint32_t na, uint32_t nb)
+{
+    __shared__ uint32_t out_offset[THREADS_PER_BLOCK];
+    __shared__ uint32_t out_size;
+
+    if (threadIdx.x == 0) {
+        out_size = 0;
+    }
+
+    uint32_t blk_size, i = 0;
+    while (i < na) {
+        blk_size = min(na - i, THREADS_PER_BLOCK);
+
+        bool found = 0;
+        uint32_t u = 0;
+        if (threadIdx.x < blk_size) {
+            int mid, l = 0, r = nb - 1; // [l, r], use signed int instead of unsigned int!
+            u = a[i + threadIdx.x]; // u: an element in set a
+            while (l <= r) {
+                mid = (l + r) >> 1;
+                if (b[mid] < u) {
+                    l = mid + 1;
+                } else if (b[mid] > u) {
+                    r = mid - 1;
+                } else {
+                    found = 1;
+                    break;
+                }
+            }
+        }
+        out_offset[threadIdx.x] = found;
+        __syncthreads();
+
+        // currently blockDim.x == THREADS_PER_BLOCK
+        for (int s = 1; s < blockDim.x; s *= 2) {
+            int index = threadIdx.x;
+            if (index >= s) {
+                out_offset[index] += out_offset[index - s];
+            }
+            __syncthreads();
+        }
+
+        if (found) {
+            uint32_t offset = out_offset[threadIdx.x] - 1;
+            out[out_size + offset] = u;
+        }
+
+        if (threadIdx.x == 0) {
+            out_size += out_offset[THREADS_PER_BLOCK - 1];
+        }
+        __syncthreads();
+
+        i += blk_size;
+    }
+
+    return out_size;
+}
+
+/**
+ * wrapper of search based intersection `do_intersection`
+ */
+__device__ void intersection2(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size)
+{
+    // make sure ln <= rn
+    if (ln > rn) {
+        swap(ln, rn);
+        swap(lbases, rbases);
+    }
+
+    uint32_t intersection_size = do_intersection(tmp, lbases, rbases, ln, rn);
+
+    if (threadIdx.x == 0)
+        *p_tmp_size = intersection_size;
 }
 
 //set0 - set1
@@ -489,7 +591,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
     }
 }
 
-__global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
     __shared__ unsigned int edgeI;
     __shared__ unsigned int edgeEnd;
     __shared__ unsigned long long sdata[THREADS_PER_BLOCK]; 
@@ -762,7 +864,7 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     uint32_t edge_num = g->e_cnt;
     uint32_t buffer_size = VertexSet::max_intersection_size;
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
-    gpu_pattern_patching<<<numBlocks, THREADS_PER_BLOCK, (schedule.get_total_prefix_num() + 2) * sizeof(GPUVertexSet)>>>(edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
+    gpu_pattern_matching<<<numBlocks, THREADS_PER_BLOCK, (schedule.get_total_prefix_num() + 2) * sizeof(GPUVertexSet)>>>(edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
@@ -771,11 +873,31 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     printf("house count %llu\n", sum);
     tmpTime.print("Counting time cost");
     //之后需要加上cudaFree
+
+    // 尝试释放一些内存
+    gpuErrchk(cudaFree(dev_edge));
+    gpuErrchk(cudaFree(dev_edge_from));
+    gpuErrchk(cudaFree(dev_vertex));
+    gpuErrchk(cudaFree(dev_tmp));
+
+    gpuErrchk(cudaFree(dev_schedule->adj_mat));
+    gpuErrchk(cudaFree(dev_schedule->father_prefix_id));
+    gpuErrchk(cudaFree(dev_schedule->last));
+    gpuErrchk(cudaFree(dev_schedule->next));
+    gpuErrchk(cudaFree(dev_schedule->loop_set_prefix_id));
+    gpuErrchk(cudaFree(dev_schedule->restrict_last));
+    gpuErrchk(cudaFree(dev_schedule->restrict_next));
+    gpuErrchk(cudaFree(dev_schedule->restrict_index));
 }
 
 int main(int argc,char *argv[]) {
     Graph *g;
     DataLoader D;
+
+    if (argc < 3) {
+        printf("Example Usage: %s Patents ~zms/patents_input\n", argv[0]);
+        return 0;
+    }
 
     const std::string type = argv[1];
     const std::string path = argv[2];
@@ -797,9 +919,12 @@ int main(int argc,char *argv[]) {
 
     allTime.check();
 
+    // using std::chrono::system_clock;
+    // auto t1 = system_clock::now();
+
     //Pattern p(PatternType::Cycle_6_Tri);
     char tmpbuf[100] = "011110101101110000110000100001010010";
-    Pattern p(6, tmpbuf); //house pattern with the best schedule
+    Pattern p(6, tmpbuf);
     printf("pattern = \n");
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);
@@ -811,6 +936,10 @@ int main(int argc,char *argv[]) {
 
     pattern_matching_init(g, schedule);
 
+    // auto t2 = system_clock::now();
+    // auto elapsed = t2 - t1;
+    // auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+    // std::cout << "total time (chrono): " << ms.count() << "ms\n";
     allTime.print("Total time cost");
 
     return 0;
