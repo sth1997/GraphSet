@@ -17,7 +17,7 @@ bool DataLoader::load_data(Graph* &g, DataType type, const char* path, int orien
     return false;
 }
 
-bool DataLoader::general_load_data(Graph *&g, DataType type, const char* path, int oriented_type) {
+bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, int oriented_type) {
     if (freopen(path, "r", stdin) == NULL)
     {
         printf("File not found. %s\n", path);
@@ -108,7 +108,8 @@ bool DataLoader::general_load_data(Graph *&g, DataType type, const char* path, i
         delete[] new_id;
     }
     //TODO we only want to get the second max degree, don't need to sort the whole array.
-    std::sort(degree, degree + g->v_cnt);
+    // std::sort(degree, degree + g->v_cnt);
+    std::nth_element(degree, degree + g->v_cnt - 2, degree + g->v_cnt); // OK, fixed
 
     // The max size of intersections is the second largest degree.
     //TODO VertexSet::max_intersection_size has different value with different dataset, but we use a static variable now.
@@ -127,7 +128,7 @@ bool DataLoader::general_load_data(Graph *&g, DataType type, const char* path, i
         return false;
     }
     std::sort(e,e+tmp_e,cmp_pair);
-    g->e_cnt = unique(e,e+tmp_e) - e;
+    g->e_cnt = std::unique(e,e+tmp_e) - e;
     for(unsigned int i = 0; i < g->e_cnt - 1; ++i)
         if(e[i] == e[i+1]) {
             printf("have same edge\n");

@@ -1,6 +1,6 @@
 #pragma once
 #include "graph.h"
-#include <map>
+#include <unordered_map>
 #include <algorithm>
 #include <vector>
 
@@ -16,13 +16,13 @@ enum DataType {
     Invalid
 };
 
-const long long Patents_tri_cnt = 7515023LL;
-const long long LiveJournal_tri_cnt = 177820130LL;
-const long long MiCo_tri_cnt = 12534960LL;
-const long long CiteSeer_tri_cnt = 1166LL;
-const long long Wiki_Vote_tri_cnt = 608389LL;
-const long long Orkut_tri_cnt = 627584181LL;
-const long long Twitter_tri_cnt = 34824916864LL;
+constexpr long long Patents_tri_cnt = 7515023LL;
+constexpr long long LiveJournal_tri_cnt = 177820130LL;
+constexpr long long MiCo_tri_cnt = 12534960LL;
+constexpr long long CiteSeer_tri_cnt = 1166LL;
+constexpr long long Wiki_Vote_tri_cnt = 608389LL;
+constexpr long long Orkut_tri_cnt = 627584181LL;
+constexpr long long Twitter_tri_cnt = 34824916864LL;
 
 class DataLoader {
 public:
@@ -44,5 +44,5 @@ private:
     bool general_load_data(Graph* &g, DataType type, const char* path, int oriented_type = 0);
     bool twitter_load_data(Graph* &g, DataType type, const char* path, int oriented_type = 0);
 
-    std::map<int,int> id;
+    std::unordered_map<int,int> id;
 };

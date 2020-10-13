@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 
-constexpr int THREADS_PER_BLOCK = 32;
+constexpr int THREADS_PER_BLOCK = 64;
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -140,13 +140,13 @@ __device__ uint32_t do_intersection(uint32_t* out, uint32_t* a, uint32_t* b, uin
                     r = mid - 1;
                 } else {
                     found = 1;
-                    printf("th%d found u=%d\n", threadIdx.x, u);
+                    // printf("th%d found u=%d\n", threadIdx.x, u);
                     break;
                 }
             }
         }
         out_offset[threadIdx.x] = found;
-        __syncthreads();
+        int num_found = __syncthreads_count(found);
 
         // currently blockDim.x == THREADS_PER_BLOCK
         for (int s = 1; s < blockDim.x; s *= 2) {
@@ -160,14 +160,13 @@ __device__ uint32_t do_intersection(uint32_t* out, uint32_t* a, uint32_t* b, uin
         if (found) {
             uint32_t offset = out_offset[threadIdx.x] - 1;
             out[out_size + offset] = u;
-            printf("th%d write out[%d] = %d;\n", threadIdx.x, out_size + offset, u);
-        }
-
-        if (threadIdx.x == 0) {
-            out_size += out_offset[THREADS_PER_BLOCK - 1];
+            // printf("th%d write out[%d] = %d;\n", threadIdx.x, out_size + offset, u);
         }
         __syncthreads();
 
+        if (threadIdx.x == 0) {
+            out_size += num_found;
+        }
         i += blk_size;
     }
 
@@ -243,6 +242,7 @@ int main()
         gpuErrchk(cudaMemcpy(dev_a, a, na * sizeof(uint32_t), cudaMemcpyHostToDevice));
         gpuErrchk(cudaMemcpy(dev_b, b, nb * sizeof(uint32_t), cudaMemcpyHostToDevice));
 
+        constexpr int num_blocks = 10;
         intersection2<<<1, THREADS_PER_BLOCK>>>(dev_c, dev_a, dev_b, na, nb, dev_nc);
         gpuErrchk(cudaDeviceSynchronize());
 

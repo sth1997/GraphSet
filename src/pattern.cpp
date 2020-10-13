@@ -19,7 +19,7 @@ Pattern::Pattern(int _size, bool clique)
     }
 }
 
-Pattern::Pattern(int _size, char *buffer) {
+Pattern::Pattern(int _size, const char *buffer) {
     size = _size;
     adj_mat = new int[size * size];
     memset(adj_mat, 0, size * size * sizeof(int));
