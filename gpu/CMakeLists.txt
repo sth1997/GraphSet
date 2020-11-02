@@ -6,9 +6,5 @@ ADD_EXECUTABLE(gpu_graph gpu_graph.cu)
 SET_PROPERTY(TARGET gpu_graph PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_graph graph_mining)
 
-ADD_EXECUTABLE(gpu_graph_sanitized gpu_graph_sanitized.cu)
-SET_PROPERTY(TARGET gpu_graph_sanitized PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-TARGET_LINK_LIBRARIES(gpu_graph_sanitized graph_mining)
-
 ADD_EXECUTABLE(intersection intersection.cu)
 SET_PROPERTY(TARGET intersection PROPERTY CUDA_SEPARABLE_COMPILATION ON)
