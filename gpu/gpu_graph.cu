@@ -15,7 +15,7 @@
 
 #define THREADS_PER_BLOCK 32
 
-#define size_type 2
+#define size_type 3
 static __device__ inline uint64_t GlobalTimer64(void) {
     // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
     // around after the upper bits have already been read. Work around this by
@@ -201,7 +201,6 @@ public:
     }
 
     __device__ void intersection_with(uint32_t *input_data, uint32_t input_size, uint64_t *timer) {
-        uint64_t t_begin = GlobalTimer64();
         __shared__ uint32_t lblock[THREADS_PER_BLOCK], rblock[THREADS_PER_BLOCK], tmp_size;//每次都申请会不会比较浪费时间？
     
         __shared__ uint32_t cur_thread;
@@ -255,11 +254,6 @@ public:
         if( threadIdx.x == 0 ) {
             size = tmp_size;
         }
-        uint64_t t_end = GlobalTimer64();
-
-        if( threadIdx.x == 0) {
-            timer[blockIdx.x * size_type] += t_end - t_begin;
-        }
     }
 
 private:
@@ -271,7 +265,6 @@ __device__ unsigned long long dev_sum;
 __device__ unsigned int dev_nowEdge;
 
 __device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size, uint64_t *timer) {
-    uint64_t t_begin = GlobalTimer64();
     __shared__ uint32_t lblock[THREADS_PER_BLOCK];//每次都申请会不会比较浪费时间？
     __shared__ uint32_t rblock[THREADS_PER_BLOCK];
 
@@ -334,10 +327,6 @@ __device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, 
         j+=v<=u;
     }
     assert(size==*p_tmp_size);*/
-    uint64_t t_end = GlobalTimer64();
-    if(threadIdx.x == 0) {
-        timer[blockIdx.x * size_type + 1] += t_end - t_begin;
-    }
 }
 
 //set0 - set1
@@ -392,101 +381,6 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
 
     uint32_t* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
 
-    if( depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num())
-    {
-        int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
-        //int* loop_set_prefix_ids[ in_exclusion_optimize_num ];
-        int loop_set_prefix_ids[8];//偷懒用了static，之后考虑改成dynamic
-        loop_set_prefix_ids[0] = loop_set_prefix_id;
-        for(int i = 1; i < in_exclusion_optimize_num; ++i)
-            loop_set_prefix_ids[i] = schedule->get_loop_set_prefix_id( depth + i );
-        /*if (threadIdx.x == 0 && subtraction_set.get_data(0) == 2 && subtraction_set.get_data(1) == 1 && subtraction_set.get_data(2) == 0)
-        {
-            for(int i = 0; i < in_exclusion_optimize_num; ++i)
-            {
-                printf("id = %d   set size = %d   data = ", schedule->get_loop_set_prefix_id( depth + i ), vertex_set[schedule->get_loop_set_prefix_id( depth + i )].get_size());
-                for (int j = 0; j < vertex_set[schedule->get_loop_set_prefix_id( depth + i )].get_size(); ++j)
-                    printf("%d ", vertex_set[schedule->get_loop_set_prefix_id( depth + i )].get_data(j));
-                printf("\n");
-            }
-            printf("in ex group size = %d\n", schedule->in_exclusion_optimize_group.size);
-        }*/
-        for(int optimize_rank = 0; optimize_rank < schedule->in_exclusion_optimize_group.size; ++optimize_rank) {
-            const GPUGroupDim1& cur_graph = schedule->in_exclusion_optimize_group.data[optimize_rank];
-            long long val = schedule->in_exclusion_optimize_val[optimize_rank];
-            //if (threadIdx.x == 0 && subtraction_set.get_data(0) == 2 && subtraction_set.get_data(1) == 1 && subtraction_set.get_data(2) == 0)
-            //    printf("origin val = %lld\n", val);
-            for(int cur_graph_rank = 0; cur_graph_rank < cur_graph.size; ++cur_graph_rank) {
-                if(cur_graph.data[cur_graph_rank].size == 1) {
-                    int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[0]];
-                    //val = val * unorderd_subtraction_size(vertex_set[id], subtraction_set);
-                    int tmp = unorderd_subtraction_size(vertex_set[id], subtraction_set);
-                    //if (threadIdx.x == 0 && subtraction_set.get_data(0) == 2 && subtraction_set.get_data(1) == 1 && subtraction_set.get_data(2) == 0)
-                    //    printf("data size = 1   id = %d  tmp = %d\n", id, tmp);
-                    val = val * tmp;
-                }
-                else {
-                    int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[0]];
-                    tmp_set.copy(vertex_set[id].get_size(), vertex_set[id].get_data_ptr());
-
-                    for(int i = 1; i < cur_graph.data[cur_graph_rank].size; ++i) {
-                        int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[i]];
-                        tmp_set.intersection_with(vertex_set[id].get_data_ptr(), vertex_set[id].get_size(), timer);
-                    }
-                    /*if (threadIdx.x == 0 && subtraction_set.get_data(0) == 2 && subtraction_set.get_data(1) == 1 && subtraction_set.get_data(2) == 4)
-                    {
-                        printf("data size = %d   id = ", cur_graph.data[cur_graph_rank].size);
-                        for (int i = 0; i < cur_graph.data[cur_graph_rank].size; ++i)
-                            printf("%d ", loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[i]]);
-                        printf("\n");
-                        printf("tmp_set.size = %d  data = %d\n", tmp_set.get_size(), tmp_set.get_data(0));
-                    }*/
-                    val = val * unorderd_subtraction_size(tmp_set, subtraction_set);
-                }
-                if (val == 0)
-                    break;
-            }
-            //if (threadIdx.x == 0 && subtraction_set.get_data(0) == 2 && subtraction_set.get_data(1) == 1 && subtraction_set.get_data(2) == 4)
-            //    printf("val = %lld\n", val);
-            
-            /*if (threadIdx.x == 0 && val != 0) {
-                printf("val=%lld    v0 = %d v1 = %d v2 = %d\n", val, subtraction_set.get_data(0), subtraction_set.get_data(1), subtraction_set.get_data(2));
-                for(int i = 0; i < in_exclusion_optimize_num; ++i)
-                {
-                    printf("id = %d   set size = %d   data = ", schedule->get_loop_set_prefix_id( depth + i ), vertex_set[schedule->get_loop_set_prefix_id( depth + i )].get_size());
-                    for (int j = 0; j < vertex_set[schedule->get_loop_set_prefix_id( depth + i )].get_size(); ++j)
-                        printf("%d ", vertex_set[schedule->get_loop_set_prefix_id( depth + i )].get_data(j));
-                    printf("\n");
-                }
-                for(int cur_graph_rank = 0; cur_graph_rank < cur_graph.size; ++cur_graph_rank) {
-                    if(cur_graph.data[cur_graph_rank].size == 1) {
-                        printf("data size = 1   id = %d\n", loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[0]]);
-                    }
-                    else {
-                        printf("data size = %d   id = ", cur_graph.data[cur_graph_rank].size);
-                        for (int i = 0; i < cur_graph.data[cur_graph_rank].size; ++i)
-                            printf("%d ", loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[i]]);
-                        printf("\n");
-                    }
-                }
-            }*/
-            if (threadIdx.x == 0)
-                local_ans += val;
-        }
-        return;
-    }
-
-    if (depth == schedule->get_size() - 1)
-    {
-        //TODO
-        assert(false);
-
-
-
-        //if (threadIdx.x == 0)
-        //    local_ans += val;
-    }
-
     uint32_t min_vertex = 0xffffffff;
     for (int i = schedule->get_restrict_last(depth); i != -1; i = schedule->get_restrict_next(i))
         if (min_vertex > subtraction_set.get_data(schedule->get_restrict_index(i)))
@@ -501,6 +395,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
         unsigned int l, r;
         get_edge_index(v, l, r);
         bool is_zero = false;
+        uint64_t t_begin = GlobalTimer64();
         for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
@@ -509,12 +404,57 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
                 break;
             }
         }
+        uint64_t t_end = GlobalTimer64();
+        if(threadIdx.x == 0) {
+            timer[blockIdx.x * size_type] += t_end - t_begin;
+        }
         if (is_zero)
             continue;
         if(threadIdx.x == 0)
             subtraction_set.push_back(v);
         __syncthreads();
-        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, edge, vertex, timer);
+        if( depth + 1 == schedule->get_size() - schedule->get_in_exclusion_optimize_num()) {
+            t_begin = GlobalTimer64();
+            depth += 1;
+            int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
+            int loop_set_prefix_ids[8];//偷懒用了static，之后考虑改成dynamic
+            //loop_set_prefix_ids[0] = loop_set_prefix_id;
+            for(int i1 = 0; i1 < in_exclusion_optimize_num; ++i1)
+                loop_set_prefix_ids[i1] = schedule->get_loop_set_prefix_id( depth + i1 );
+            for(int optimize_rank = 0; optimize_rank < schedule->in_exclusion_optimize_group.size; ++optimize_rank) {
+                const GPUGroupDim1& cur_graph = schedule->in_exclusion_optimize_group.data[optimize_rank];
+                long long val = schedule->in_exclusion_optimize_val[optimize_rank];
+                for(int cur_graph_rank = 0; cur_graph_rank < cur_graph.size; ++cur_graph_rank) {
+                    if(cur_graph.data[cur_graph_rank].size == 1) {
+                        int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[0]];
+                        int tmp = unorderd_subtraction_size(vertex_set[id], subtraction_set);
+                        val = val * tmp;
+                    }
+                    else {
+                        int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[0]];
+                        tmp_set.copy(vertex_set[id].get_size(), vertex_set[id].get_data_ptr());
+
+                        for(int i1 = 1; i1 < cur_graph.data[cur_graph_rank].size; ++i1) {
+                            int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[i1]];
+                            tmp_set.intersection_with(vertex_set[id].get_data_ptr(), vertex_set[id].get_size(), timer);
+                        }
+                        val = val * unorderd_subtraction_size(tmp_set, subtraction_set);
+                    }
+                    if (val == 0)
+                        break;
+                }
+                if (threadIdx.x == 0)
+                    local_ans += val;
+            }
+            depth -= 1;
+            t_end = GlobalTimer64();
+            if(threadIdx.x  == 0) {
+                timer[blockIdx.x * size_type + 1] +=  t_end - t_begin;
+            }
+        }
+        else {
+            GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, edge, vertex, timer);
+        }
         if(threadIdx.x == 0)
             subtraction_set.pop_back();
         __syncthreads();
@@ -522,6 +462,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
 }
 
 __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule, uint64_t *timer) {
+    
     __shared__ unsigned int edgeI;
     __shared__ unsigned int edgeEnd;
     __shared__ unsigned long long sdata[THREADS_PER_BLOCK]; 
@@ -564,6 +505,7 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
 
     while(true) {
         if(threadIdx.x == 0) {
+   //         uint64_t t_begin = GlobalTimer64();
             //printf("%d at %u\n", blockIdx.x, edgeI);
             if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？
                 edgeI = atomicAdd(&dev_nowEdge, 1);
@@ -576,6 +518,9 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
                     subtraction_set.push_back(edge[i]);
                 }
             }
+ //           uint64_t t_end = GlobalTimer64();
+ //           timer[blockIdx.x * size_type] += t_end - t_begin;
+
         }
 
         __syncthreads();
@@ -588,9 +533,16 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
         v1 = edge[i];
 
         bool is_zero = false;
+
+        //uint64_t t_begin = GlobalTimer64();
         get_edge_index(v0, l, r);
         for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
+        
+        /*uint64_t t_end = GlobalTimer64();
+        if( threadIdx.x == 0) {
+            timer[blockIdx.x * size_type] += t_end - t_begin;
+        }*/
 
         //目前只考虑pattern size>2的情况
         //start v1, depth = 1
@@ -599,6 +551,8 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
         //if (v0 == 2 && v1 == 1 && threadIdx.x == 0)
         //    printf("v0 = 2 and v1 = 1\n");
         
+        
+        uint64_t t_begin = GlobalTimer64();
         get_edge_index(v1, l, r);
         for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
@@ -608,10 +562,20 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
                 break;
             }
         }
+        uint64_t t_end = GlobalTimer64();
+        if( threadIdx.x == 0) {
+       //     timer[blockIdx.x * size_type + 1] += t_end - t_begin;
+        }
+
         if (is_zero)
             continue;
         
+        t_begin = GlobalTimer64();
         GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex, timer);
+        t_end = GlobalTimer64();
+        if( threadIdx.x == 0) {
+            timer[blockIdx.x * size_type + 2] += t_end - t_begin;
+        }
 
         /*
 
@@ -667,7 +631,7 @@ __global__ void gpu_pattern_patching(uint32_t edge_num, uint32_t buffer_size, ui
     if (threadIdx.x == 0) {
         atomicAdd(&dev_sum, sdata[0]);
     }
-    
+
 }
 
 void pattern_matching_init(Graph *g, const Schedule& schedule) {
@@ -688,7 +652,7 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     //printf("restrict_last[1] = %d   index = %d\n", schedule.get_restrict_last(1), schedule.get_restrict_index(schedule.get_restrict_last(1)));
 
     tmpTime.check(); 
-    int numBlocks = 4096;
+    int numBlocks = 1024;
 
     uint32_t size_edge = g->e_cnt * sizeof(uint32_t);
     uint32_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
@@ -863,6 +827,14 @@ int main(int argc,char *argv[]) {
     bool use_in_exclusion_optimize = true;
     //Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
     Schedule schedule(p, is_pattern_valid, 0, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // use the best schedule
+
+    for(int i = 0; i < schedule.get_size(); ++i) {
+        printf("node %d\n", i);
+       for (int prefix_id = schedule.get_last(i); prefix_id != -1; prefix_id = schedule.get_next(prefix_id)) {
+            printf("prefix id %d, father is %d\n", prefix_id, schedule.get_father_prefix_id(prefix_id));
+        }
+    }
+
     assert(is_pattern_valid);
 
     pattern_matching_init(g, schedule);

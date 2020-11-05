@@ -1157,6 +1157,16 @@ void Schedule::init_in_exclusion_optimize() {
 
     get_in_exclusion_optimize_group(0, id, 0, in_exclusion_val);
 
+    for(int i = 0; i < in_exclusion_optimize_group.size(); ++i) {
+        printf("The %d th in ex opt group has %d parts\n", i, in_exclusion_optimize_group[i].size());
+        for(int j = 0; j < in_exclusion_optimize_group[i].size(); ++j) {
+            printf("(");
+            for(int k = 0; k < in_exclusion_optimize_group[i][j].size(); ++k)
+                printf("%d,", in_exclusion_optimize_group[i][j][k]);
+            printf(")\n");
+        }
+    }
+
     delete[] id;
     delete[] in_exclusion_val;
 }
