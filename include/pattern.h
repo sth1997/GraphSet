@@ -28,7 +28,7 @@ class Pattern
 {
 public:
     Pattern(int _size, bool clique = false);
-    Pattern(int _size, char* buffer);
+    Pattern(int _size, const char* buffer);
     ~Pattern();
     Pattern(const Pattern& p);
     Pattern(PatternType type);
