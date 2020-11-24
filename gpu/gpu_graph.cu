@@ -14,7 +14,7 @@
 #include <sys/time.h>
 #include <chrono>
 
-constexpr int THREADS_PER_BLOCK = 256;
+constexpr int THREADS_PER_BLOCK = 64;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
@@ -341,12 +341,10 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
  * @note set0 should be an ordered set, while set1 can be unordered
  * @todo rename 'subtraction' => 'difference'
  */
-__device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, int size_after_restrict = -1)
+__device__ int unordered_subtraction_size(const uint32_t* lbases, const uint32_t* rbases, int size0, int size1, int size_after_restrict = -1)
 {
     __shared__ int block_ret[WARPS_PER_BLOCK];
 
-    int size0 = set0.get_size();
-    int size1 = set1.get_size();
     if (size_after_restrict != -1)
         size0 = size_after_restrict;
 
@@ -363,17 +361,17 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
         if (lid + done1 < size1)
         {
             int l = 0, r = size0 - 1;
-            uint32_t val = set1.get_data(lid + done1);
+            uint32_t val = rbases[lid + done1];
             //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
             while (l <= r)
             {
                 int mid = (l + r) >> 1;
-                if (set0.get_data(mid) == val)
+                if (lbases[mid] == val)
                 {
                     atomicSub(&ret, 1);
                     break;
                 }
-                if (set0.get_data(mid) < val)
+                if (lbases[mid] < val)
                     l = mid + 1;
                 else
                     r = mid - 1;
@@ -385,6 +383,54 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
 
     __syncwarp();
     return ret;
+}
+
+__device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, int size_after_restrict = -1)
+{
+    return unordered_subtraction_size(set0.get_data_ptr(), set1.get_data_ptr(), set0.get_size(), set1.get_size(), size_after_restrict);
+}
+
+//减少容斥原理中的计算量，并利用一定shared memory
+constexpr int MAX_SHARED_SET_LENGTH = 142; //如果一个集合小于这个阈值，则可以放在shared memory。需要与32x + 16对齐，为了两个subwarp同时做的时候没有bank conflict
+__device__ unsigned long long IEP_3_layer(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
+    GPUVertexSet& tmp_set, int in_exclusion_optimize_num, int depth)
+{
+    __shared__ uint32_t local_mem[MAX_SHARED_SET_LENGTH * WARPS_PER_BLOCK];
+    uint32_t* warp_mem_start = local_mem + MAX_SHARED_SET_LENGTH * (threadIdx.x / THREADS_PER_WARP);
+    //首先找到需要做容斥原理的三个集合ABC的id
+    int loop_set_prefix_ids[3];
+    for (int i = 0; i < in_exclusion_optimize_num; ++i)
+        loop_set_prefix_ids[i] = schedule->get_loop_set_prefix_id(depth + i );
+    //对3个集合从小到大排序
+    if (vertex_set[loop_set_prefix_ids[2]].get_size() < vertex_set[loop_set_prefix_ids[1]].get_size())
+        swap(loop_set_prefix_ids[1], loop_set_prefix_ids[2]);
+    if (vertex_set[loop_set_prefix_ids[1]].get_size() < vertex_set[loop_set_prefix_ids[0]].get_size())
+        swap(loop_set_prefix_ids[0], loop_set_prefix_ids[1]);
+    if (vertex_set[loop_set_prefix_ids[2]].get_size() < vertex_set[loop_set_prefix_ids[1]].get_size())
+        swap(loop_set_prefix_ids[1], loop_set_prefix_ids[2]);
+
+    uint32_t* subtraction_ptr = subtraction_set.get_data_ptr();
+    int subtraction_size = subtraction_set.get_size();
+    //A & B，由于A.size < B.size，只要A.size < MAX_SHARED_SET_LENGTH，则求交后大小一定 < MAX_SHARED_SET_LENGTH，可以放到shared memory
+    uint32_t* intersection_ptr = vertex_set[loop_set_prefix_ids[0]].get_size() < MAX_SHARED_SET_LENGTH ? warp_mem_start : tmp_set.get_data_ptr();
+    unsigned long long AB_size = do_intersection(intersection_ptr, vertex_set[loop_set_prefix_ids[0]].get_data_ptr(), vertex_set[loop_set_prefix_ids[1]].get_data_ptr(), vertex_set[loop_set_prefix_ids[0]].get_size(), vertex_set[loop_set_prefix_ids[1]].get_size());
+    AB_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AB_size, subtraction_size);
+    //(A & B) & C
+    unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, vertex_set[loop_set_prefix_ids[2]].get_data_ptr(), AB_size, vertex_set[loop_set_prefix_ids[2]].get_size());
+    ABC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, ABC_size, subtraction_size);
+    //A & C
+    intersection_ptr = vertex_set[loop_set_prefix_ids[0]].get_size() < MAX_SHARED_SET_LENGTH ? warp_mem_start : tmp_set.get_data_ptr();
+    unsigned long long AC_size = do_intersection(intersection_ptr, vertex_set[loop_set_prefix_ids[0]].get_data_ptr(), vertex_set[loop_set_prefix_ids[2]].get_data_ptr(), vertex_set[loop_set_prefix_ids[0]].get_size(), vertex_set[loop_set_prefix_ids[2]].get_size());
+    AC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AC_size, subtraction_size);
+    //B & C
+    intersection_ptr = vertex_set[loop_set_prefix_ids[1]].get_size() < MAX_SHARED_SET_LENGTH ? warp_mem_start : tmp_set.get_data_ptr();
+    unsigned long long BC_size = do_intersection(intersection_ptr, vertex_set[loop_set_prefix_ids[1]].get_data_ptr(), vertex_set[loop_set_prefix_ids[2]].get_data_ptr(), vertex_set[loop_set_prefix_ids[1]].get_size(), vertex_set[loop_set_prefix_ids[2]].get_size());
+    BC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, BC_size, subtraction_size);
+
+    unsigned long long A_size = unordered_subtraction_size(vertex_set[loop_set_prefix_ids[0]], subtraction_set);
+    unsigned long long B_size = unordered_subtraction_size(vertex_set[loop_set_prefix_ids[1]], subtraction_set);
+    unsigned long long C_size = unordered_subtraction_size(vertex_set[loop_set_prefix_ids[2]], subtraction_set);
+    return A_size * B_size * C_size - A_size * BC_size - B_size * AC_size - C_size * AB_size + (ABC_size << 1);
 }
 
 __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
@@ -400,6 +446,12 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
     if( depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num())
     {
         int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
+
+        if (in_exclusion_optimize_num == 3) {
+            local_ans += IEP_3_layer(schedule, vertex_set, subtraction_set, tmp_set, in_exclusion_optimize_num, depth);
+            return;
+        }
+
         //int* loop_set_prefix_ids[ in_exclusion_optimize_num ];
         int loop_set_prefix_ids[8];/** @todo 偷懒用了static，之后考虑改成dynamic */
         /** @todo 这里有硬编码的数字，之后考虑修改。*/
@@ -407,6 +459,25 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
         for(int i = 1; i < in_exclusion_optimize_num; ++i)
             loop_set_prefix_ids[i] = schedule->get_loop_set_prefix_id( depth + i );
 
+        /*
+            if (threadIdx.x == 0)
+        {
+                printf("group size = %d\n", schedule->in_exclusion_optimize_group.size);
+                for (int optimize_rank = 0; optimize_rank < schedule->in_exclusion_optimize_group.size; ++optimize_rank)
+                {
+                    const GPUGroupDim1& cur_graph = schedule->in_exclusion_optimize_group.data[optimize_rank];
+                    long long val = schedule->in_exclusion_optimize_val[optimize_rank];
+                    printf("val = %lld    cur_graph size = %d\n", val, cur_graph.size);
+                    for(int cur_graph_rank = 0; cur_graph_rank < cur_graph.size; ++cur_graph_rank) {
+                        for(int i = 0; i < cur_graph.data[cur_graph_rank].size; ++i) {
+                            printf("%d:%d , ", loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[i]], cur_graph.data[cur_graph_rank].data[i]);
+                        }
+                        printf("      ");
+                    }
+                    printf("\n");
+                }
+        }
+        */
         for(int optimize_rank = 0; optimize_rank < schedule->in_exclusion_optimize_group.size; ++optimize_rank) {
             const GPUGroupDim1& cur_graph = schedule->in_exclusion_optimize_group.data[optimize_rank];
             long long val = schedule->in_exclusion_optimize_val[optimize_rank];
