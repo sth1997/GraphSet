@@ -390,12 +390,91 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     return unordered_subtraction_size(set0.get_data_ptr(), set1.get_data_ptr(), set0.get_size(), set1.get_size(), size_after_restrict);
 }
 
+constexpr int MAX_SHARED_SET_LENGTH = 144; //如果一个集合小于这个阈值，则可以放在shared memory。需要与32x + 16对齐，为了两个subwarp同时做的时候没有bank conflict
+__shared__ uint32_t local_mem[4 * MAX_SHARED_SET_LENGTH * WARPS_PER_BLOCK];
+
+__device__ void global_to_shared(const GPUVertexSet& set, uint32_t* smem)
+{
+    int loop_size = set.get_size();
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    for (int i = lid; i < loop_size; i += THREADS_PER_WARP)
+        smem[i] = set.get_data(i); //频繁调用get_data，编译器应该会用寄存器缓存一下set.data_ptr吧？之后改一下手动存ptr试试
+}
+
+//减少容斥原理中的计算量，并使用更多shared memory。但是性能却下降了
+__device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
+    GPUVertexSet& tmp_set, int in_exclusion_optimize_num, int depth)
+{
+    //这个版本只需要用4个set大小的shared memory
+    uint32_t* warp_mem_start = local_mem + 4 * MAX_SHARED_SET_LENGTH * (threadIdx.x / THREADS_PER_WARP);
+    //首先找到需要做容斥原理的三个集合ABC的id
+    int loop_set_prefix_ids[3];
+    for (int i = 0; i < in_exclusion_optimize_num; ++i)
+        loop_set_prefix_ids[i] = schedule->get_loop_set_prefix_id(depth + i );
+    //对3个集合从小到大排序
+    if (vertex_set[loop_set_prefix_ids[2]].get_size() < vertex_set[loop_set_prefix_ids[1]].get_size())
+        swap(loop_set_prefix_ids[1], loop_set_prefix_ids[2]);
+    if (vertex_set[loop_set_prefix_ids[1]].get_size() < vertex_set[loop_set_prefix_ids[0]].get_size())
+        swap(loop_set_prefix_ids[0], loop_set_prefix_ids[1]);
+    if (vertex_set[loop_set_prefix_ids[2]].get_size() < vertex_set[loop_set_prefix_ids[1]].get_size())
+        swap(loop_set_prefix_ids[1], loop_set_prefix_ids[2]);
+
+    //把ABC从global移动到shared
+    uint32_t *A_ptr, *B_ptr, *C_ptr;
+    uint32_t A_size = vertex_set[loop_set_prefix_ids[0]].get_size(), B_size = vertex_set[loop_set_prefix_ids[1]].get_size(), C_size = vertex_set[loop_set_prefix_ids[2]].get_size();
+    if (A_size < MAX_SHARED_SET_LENGTH)
+    {
+        A_ptr = warp_mem_start;
+        global_to_shared(vertex_set[loop_set_prefix_ids[0]], A_ptr);
+    }
+    else
+        A_ptr = vertex_set[loop_set_prefix_ids[0]].get_data_ptr();
+
+    if (B_size < MAX_SHARED_SET_LENGTH)
+    {
+        B_ptr = warp_mem_start + MAX_SHARED_SET_LENGTH;
+        global_to_shared(vertex_set[loop_set_prefix_ids[1]], B_ptr);
+    }
+    else
+        B_ptr = vertex_set[loop_set_prefix_ids[1]].get_data_ptr();
+
+    if (C_size < MAX_SHARED_SET_LENGTH)
+    {
+        C_ptr = warp_mem_start + (MAX_SHARED_SET_LENGTH << 1);
+        global_to_shared(vertex_set[loop_set_prefix_ids[2]], C_ptr);
+    }
+    else
+        C_ptr = vertex_set[loop_set_prefix_ids[2]].get_data_ptr();
+
+    uint32_t* subtraction_ptr = subtraction_set.get_data_ptr();
+    int subtraction_size = subtraction_set.get_size();
+    //A & B，由于A.size < B.size，只要A.size < MAX_SHARED_SET_LENGTH，则求交后大小一定 < MAX_SHARED_SET_LENGTH，可以放到shared memory
+    uint32_t* intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
+    unsigned long long AB_size = do_intersection(intersection_ptr, A_ptr, B_ptr, A_size, B_size);
+    AB_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AB_size, subtraction_size);
+    //(A & B) & C
+    unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, C_ptr, AB_size, C_size);
+    ABC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, ABC_size, subtraction_size);
+    //A & C
+    intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
+    unsigned long long AC_size = do_intersection(intersection_ptr, A_ptr, C_ptr, A_size, C_size);
+    AC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AC_size, subtraction_size);
+    //B & C
+    intersection_ptr = B_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
+    unsigned long long BC_size = do_intersection(intersection_ptr, B_ptr, C_ptr, B_size, C_size);
+    BC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, BC_size, subtraction_size);
+
+    A_size = unordered_subtraction_size(A_ptr, subtraction_ptr, A_size, subtraction_size);
+    B_size = unordered_subtraction_size(B_ptr, subtraction_ptr, B_size, subtraction_size);
+    C_size = unordered_subtraction_size(C_ptr, subtraction_ptr, C_size, subtraction_size);
+    return A_size * B_size * C_size - A_size * BC_size - B_size * AC_size - C_size * AB_size + (ABC_size << 1);
+}
+
 //减少容斥原理中的计算量，并利用一定shared memory
-constexpr int MAX_SHARED_SET_LENGTH = 142; //如果一个集合小于这个阈值，则可以放在shared memory。需要与32x + 16对齐，为了两个subwarp同时做的时候没有bank conflict
 __device__ unsigned long long IEP_3_layer(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
     GPUVertexSet& tmp_set, int in_exclusion_optimize_num, int depth)
 {
-    __shared__ uint32_t local_mem[MAX_SHARED_SET_LENGTH * WARPS_PER_BLOCK];
+    //这个版本只需要用一个set大小的shared memory
     uint32_t* warp_mem_start = local_mem + MAX_SHARED_SET_LENGTH * (threadIdx.x / THREADS_PER_WARP);
     //首先找到需要做容斥原理的三个集合ABC的id
     int loop_set_prefix_ids[3];
