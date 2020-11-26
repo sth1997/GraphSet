@@ -18,25 +18,72 @@ constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
+
+class GPU_TimeInterval{
+    public:
+        static __device__ inline uint64_t GlobalTimer64(void) {
+            // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
+            // around after the upper bits have already been read. Work around this by
+            // reading the high bits a second time. Use the second value to detect a
+            // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
+            // would be valid, it's passed over during the duration of the reading. If no
+            // rollover occurred, just return the initial reading.
+            volatile uint64_t first_reading;
+            volatile uint32_t second_reading;
+            uint32_t high_bits_first;
+            asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
+            high_bits_first = first_reading >> 32;
+            asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
+            if (high_bits_first == second_reading) {
+                return first_reading;
+            }
+            // Return the value with the updated high bits, but the low bits set to 0.
+            return ((uint64_t) second_reading) << 32;
+        }
+
+        __device__ GPU_TimeInterval() {
+            check();
+        }
+
+        __device__ void check() {
+            tp = GlobalTimer64();
+        }
+
+        __device__ void save(uint64_t* p) {
+            *p = GlobalTimer64() - tp;
+        }
+
+        __device__ uint64_t get_begin() {
+            return tp;
+        }
+
+        __device__ uint64_t get_end() {
+            return GlobalTimer64();
+        }
+
+    private:
+        uint64_t tp;
+};
+
 // 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
-public:
-    TimeInterval(){
-        check();
-    }
+    public:
+        TimeInterval(){
+            check();
+        }
 
-    void check(){
-        gettimeofday(&tp, NULL);
-    }
+        void check(){
+            gettimeofday(&tp, NULL);
+        }
 
-    void print(const char* title){
-        struct timeval tp_end, tp_res;
-        gettimeofday(&tp_end, NULL);
-        timersub(&tp_end, &tp, &tp_res);
-        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
-    }
-private:
-    struct timeval tp;
+        void print(const char* title){
+            struct timeval tp_end, tp_res;
+            gettimeofday(&tp_end, NULL);
+            timersub(&tp_end, &tp, &tp_res);
+            printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
+        }
+    private:
+        struct timeval tp;
 };
 
 TimeInterval allTime;
@@ -45,11 +92,11 @@ TimeInterval tmpTime;
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
+    if (code != cudaSuccess) 
+    {
+        fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        if (abort) exit(code);
+    }
 }
 
 #define get_edge_index(v, l, r) do { \
@@ -57,7 +104,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
     r = vertex[v + 1]; \
 } while(0)
 
-template <typename T>
+    template <typename T>
 __device__ inline void swap(T& a, T& b)
 {
     T t(std::move(a));
@@ -68,7 +115,7 @@ __device__ inline void swap(T& a, T& b)
 extern __device__ int count;
 
 // 用来检查一个block内线程计算结果是否一致 TODO：移除
-template <typename T>
+    template <typename T>
 __device__ inline void _check_consistency(const T& v, int line)
 {
     __shared__ T sdata[THREADS_PER_BLOCK];
@@ -487,7 +534,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
     }
 }
 
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule, uint64_t *warp_timer) {
     __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
@@ -521,6 +568,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 
     unsigned long long sum = 0;
 
+    GPU_TimeInterval tstamp;
     while (true) {
         if (lid == 0) {
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
@@ -541,6 +589,8 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         unsigned int i = edge_idx;
         if(i >= edge_num) break;
        
+       if( lid == 0) 
+           tstamp.check();
        // for edge in E
         v0 = edge_from[i];
         v1 = edge[i];
@@ -571,6 +621,9 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
         sum += local_sum;
         check_ans(local_sum);
+
+        if(lid == 0) 
+            warp_timer[global_wid] += tstamp.get_end() - tstamp.get_begin();
     }
 
     if (lid == 0)
@@ -592,26 +645,35 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
 
     tmpTime.check(); 
 
-    int num_blocks = 4096;
+    int num_blocks = 256;
     int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
     uint32_t size_edge = g->e_cnt * sizeof(uint32_t);
     uint32_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
     uint32_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+    uint32_t size_warp_timer = num_total_warps * sizeof(uint64_t);
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
     uint32_t *dev_vertex;
     uint32_t *dev_tmp;
+    uint64_t *warp_timer;
+    uint64_t *cpu_warp_timer;
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
     gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
     gpuErrchk( cudaMalloc((void**)&dev_vertex, size_vertex));
     gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
+    gpuErrchk( cudaMalloc((void**)&warp_timer, size_warp_timer));
+    cpu_warp_timer = new uint64_t[num_total_warps];
+    
+    for(int i = 0; i < num_total_warps; ++i)
+        cpu_warp_timer[i] = 0;
 
     gpuErrchk( cudaMemcpy(dev_edge, edge, size_edge, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_vertex, vertex, size_vertex, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpy(warp_timer, cpu_warp_timer, size_warp_timer, cudaMemcpyHostToDevice));
 
     unsigned long long sum = 0;
 
@@ -664,11 +726,15 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
-        (edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
+        (edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule, warp_timer);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
+
+    gpuErrchk( cudaMemcpy(cpu_warp_timer, warp_timer, size_warp_timer, cudaMemcpyDeviceToHost));
+    for(int i = 0; i < num_total_warps; ++i)
+        printf("%d : %lu\n", i, cpu_warp_timer[i]);
 
     printf("house count %llu\n", sum);
     tmpTime.print("Counting time cost");
@@ -717,7 +783,14 @@ int main(int argc,char *argv[]) {
     using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
-    assert(D.load_data(g, my_type, path.c_str())); 
+    printf("before load\n");
+    //Do not use assert in release type, because it will not be executed!
+    //assert(D.load_data(g, my_type, path.c_str())); 
+    if(!D.load_data(g, my_type, path.c_str())) {
+        printf("fatal error: load dataset failed.");
+        return 0;
+    }
+    printf("after load\n");
 
     auto t2 = system_clock::now();
     auto load_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
