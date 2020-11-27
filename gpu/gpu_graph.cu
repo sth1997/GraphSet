@@ -17,53 +17,27 @@
 constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
+constexpr int num_timer = 3;
 
-
-class GPU_TimeInterval{
-    public:
-        static __device__ inline uint64_t GlobalTimer64(void) {
-            // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
-            // around after the upper bits have already been read. Work around this by
-            // reading the high bits a second time. Use the second value to detect a
-            // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
-            // would be valid, it's passed over during the duration of the reading. If no
-            // rollover occurred, just return the initial reading.
-            volatile uint64_t first_reading;
-            volatile uint32_t second_reading;
-            uint32_t high_bits_first;
-            asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
-            high_bits_first = first_reading >> 32;
-            asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
-            if (high_bits_first == second_reading) {
-                return first_reading;
-            }
-            // Return the value with the updated high bits, but the low bits set to 0.
-            return ((uint64_t) second_reading) << 32;
-        }
-
-        __device__ GPU_TimeInterval() {
-            check();
-        }
-
-        __device__ void check() {
-            tp = GlobalTimer64();
-        }
-
-        __device__ void save(uint64_t* p) {
-            *p = GlobalTimer64() - tp;
-        }
-
-        __device__ uint64_t get_begin() {
-            return tp;
-        }
-
-        __device__ uint64_t get_end() {
-            return GlobalTimer64();
-        }
-
-    private:
-        uint64_t tp;
-};
+static __device__ inline uint64_t GlobalTimer64(void) {
+    // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
+    // around after the upper bits have already been read. Work around this by
+    // reading the high bits a second time. Use the second value to detect a
+    // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
+    // would be valid, it's passed over during the duration of the reading. If no
+    // rollover occurred, just return the initial reading.
+    volatile uint64_t first_reading;
+    volatile uint32_t second_reading;
+    uint32_t high_bits_first;
+    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
+    high_bits_first = first_reading >> 32;
+    asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
+    if (high_bits_first == second_reading) {
+        return first_reading;
+    }
+    // Return the value with the updated high bits, but the low bits set to 0.
+    return ((uint64_t) second_reading) << 32;
+}
 
 // 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
@@ -219,7 +193,7 @@ public:
 };
 
 // __device__ void intersection1(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
-__device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
+__device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size, uint64_t* timer);
 static __device__ uint32_t do_intersection(uint32_t*, const uint32_t*, const uint32_t*, uint32_t, uint32_t);
 
 class GPUVertexSet
@@ -263,7 +237,7 @@ public:
             data[i] = input_data[i];
         __syncwarp();
     }
-    __device__ void build_vertex_set(const GPUSchedule* schedule, const GPUVertexSet* vertex_set, uint32_t* input_data, uint32_t input_size, int prefix_id)
+    __device__ void build_vertex_set(const GPUSchedule* schedule, const GPUVertexSet* vertex_set, uint32_t* input_data, uint32_t input_size, int prefix_id, uint64_t* timer)
     {
         int father_id = schedule->get_father_prefix_id(prefix_id);
         if (father_id == -1)
@@ -274,7 +248,7 @@ public:
         }
         else
         {
-            intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
+            intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size, timer);
         }
     }
 
@@ -364,8 +338,12 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
  * 
  * 注意：不能进行in-place操作。若想原地操作则应当把交换去掉。
  */
-__device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size)
+__device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size, uint64_t* timer)
 {
+    if( threadIdx.x % THREADS_PER_WARP == 0) {
+        timer[(blockIdx.x * WARPS_PER_BLOCK + threadIdx.x  / THREADS_PER_WARP) * num_timer] -= GlobalTimer64();
+    }
+
     // make sure ln <= rn
     if (ln > rn) {
         swap(ln, rn);
@@ -381,6 +359,10 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
     if (threadIdx.x % THREADS_PER_WARP == 0)
         *p_tmp_size = intersection_size;
     __syncwarp();
+    
+    if( threadIdx.x % THREADS_PER_WARP == 0) {
+        timer[(blockIdx.x * WARPS_PER_BLOCK + threadIdx.x  / THREADS_PER_WARP) * num_timer] += GlobalTimer64();
+    }
 }
 
 /**
@@ -388,8 +370,12 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
  * @note set0 should be an ordered set, while set1 can be unordered
  * @todo rename 'subtraction' => 'difference'
  */
-__device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, int size_after_restrict = -1)
+__device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, uint64_t* timer, int size_after_restrict = -1)
 {
+    if( threadIdx.x % THREADS_PER_WARP == 0) {
+        timer[(blockIdx.x * WARPS_PER_BLOCK + threadIdx.x / THREADS_PER_WARP) * num_timer + 1] -= GlobalTimer64();
+    }
+    
     __shared__ int block_ret[WARPS_PER_BLOCK];
 
     int size0 = set0.get_size();
@@ -431,11 +417,15 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     }
 
     __syncwarp();
+    
+    if( threadIdx.x % THREADS_PER_WARP == 0) {
+        timer[(blockIdx.x * WARPS_PER_BLOCK + threadIdx.x / THREADS_PER_WARP) * num_timer + 1] += GlobalTimer64();
+    }
     return ret;
 }
 
 __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, uint32_t *vertex)
+    GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, uint32_t *vertex, uint64_t* timer)
 {
     int loop_set_prefix_id = schedule->get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -446,6 +436,9 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
 
     if( depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num())
     {
+        if( threadIdx.x % THREADS_PER_WARP == 0) {
+            timer[(blockIdx.x * WARPS_PER_BLOCK + threadIdx.x / THREADS_PER_WARP) * num_timer + 2] -= GlobalTimer64();
+        }
         int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
         //int* loop_set_prefix_ids[ in_exclusion_optimize_num ];
         int loop_set_prefix_ids[8];/** @todo 偷懒用了static，之后考虑改成dynamic */
@@ -462,7 +455,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
                 if(cur_graph.data[cur_graph_rank].size == 1) {
                     int id = loop_set_prefix_ids[cur_graph.data[cur_graph_rank].data[0]];
                     //val = val * unordered_subtraction_size(vertex_set[id], subtraction_set);
-                    int tmp = unordered_subtraction_size(vertex_set[id], subtraction_set);
+                    int tmp = unordered_subtraction_size(vertex_set[id], subtraction_set, timer);
                     check_ans(tmp);
 
                     val = val * tmp;
@@ -476,7 +469,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
                         tmp_set.intersection_with(vertex_set[id]);
                     }
                     
-                    int tmp = unordered_subtraction_size(tmp_set, subtraction_set);
+                    int tmp = unordered_subtraction_size(tmp_set, subtraction_set, timer);
                     check_ans(tmp);
 
                     val = val * tmp;
@@ -486,6 +479,9 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
             }
 
             local_ans += val;
+        }
+        if( threadIdx.x % THREADS_PER_WARP == 0) {
+            timer[(blockIdx.x * WARPS_PER_BLOCK + threadIdx.x / THREADS_PER_WARP) * num_timer + 2] += GlobalTimer64();
         }
         return;
     }
@@ -516,7 +512,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
         bool is_zero = false;
         for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
             if (vertex_set[prefix_id].get_size() == 0) {
                 is_zero = true;
                 break;
@@ -527,14 +523,14 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
         if(threadIdx.x % THREADS_PER_WARP == 0)
             subtraction_set.push_back(v);
         __syncwarp();
-        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, edge, vertex);
+        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, edge, vertex, timer);
         if(threadIdx.x % THREADS_PER_WARP == 0)
             subtraction_set.pop_back();
         __syncwarp();
     }
 }
 
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule, uint64_t *warp_timer) {
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule, uint64_t* timer) {
     __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
@@ -568,7 +564,6 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 
     unsigned long long sum = 0;
 
-    GPU_TimeInterval tstamp;
     while (true) {
         if (lid == 0) {
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
@@ -589,8 +584,6 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         unsigned int i = edge_idx;
         if(i >= edge_num) break;
        
-       if( lid == 0) 
-           tstamp.check();
        // for edge in E
         v0 = edge_from[i];
         v1 = edge[i];
@@ -598,7 +591,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         bool is_zero = false;
         get_edge_index(v0, l, r);
         for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
 
         //目前只考虑pattern size>2的情况
         //start v1, depth = 1
@@ -608,7 +601,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         get_edge_index(v1, l, r);
         for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id, timer);
             if (vertex_set[prefix_id].get_size() == 0) {
                 is_zero = true;
                 break;
@@ -618,12 +611,10 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
             continue;
         
         unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
-        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
+        GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex, timer);
         sum += local_sum;
         check_ans(local_sum);
 
-        if(lid == 0) 
-            warp_timer[global_wid] += tstamp.get_end() - tstamp.get_begin();
     }
 
     if (lid == 0)
@@ -651,29 +642,27 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     uint32_t size_edge = g->e_cnt * sizeof(uint32_t);
     uint32_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
     uint32_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule.get_total_prefix_num() + 2); //prefix + subtraction + tmp
-    uint32_t size_warp_timer = num_total_warps * sizeof(uint64_t);
+    uint32_t size_timer = num_total_warps * num_timer * sizeof(uint64_t);
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
     uint32_t *dev_vertex;
     uint32_t *dev_tmp;
-    uint64_t *warp_timer;
-    uint64_t *cpu_warp_timer;
+    uint64_t *dev_timer;
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
     gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
     gpuErrchk( cudaMalloc((void**)&dev_vertex, size_vertex));
     gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
-    gpuErrchk( cudaMalloc((void**)&warp_timer, size_warp_timer));
-    cpu_warp_timer = new uint64_t[num_total_warps];
-    
-    for(int i = 0; i < num_total_warps; ++i)
-        cpu_warp_timer[i] = 0;
+    gpuErrchk( cudaMalloc((void**)&dev_timer, size_timer));
+
+    uint64_t *timer = new uint64_t[num_total_warps * num_timer];
+    for(int i = 0; i < num_total_warps * num_timer; ++i) timer[i] = 0;
 
     gpuErrchk( cudaMemcpy(dev_edge, edge, size_edge, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_vertex, vertex, size_vertex, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(warp_timer, cpu_warp_timer, size_warp_timer, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpy(dev_timer, timer, size_timer, cudaMemcpyHostToDevice));
 
     unsigned long long sum = 0;
 
@@ -726,15 +715,24 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
-        (edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule, warp_timer);
+        (edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule, dev_timer);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
-    gpuErrchk( cudaMemcpy(cpu_warp_timer, warp_timer, size_warp_timer, cudaMemcpyDeviceToHost));
-    for(int i = 0; i < num_total_warps; ++i)
-        printf("%d : %lu\n", i, cpu_warp_timer[i]);
+    gpuErrchk( cudaMemcpy(timer, dev_timer, size_timer, cudaMemcpyDeviceToHost));
+    uint64_t timer_result[num_timer];
+    for(int i = 0; i < num_timer; ++i) {
+        int non_zero = 0;
+        timer_result[i] = 0;
+        for(int j = 0; j < num_total_warps; ++j) {
+            if(timer[j * num_timer + i]) ++non_zero;
+            timer_result[i] += timer[j * num_timer + i];
+        }
+        printf("non zero warps : %d\n", non_zero);
+        printf("timer %d : %lu\n", i, timer_result[i]);
+    }
 
     printf("house count %llu\n", sum);
     tmpTime.print("Counting time cost");
