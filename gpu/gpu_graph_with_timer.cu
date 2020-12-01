@@ -1,7 +1,3 @@
-/**
- * 这个版本里面没有细粒度计时。有计时的在gpu_graph_with_timer.cu里面。
- * 而且计时的方式与zms版本略有区别。
- */
 #include <graph.h>
 #include <dataloader.h>
 #include <vertex_set.h>
@@ -17,6 +13,9 @@
 
 #include <sys/time.h>
 #include <chrono>
+
+#define COUNT_TIME 0
+#define FINE_GRAINED_TIMING 0
 
 constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
@@ -67,6 +66,27 @@ __device__ inline void swap(T& a, T& b)
     T t(std::move(a));
     a = std::move(b);
     b = std::move(t);
+}
+
+__device__ static inline uint64_t read_timer()
+{
+    // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
+    // around after the upper bits have already been read. Work around this by
+    // reading the high bits a second time. Use the second value to detect a
+    // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
+    // would be valid, it's passed over during the duration of the reading. If no
+    // rollover occurred, just return the initial reading.
+    volatile uint64_t first_reading;
+    volatile uint32_t second_reading;
+    uint32_t high_bits_first;
+    asm volatile ("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
+    high_bits_first = first_reading >> 32;
+    asm volatile ("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
+    if (high_bits_first == second_reading) {
+        return first_reading;
+    }
+    // Return the value with the updated high bits, but the low bits set to 0.
+    return ((uint64_t) second_reading) << 32;
 }
 
 struct GPUGroupDim2 {
@@ -219,6 +239,24 @@ private:
 __device__ unsigned long long dev_sum = 0;
 __device__ unsigned int dev_cur_edge = 0;
 
+#if COUNT_TIME
+__device__ uint32_t i_count = 0;
+__device__ uint64_t ihead_time = 0, i_time = 0, t_time = 0;
+#endif
+
+#if FINE_GRAINED_TIMING
+__device__ __host__ struct TimingRecord {
+    int warp_id;
+    uint64_t begin, end;
+};
+
+__device__ unsigned int dev_nr_records = 0, dev_real_nr_records;
+
+constexpr int MAX_NR_RECORDS = 100000; // 注意：请先得到real_nr_records再确定此值
+__device__ TimingRecord dev_records[MAX_NR_RECORDS];
+
+#endif
+
 /**
  * search-based intersection
  * 
@@ -229,6 +267,10 @@ __device__ unsigned int dev_cur_edge = 0;
  */
 __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
 {
+#if COUNT_TIME
+    auto t1 = read_timer();
+#endif
+
     __shared__ uint32_t block_out_offset[THREADS_PER_BLOCK];
     __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
 
@@ -237,29 +279,20 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
     uint32_t *out_offset = block_out_offset + wid * THREADS_PER_WARP;
     uint32_t &out_size = block_out_size[wid];
 
+#if COUNT_TIME
+    auto t2 = read_timer();
+#endif
+
     if (lid == 0)
         out_size = 0;
 
-    uint32_t v, num_done = 0;
+    uint32_t num_done = 0;
     while (num_done < na) {
         bool found = 0;
         uint32_t u = 0;
         if (num_done + lid < na) {
+            int mid, l = 0, r = nb - 1; // [l, r], use signed int instead of unsigned int!
             u = a[num_done + lid]; // u: an element in set a
-            /*
-            // 我这里这样写并没有变快，反而明显慢了
-            int x, s[3], &l = s[0], &r = s[1], &mid = s[2];
-            l = 0, r = int(nb) - 1, mid = (int(nb) - 1) >> 1;
-            while (l <= r && !found) {
-                uint32_t v = b[mid];
-                found = (v == u);
-                x = (v < u);
-                mid += 2 * x - 1;
-                swap(mid, s[!x]);
-                mid = (l + r) >> 1;
-            }
-            */
-            int mid, l = 0, r = int(nb) - 1;
             while (l <= r) {
                 mid = (l + r) >> 1;
                 if (b[mid] < u) {
@@ -293,6 +326,15 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
     }
 
     __threadfence_block();
+
+#if COUNT_TIME
+    auto t3 = read_timer();
+    if (lid == 0) {
+        atomicAdd(&i_count, 1);
+        atomicAdd((unsigned long long*)&ihead_time, t2 - t1);
+        atomicAdd((unsigned long long*)&i_time, t3 - t1);
+    }
+#endif
     return out_size;
 }
 
@@ -610,8 +652,16 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
     uint32_t l, r;
 
     unsigned long long sum = 0;
+#if COUNT_TIME
+    uint64_t t_time_local = 0;
+#endif
 
     while (true) {
+
+#if COUNT_TIME || FINE_GRAINED_TIMING
+        auto t1 = read_timer();
+#endif
+
         if (lid == 0) {
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
                 edge_idx = atomicAdd(&dev_cur_edge, 1);
@@ -661,10 +711,29 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         GPU_pattern_matching_func<2>(schedule, vertex_set, subtraction_set, tmp_set, local_sum, edge, vertex);
         // GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
         sum += local_sum;
+
+#if COUNT_TIME
+        auto t2 = read_timer();
+        t_time_local += t2 - t1;
+#endif
+
+#if FINE_GRAINED_TIMING
+        if (lid == 0) {
+            auto t2 = read_timer();
+            atomicAdd(&dev_real_nr_records, 1);
+            int idx = atomicInc(&dev_nr_records, MAX_NR_RECORDS);
+            dev_records[idx].warp_id = global_wid;
+            dev_records[idx].begin = t1;
+            dev_records[idx].end = t2;
+        }
+#endif
     }
 
     if (lid == 0) {
         atomicAdd(&dev_sum, sum);
+#if COUNT_TIME
+        atomicAdd((unsigned long long*)&t_time, t_time_local);
+#endif
     }
 }
 
@@ -761,7 +830,43 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
-    printf("count %llu\n", sum);
+#if COUNT_TIME
+    int i_count_cpu;
+    uint64_t t_time_cpu, i_time_cpu, ihead_time_cpu;
+    gpuErrchk( cudaMemcpyFromSymbol(&t_time_cpu, t_time, sizeof(t_time)));
+    gpuErrchk( cudaMemcpyFromSymbol(&i_count_cpu, i_count, sizeof(i_count)));
+    gpuErrchk( cudaMemcpyFromSymbol(&i_time_cpu, i_time, sizeof(i_time)));
+    gpuErrchk( cudaMemcpyFromSymbol(&ihead_time_cpu, ihead_time, sizeof(ihead_time)));
+    printf("t_time: %ld\n", t_time_cpu);
+    printf("[intersection] count: %d, head time: %ld, total time: %ld\n", i_count_cpu, ihead_time_cpu, i_time_cpu);
+#endif
+
+#if FINE_GRAINED_TIMING
+    int nr_records;
+    gpuErrchk( cudaMemcpyFromSymbol(&nr_records, dev_nr_records, sizeof(dev_nr_records)));
+    printf("number of records: %d\n", nr_records);
+
+    auto records = new TimingRecord[nr_records];
+    gpuErrchk( cudaMemcpyFromSymbol(records, dev_records, sizeof(TimingRecord) * nr_records));
+
+    uint64_t min_timestamp = UINT64_MAX;
+    for (int i = 0; i < nr_records; ++i) {
+        uint64_t t1 = records[i].begin, t2 = records[i].end;
+        if (!t1 && !t2)
+            continue;
+        min_timestamp = min(min_timestamp, min(t1, t2));
+    }
+    for (int i = 0; i < nr_records; ++i) {
+        int warp_id = records[i].warp_id;
+        uint64_t t1 = records[i].begin, t2 = records[i].end;
+        if (!t1 && !t2)
+            continue;
+        printf("@%d,%lu,%lu\n", warp_id, t1 - min_timestamp, t2 - min_timestamp);
+    }
+    delete[] records;
+#endif
+
+    printf("house count %llu\n", sum);
     tmpTime.print("Counting time cost");
     //之后需要加上cudaFree
 
@@ -817,11 +922,11 @@ int main(int argc,char *argv[]) {
 
     allTime.check();
 
-    const char *pattern_str = "0111010011100011100001100"; // 5 house p1
-    // const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
+    // const char *pattern_str = "0111010011100011100001100"; // 5 house p1
+    const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
     // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
 
-    Pattern p(5, pattern_str);
+    Pattern p(6, pattern_str);
     printf("pattern = \n");
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);
