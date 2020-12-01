@@ -297,6 +297,123 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 }
 
 /**
+ * search-based intersection
+ * 
+ * returns the size of the intersection set
+ * 
+ * @note：只返回交集大小，并不实际地求出交集。
+            集合中的元素的最后一位为flag，flag为0表示元素合法（即每个元素是原始节点编号的2倍或者2倍+1）。
+ * @todo：shared memory缓存优化
+ */
+__device__ uint32_t get_intersection_size_with_flag(const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
+{
+    __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
+
+    int wid = threadIdx.x / THREADS_PER_WARP; // warp id
+    int lid = threadIdx.x % THREADS_PER_WARP; // lane id
+    uint32_t &out_size = block_out_size[wid];
+
+    if (lid == 0)
+        out_size = 0;
+
+    uint32_t num_done = 0;
+    while (num_done < na) {
+        uint32_t u = 0;
+        if (num_done + lid < na) {
+            u = a[num_done + lid];
+            if ((u & 1) == 0) //只使用a中合法元素查找，这样求交结果也一定都是合法元素
+            {
+                int mid, l = 0, r = int(nb) - 1;
+                while (l <= r) {
+                    mid = (l + r) >> 1;
+                    if (b[mid] < u) {
+                        l = mid + 1;
+                    } else if (b[mid] > u) {
+                        r = mid - 1;
+                    } else {
+                        atomicAdd(&out_size, 1);
+                        break;
+                    }
+                }
+            }
+        }
+        __threadfence_block();
+        num_done += THREADS_PER_WARP;
+    }
+
+    __threadfence_block();
+    return out_size;
+}
+
+/**
+ * search-based intersection
+ * 
+ * returns the size of the intersection set
+ * 
+ * @note：a和b并不是地位相等的。如果要进行in-place操作，请把输入放在a而不是b。
+            集合中的元素的最后一位为flag，flag为0表示元素合法（即每个元素是原始节点编号的2倍或者2倍+1）。
+ * @todo：shared memory缓存优化
+ */
+__device__ uint32_t do_intersection_with_flag(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
+{
+    __shared__ uint32_t block_out_offset[THREADS_PER_BLOCK];
+    __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
+
+    int wid = threadIdx.x / THREADS_PER_WARP; // warp id
+    int lid = threadIdx.x % THREADS_PER_WARP; // lane id
+    uint32_t *out_offset = block_out_offset + wid * THREADS_PER_WARP;
+    uint32_t &out_size = block_out_size[wid];
+
+    if (lid == 0)
+        out_size = 0;
+
+    uint32_t num_done = 0;
+    while (num_done < na) {
+        bool found = 0;
+        uint32_t u = 0;
+        if (num_done + lid < na) {
+            u = a[num_done + lid];
+            if ((u & 1) == 0) //只使用a中合法元素查找，这样求交结果也一定都是合法元素
+            {
+                int mid, l = 0, r = int(nb) - 1;
+                while (l <= r) {
+                    mid = (l + r) >> 1;
+                    if (b[mid] < u) {
+                        l = mid + 1;
+                    } else if (b[mid] > u) {
+                        r = mid - 1;
+                    } else {
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+        }
+        out_offset[lid] = found;
+        __threadfence_block();
+
+        for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
+            uint32_t v = lid >= s ? out_offset[lid - s] : 0;
+            __threadfence_block();
+            out_offset[lid] += v;
+            __threadfence_block();
+        }
+
+        if (found) {
+            uint32_t offset = out_offset[lid] - 1;
+            out[out_size + offset] = u;
+        }
+
+        if (lid == 0)
+            out_size += out_offset[THREADS_PER_WARP - 1];
+        num_done += THREADS_PER_WARP;
+    }
+
+    __threadfence_block();
+    return out_size;
+}
+
+/**
  * wrapper of search based intersection `do_intersection`
  * 
  * 注意：不能进行in-place操作。若想原地操作则应当把交换去掉。
@@ -320,6 +437,52 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
 }
 
 /**
+ * @brief calculate set0 = set0 - set1。返回集合大小。输入的set0元素必须是原节点编号*2（不允许有单数存在），set1为原节点编号。
+ * @note set0 should be an ordered set, while set1 can be unordered。元素不被真正地删除，而是被+1（最低位为1，表示不合法）。需要注意，得到的set0的size不变，仍然包含被删除元素。
+            注意区别size0和ret的区别。ret是真实差集的大小，而size0是占用存储空间。也就是说元素不被真正的删除，size0不会变。之后如果用set0继续求交集，需要用size0而不是ret当做元素个数。
+ * @todo rename 'subtraction' => 'difference'
+ */
+__device__ int unordered_subtraction_with_flag(uint32_t* lbases, const uint32_t* rbases, int size0, int size1, int size_after_restrict = -1)
+{
+    if (size_after_restrict != -1)
+        size0 = size_after_restrict;
+
+    __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
+
+    int wid = threadIdx.x / THREADS_PER_WARP;
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    uint32_t &ret = block_out_size[wid];
+    if (lid == 0)
+        ret = size0;
+    __threadfence_block();
+
+    int done1 = lid;
+    while (done1 < size1)
+    {
+        int l = 0, r = size0 - 1;
+        uint32_t val = rbases[done1] << 1;
+        //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+        while (l <= r)
+        {
+            int mid = (l + r) >> 1;
+            if (lbases[mid] < val)
+                l = mid + 1;
+            else if (lbases[mid] > val)
+                r = mid - 1;
+            else
+            {
+                ++lbases[mid];
+                atomicSub(&ret, 1);
+                break;
+            }
+        }
+        done1 += THREADS_PER_WARP;
+    }
+    __threadfence_block();
+    return ret;
+}
+
+/**
  * @brief calculate | set0 - set1 |
  * @note set0 should be an ordered set, while set1 can be unordered
  * @todo rename 'subtraction' => 'difference'
@@ -336,8 +499,8 @@ __device__ int unordered_subtraction_size(const uint32_t* lbases, const uint32_t
     int &ret = block_ret[wid];
     if (lid == 0)
         ret = size0;
-    __threadfence_block();
 
+    //TODO: 把done1初始化为lid，之后就可以省掉lid + done1的运算。把这个优化用到intersection里不知道会不会有问题（比如只有一部分线程求前缀和可能有问题？）
     int done1 = 0;
     while (done1 < size1)
     {
@@ -349,7 +512,7 @@ __device__ int unordered_subtraction_size(const uint32_t* lbases, const uint32_t
             while (l <= r)
             {
                 int mid = (l + r) >> 1;
-                if (lbases[mid] == val)
+                if (lbases[mid] == val)//TODO：命中的概率是很低的，所以放在最后一个else会不会性能更好？
                 {
                     atomicSub(&ret, 1);
                     break;
@@ -384,6 +547,15 @@ __device__ void global_to_shared(const GPUVertexSet& set, uint32_t* smem)
         smem[i] = set.get_data(i); //频繁调用get_data，编译器应该会用寄存器缓存一下set.data_ptr吧？之后改一下手动存ptr试试
 }
 
+//将集合数据拷贝至shared memory，且每个元素值为原先的2倍（左移一位，最后一位作为flag位）
+__device__ void global_to_shared_double(const GPUVertexSet& set, uint32_t* smem)
+{
+    int loop_size = set.get_size();
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    for (int i = lid; i < loop_size; i += THREADS_PER_WARP)
+        smem[i] = (set.get_data(i) << 1); //频繁调用get_data，编译器应该会用寄存器缓存一下set.data_ptr吧？之后改一下手动存ptr试试
+}
+
 //减少容斥原理中的计算量，并使用更多shared memory。但是性能却下降了
 __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
     GPUVertexSet& tmp_set, int in_exclusion_optimize_num, int depth)
@@ -393,7 +565,7 @@ __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedul
     //首先找到需要做容斥原理的三个集合ABC的id
     int loop_set_prefix_ids[3];
     for (int i = 0; i < in_exclusion_optimize_num; ++i)
-        loop_set_prefix_ids[i] = schedule->get_loop_set_prefix_id(depth + i );
+        loop_set_prefix_ids[i] = schedule->get_loop_set_prefix_id(depth + i);
     //对3个集合从小到大排序
     if (vertex_set[loop_set_prefix_ids[2]].get_size() < vertex_set[loop_set_prefix_ids[1]].get_size())
         swap(loop_set_prefix_ids[1], loop_set_prefix_ids[2]);
@@ -402,55 +574,91 @@ __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedul
     if (vertex_set[loop_set_prefix_ids[2]].get_size() < vertex_set[loop_set_prefix_ids[1]].get_size())
         swap(loop_set_prefix_ids[1], loop_set_prefix_ids[2]);
 
+    uint32_t* subtraction_ptr = subtraction_set.get_data_ptr();
+    int subtraction_size = subtraction_set.get_size();
+
     //把ABC从global移动到shared
     uint32_t *A_ptr, *B_ptr, *C_ptr;
     uint32_t A_size = vertex_set[loop_set_prefix_ids[0]].get_size(), B_size = vertex_set[loop_set_prefix_ids[1]].get_size(), C_size = vertex_set[loop_set_prefix_ids[2]].get_size();
-    if (A_size < MAX_SHARED_SET_LENGTH)
+    
+    if (C_size < MAX_SHARED_SET_LENGTH) // 即ABC都可以被放入shared memory
+    //if (false)
     {
+        //TODO： 其实ABC都能被放入shared memory这个限制太严了，实际上只要AB能放入shared memory就可以，也就是一开始只将AB的元素都*2，然后任何集合在与C求交的时候再处理一下就可以（如果C作为a数组，就取出C元素后*2，如果C作为b数组，就把a数组中的元素取出后除2）
         A_ptr = warp_mem_start;
-        global_to_shared(vertex_set[loop_set_prefix_ids[0]], A_ptr);
-    }
-    else
-        A_ptr = vertex_set[loop_set_prefix_ids[0]].get_data_ptr();
-
-    if (B_size < MAX_SHARED_SET_LENGTH)
-    {
+        global_to_shared_double(vertex_set[loop_set_prefix_ids[0]], A_ptr);
         B_ptr = warp_mem_start + MAX_SHARED_SET_LENGTH;
-        global_to_shared(vertex_set[loop_set_prefix_ids[1]], B_ptr);
-    }
-    else
-        B_ptr = vertex_set[loop_set_prefix_ids[1]].get_data_ptr();
-
-    if (C_size < MAX_SHARED_SET_LENGTH)
-    {
+        global_to_shared_double(vertex_set[loop_set_prefix_ids[1]], B_ptr);
         C_ptr = warp_mem_start + (MAX_SHARED_SET_LENGTH << 1);
-        global_to_shared(vertex_set[loop_set_prefix_ids[2]], C_ptr);
+        global_to_shared_double(vertex_set[loop_set_prefix_ids[2]], C_ptr);
+
+        //首先对ABC求差集，就不用之后每次求完交集再次求差集了
+        //real_X_size用于计算最终答案，X_size用于之后求交集（求差后X_size不变）
+        unsigned long long real_A_size = unordered_subtraction_with_flag(A_ptr, subtraction_ptr, A_size, subtraction_size);
+        unsigned long long real_B_size = unordered_subtraction_with_flag(B_ptr, subtraction_ptr, B_size, subtraction_size);
+        unsigned long long real_C_size = unordered_subtraction_with_flag(C_ptr, subtraction_ptr, C_size, subtraction_size);
+        uint32_t* intersection_ptr = warp_mem_start + MAX_SHARED_SET_LENGTH * 3;
+        //A & B
+        unsigned long long AB_size = do_intersection_with_flag(intersection_ptr, A_ptr, B_ptr, A_size, B_size);
+        //(A & B) & C
+        unsigned long long ABC_size = get_intersection_size_with_flag(intersection_ptr, C_ptr, AB_size, C_size);
+        //A & C
+        unsigned long long AC_size = get_intersection_size_with_flag(A_ptr, C_ptr, A_size, C_size);
+        //B & C
+        unsigned long long BC_size = get_intersection_size_with_flag(B_ptr, C_ptr, B_size, C_size);
+        return real_A_size * real_B_size * real_C_size - real_A_size * BC_size - real_B_size * AC_size - real_C_size * AB_size + (ABC_size << 1);
+        //if (threadIdx.x == 0)
+        //    printf("T %llu %llu %llu %llu %llu %llu %llu\n", real_A_size, real_B_size,real_C_size, AB_size, BC_size, AC_size, ABC_size);
     }
     else
-        C_ptr = vertex_set[loop_set_prefix_ids[2]].get_data_ptr();
-
-    uint32_t* subtraction_ptr = subtraction_set.get_data_ptr();
-    int subtraction_size = subtraction_set.get_size();
-    //A & B，由于A.size < B.size，只要A.size < MAX_SHARED_SET_LENGTH，则求交后大小一定 < MAX_SHARED_SET_LENGTH，可以放到shared memory
-    uint32_t* intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
-    unsigned long long AB_size = do_intersection(intersection_ptr, A_ptr, B_ptr, A_size, B_size);
-    AB_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AB_size, subtraction_size);
-    //(A & B) & C
-    unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, C_ptr, AB_size, C_size);
-    ABC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, ABC_size, subtraction_size);
-    //A & C
-    intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
-    unsigned long long AC_size = do_intersection(intersection_ptr, A_ptr, C_ptr, A_size, C_size);
-    AC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AC_size, subtraction_size);
-    //B & C
-    intersection_ptr = B_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
-    unsigned long long BC_size = do_intersection(intersection_ptr, B_ptr, C_ptr, B_size, C_size);
-    BC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, BC_size, subtraction_size);
-
-    A_size = unordered_subtraction_size(A_ptr, subtraction_ptr, A_size, subtraction_size);
-    B_size = unordered_subtraction_size(B_ptr, subtraction_ptr, B_size, subtraction_size);
-    C_size = unordered_subtraction_size(C_ptr, subtraction_ptr, C_size, subtraction_size);
-    return A_size * B_size * C_size - A_size * BC_size - B_size * AC_size - C_size * AB_size + (ABC_size << 1);
+    {
+        if (A_size < MAX_SHARED_SET_LENGTH)
+        {
+            A_ptr = warp_mem_start;
+            global_to_shared(vertex_set[loop_set_prefix_ids[0]], A_ptr);
+        }
+        else
+            A_ptr = vertex_set[loop_set_prefix_ids[0]].get_data_ptr();
+    
+        if (B_size < MAX_SHARED_SET_LENGTH)
+        {
+            B_ptr = warp_mem_start + MAX_SHARED_SET_LENGTH;
+            global_to_shared(vertex_set[loop_set_prefix_ids[1]], B_ptr);
+        }
+        else
+            B_ptr = vertex_set[loop_set_prefix_ids[1]].get_data_ptr();
+    
+        if (C_size < MAX_SHARED_SET_LENGTH)
+        {
+            C_ptr = warp_mem_start + (MAX_SHARED_SET_LENGTH << 1);
+            global_to_shared(vertex_set[loop_set_prefix_ids[2]], C_ptr);
+        }
+        else
+            C_ptr = vertex_set[loop_set_prefix_ids[2]].get_data_ptr();
+    
+        //A & B，由于A.size < B.size，只要A.size < MAX_SHARED_SET_LENGTH，则求交后大小一定 < MAX_SHARED_SET_LENGTH，可以放到shared memory
+        uint32_t* intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
+        unsigned long long AB_size = do_intersection(intersection_ptr, A_ptr, B_ptr, A_size, B_size);
+        AB_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AB_size, subtraction_size);
+        //(A & B) & C
+        unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, C_ptr, AB_size, C_size);
+        ABC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, ABC_size, subtraction_size);
+        //A & C
+        intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
+        unsigned long long AC_size = do_intersection(intersection_ptr, A_ptr, C_ptr, A_size, C_size);
+        AC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AC_size, subtraction_size);
+        //B & C
+        intersection_ptr = B_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
+        unsigned long long BC_size = do_intersection(intersection_ptr, B_ptr, C_ptr, B_size, C_size);
+        BC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, BC_size, subtraction_size);
+    
+        unsigned long long real_A_size = unordered_subtraction_size(A_ptr, subtraction_ptr, A_size, subtraction_size);
+        unsigned long long real_B_size = unordered_subtraction_size(B_ptr, subtraction_ptr, B_size, subtraction_size);
+        unsigned long long real_C_size = unordered_subtraction_size(C_ptr, subtraction_ptr, C_size, subtraction_size);
+        //if (threadIdx.x == 0)
+        //    printf("T %llu %llu %llu %llu %llu %llu %llu\n", real_A_size, real_B_size,real_C_size, AB_size, BC_size, AC_size, ABC_size);
+        return real_A_size * real_B_size * real_C_size - real_A_size * BC_size - real_B_size * AC_size - real_C_size * AB_size + (ABC_size << 1);
+    }
 }
 
 //减少容斥原理中的计算量，并利用一定shared memory
@@ -503,7 +711,7 @@ __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* sched
 {
     int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
     if (in_exclusion_optimize_num == 3) {
-        local_ans += IEP_3_layer(schedule, vertex_set, subtraction_set, tmp_set, in_exclusion_optimize_num, depth);
+        local_ans += IEP_3_layer_more_shared(schedule, vertex_set, subtraction_set, tmp_set, in_exclusion_optimize_num, depth);
         return;
     }
     //int* loop_set_prefix_ids[ in_exclusion_optimize_num ];
