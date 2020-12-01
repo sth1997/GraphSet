@@ -51,69 +51,57 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 __device__ unsigned long long dev_sum;
 __device__ unsigned int dev_nowEdge;
 
-__device__ void intersection(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size) {
-    __shared__ uint32_t lblock[THREADS_PER_BLOCK];
-    __shared__ uint32_t rblock[THREADS_PER_BLOCK];
+__device__ void intersection(uint32_t *out, uint32_t *a, uint32_t *b, uint32_t na, uint32_t nb, uint32_t* result_size) {
+    __shared__ uint32_t out_offset[THREADS_PER_BLOCK];
+    __shared__ uint32_t out_size;
+    
+    int lid = threadIdx.x;
+    
+    if (lid == 0)
+        out_size = 0;
 
-    __shared__ uint32_t cur_thread;
-
-    uint32_t i = 0, j = 0;
-    uint32_t lsize = THREADS_PER_BLOCK, rsize = THREADS_PER_BLOCK;
-
-    bool hit;
-
-    if( threadIdx.x == 0 ) {
-        *p_tmp_size = 0;
-    }
-    __syncthreads();
-
-    while (i < ln && j < rn) {
-
-        lsize = min(ln - i, THREADS_PER_BLOCK);
-        rsize = min(rn - j, THREADS_PER_BLOCK);
-
-        if(i + threadIdx.x < ln) lblock[threadIdx.x] = lbases[i + threadIdx.x];
-        if(j + threadIdx.x < rn) rblock[threadIdx.x] = rbases[j + threadIdx.x];
-
-        __threadfence_block();
-
-        hit = false;
-        for(int k = 0; k < rsize; ++k)
-            hit |= (threadIdx.x < lsize) & (lblock[threadIdx.x] == rblock[k]);
-
-        if( threadIdx.x == 0) {
-            cur_thread = 0;
+    uint32_t num_done = 0;
+    while (num_done < na) {
+        bool found = 0;
+        uint32_t u = 0;
+        if (num_done + lid < na) {
+            int mid, l = 0, r = nb - 1; // [l, r], use signed int instead of unsigned int!
+            u = a[num_done + lid]; // u: an element in set a
+            while (l <= r) {
+                mid = (l + r) >> 1;
+                if (b[mid] < u) {
+                    l = mid + 1;
+                } else if (b[mid] > u) {
+                    r = mid - 1;
+                } else {
+                    found = 1;
+                    break;
+                }
+            }
         }
+        out_offset[lid] = found;
         __syncthreads();
 
-        while( cur_thread < THREADS_PER_BLOCK) {
-            if(cur_thread == threadIdx.x) {
-                if(hit && i + threadIdx.x < ln) tmp[(*p_tmp_size)++] = lblock[threadIdx.x];
-                ++cur_thread;
-            }
+        for (int s = 1; s < THREADS_PER_BLOCK; s *= 2) {
+            uint32_t v = lid >= s ? out_offset[lid - s] : 0;
+            __syncthreads();
+            out_offset[lid] += v;
             __syncthreads();
         }
-        
-        uint32_t llast = lblock[lsize - 1];
-        uint32_t rlast = rblock[rsize - 1];
 
-        if(llast >= rlast) j += rsize;
-        if(llast <= rlast) i += lsize;
-    }
-
-/*    i = 0;
-    j = 0;
-    int size = 0;
-    while(i < ln && j < rn) {
-        if(lbases[i]==rbases[j]) {
-            assert(lbases[i]==tmp[size]);
-            ++size;
+        if (found) {
+            uint32_t offset = out_offset[lid] - 1;
+            out[out_size + offset] = u;
         }
-        int u = lbases[i],v=rbases[j];
-        i+=u<=v;
-        j+=v<=u;
+
+        if (lid == 0)
+            out_size += out_offset[THREADS_PER_BLOCK - 1];
+        num_done += THREADS_PER_BLOCK;
     }
-    assert(size==*p_tmp_size);*/
+    __syncthreads();
+    if( lid == 0)
+        *result_size = out_size;
+    
 }
 
 __device__ void detect_v2(uint32_t *tmp, uint32_t size, uint32_t v2, bool *p_hit) {
@@ -126,48 +114,87 @@ __device__ void detect_v2(uint32_t *tmp, uint32_t size, uint32_t v2, bool *p_hit
     if(hit) *p_hit = true;
 }
 
-__device__ void upd_ans(uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, unsigned long long *p_sum) {
-    __shared__ uint32_t lblock[THREADS_PER_BLOCK];
-    __shared__ uint32_t rblock[THREADS_PER_BLOCK];
-
-    uint32_t i = 0, j = 0;
-    unsigned long long sum = 0;
-    uint32_t lsize = THREADS_PER_BLOCK, rsize = THREADS_PER_BLOCK;
-
-    while (i < ln && j < rn) {
-
-        lsize = min(ln - i, THREADS_PER_BLOCK);
-        rsize = min(rn - j, THREADS_PER_BLOCK);
-
-        if(i + threadIdx.x < ln) lblock[threadIdx.x] = lbases[i + threadIdx.x];
-        if(j + threadIdx.x < rn) rblock[threadIdx.x] = rbases[j + threadIdx.x];
-
-        __threadfence_block();
+__device__ void upd_ans(uint32_t *a, uint32_t *b, uint32_t na, uint32_t nb, unsigned long long *p_sum) {
+    __shared__ uint32_t out_size[32];
     
-        for(int k = 0; k < rsize; ++k)
-            sum += (threadIdx.x < lsize) & (lblock[threadIdx.x] == rblock[k]);
+    int lid = threadIdx.x;
+    
+    out_size[lid] = 0;
 
-        uint32_t llast = lblock[lsize - 1];
-        uint32_t rlast = rblock[rsize - 1];
-
-        if(llast >= rlast) j += rsize;
-        if(llast <= rlast) i += lsize;
-    }
-
-    (*p_sum) -= sum;
-/*    i = 0;
-    j = 0;
-    unsigned long long size = 0;
-    while(i < ln && j < rn) {
-        if(lbases[i]==rbases[j] && i % 32 == threadIdx.x) {
-            ++size;
+    uint32_t num_done = 0;
+    while (num_done < na) {
+        bool found = 0;
+        uint32_t u = 0;
+        if (num_done + lid < na) {
+            int mid, l = 0, r = nb - 1; // [l, r], use signed int instead of unsigned int!
+            u = a[num_done + lid]; // u: an element in set a
+            while (l <= r) {
+                mid = (l + r) >> 1;
+                if (b[mid] < u) {
+                    l = mid + 1;
+                } else if (b[mid] > u) {
+                    r = mid - 1;
+                } else {
+                    found = 1;
+                    break;
+                }
+            }
         }
-        int u = lbases[i],v=rbases[j];
-        i+=u<=v;
-        j+=v<=u;
+        out_size[lid] += found;
+        num_done += THREADS_PER_BLOCK;
     }
-    assert(size==sum);*/
-    
+    __syncthreads();
+
+    for (int s = 1; s < THREADS_PER_BLOCK; s *= 2) {
+        uint32_t v = lid >= s ? out_size[lid - s] : 0;
+        __syncthreads();
+        out_size[lid] += v;
+        __syncthreads();
+    }
+    if(lid == 0)
+        *p_sum -= out_size[31];
+
+    /*   __shared__ uint32_t lblock[THREADS_PER_BLOCK];
+         __shared__ uint32_t rblock[THREADS_PER_BLOCK];
+
+         uint32_t i = 0, j = 0;
+         unsigned long long sum = 0;
+         uint32_t lsize = THREADS_PER_BLOCK, rsize = THREADS_PER_BLOCK;
+
+         while (i < ln && j < rn) {
+
+         lsize = min(ln - i, THREADS_PER_BLOCK);
+         rsize = min(rn - j, THREADS_PER_BLOCK);
+
+         if(i + threadIdx.x < ln) lblock[threadIdx.x] = lbases[i + threadIdx.x];
+         if(j + threadIdx.x < rn) rblock[threadIdx.x] = rbases[j + threadIdx.x];
+
+         __threadfence_block();
+
+         for(int k = 0; k < rsize; ++k)
+         sum += (threadIdx.x < lsize) & (lblock[threadIdx.x] == rblock[k]);
+
+         uint32_t llast = lblock[lsize - 1];
+         uint32_t rlast = rblock[rsize - 1];
+
+         if(llast >= rlast) j += rsize;
+         if(llast <= rlast) i += lsize;
+         }
+
+         (*p_sum) -= sum;*/
+    /*    i = 0;
+          j = 0;
+          unsigned long long size = 0;
+          while(i < ln && j < rn) {
+          if(lbases[i]==rbases[j] && i % 32 == threadIdx.x) {
+          ++size;
+          }
+          int u = lbases[i],v=rbases[j];
+          i+=u<=v;
+          j+=v<=u;
+          }
+          assert(size==sum);*/
+
 }
 
 __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp) {
@@ -179,13 +206,13 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
 
     uint32_t tmp1_begin = buffer_size * 2 * blockIdx.x;
     uint32_t tmp2_begin = tmp1_begin + buffer_size;
-    
+
     if(threadIdx.x == 0) {
         edgeI = edgeEnd = 0;
     }
 
     __syncthreads();
-    
+
     assert( edgeI == edgeEnd);
 
     uint32_t v0,v1,v2;
@@ -212,8 +239,8 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
 
         unsigned int i = edgeI;
         if(i >= edge_num) break;
-       
-       // for edge in E
+
+        // for edge in E
         v0 = edge_from[i];
         v1 = edge[i];
 
@@ -351,7 +378,8 @@ int main(int argc,char *argv[]) {
         return 0;
     }
 
-    assert(D.load_data(g,my_type,path.c_str())==true); 
+    D.load_data(g,my_type,path.c_str());
+    //assert(D.load_data(g,my_type,path.c_str())==true); 
 
  //   assert(D.load_data(g,10));
     printf("Load data success!\n");
