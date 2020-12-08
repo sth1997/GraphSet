@@ -27,7 +27,8 @@ constexpr long long Twitter_tri_cnt = 34824916864LL;
 class DataLoader {
 public:
 
-    bool load_data(Graph* &g, DataType type, const char* path, int oriented_type = 0);
+    bool load_data(Graph* &g, DataType type, const char* path, bool binary_input = false, int oriented_type = 0);
+        // binary_input: binary graph input if true, otherwise text
         // pattern_diameter means max distance between two vertex in graph
         // oriented_type is used to reorder dataset
         // oriented_type == 0 do nothing
@@ -35,14 +36,16 @@ public:
         //               == 2 low degree first
     bool load_data(Graph* &g, int clique_size);
 
+    bool fast_load(Graph* &g, const char* path);
+
 private:
     static bool cmp_pair(std::pair<int,int>a, std::pair<int,int>b);
     static bool cmp_degree_gt(std::pair<int,int> a,std::pair<int,int> b);
     static bool cmp_degree_lt(std::pair<int,int> a,std::pair<int,int> b);
 
     long long comb(int n,int k);
-    bool general_load_data(Graph* &g, DataType type, const char* path, int oriented_type = 0);
+    bool general_load_data(Graph* &g, DataType type, const char* path, bool binary_input, int oriented_type = 0);
     bool twitter_load_data(Graph* &g, DataType type, const char* path, int oriented_type = 0);
 
-    std::unordered_map<int,int> id;
+    std::unordered_map<uint32_t, uint32_t> id;
 };

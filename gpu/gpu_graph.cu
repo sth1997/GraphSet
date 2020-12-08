@@ -8,6 +8,7 @@
 #include <common.h>
 
 #include <cassert>
+#include <cstring>
 #include <cstdint>
 #include <string>
 #include <algorithm>
@@ -240,7 +241,7 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
     if (lid == 0)
         out_size = 0;
 
-    uint32_t v, num_done = 0;
+    uint32_t num_done = 0;
     while (num_done < na) {
         bool found = 0;
         uint32_t u = 0;
@@ -788,27 +789,44 @@ int main(int argc,char *argv[]) {
     Graph *g;
     DataLoader D;
 
-    if (argc < 3) {
-        printf("Example Usage: %s Patents ~zms/patents_input\n", argv[0]);
+    if (argc < 2) {
+        printf("Usage: %s dataset_name graph_file [binary/text]\n", argv[0]);
+        printf("Example: %s Patents ~hzx/data/patents_bin binary\n", argv[0]);
+        printf("Example: %s Patents ~zms/patents_input\n", argv[0]);
+
+        printf("\nExperimental usage: %s [graph_file.g]\n", argv[0]);
+        printf("Example: %s ~hzx/data/patents.g\n", argv[0]);
         return 0;
     }
 
-    const std::string type = argv[1];
-    const std::string path = argv[2];
+    bool binary_input = false;
+    if (argc >= 4)
+        binary_input = (strcmp(argv[3], "binary") == 0);
 
     DataType my_type;
+    if (argc >= 3) {
+        GetDataType(my_type, argv[1]);
 
-    GetDataType(my_type, type);
-
-    if(my_type == DataType::Invalid) {
-        printf("Dataset not found!\n");
-        return 0;
+        if (my_type == DataType::Invalid) {
+            printf("Dataset not found!\n");
+            return 0;
+        }
     }
 
     using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
-    assert(D.load_data(g, my_type, path.c_str())); 
+    bool ok;
+    if (argc >= 3) {
+        // 注：load_data的第四个参数用于指定是否读取二进制文件输入，默认为false
+        ok = D.load_data(g, my_type, argv[2], binary_input);
+    } else {
+        ok = D.fast_load(g, argv[1]);
+    }
+    if (!ok) {
+        printf("data load failure :-(\n");
+        return 0;
+    }
 
     auto t2 = system_clock::now();
     auto load_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
@@ -829,7 +847,11 @@ int main(int argc,char *argv[]) {
     bool use_in_exclusion_optimize = true;
     Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
     //Schedule schedule(p, is_pattern_valid, 0, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // use the best schedule
-    assert(is_pattern_valid);
+
+    if (!is_pattern_valid) {
+        printf("pattern is invalid!\n");
+        return 0;
+    }
 
     pattern_matching_init(g, schedule);
 
