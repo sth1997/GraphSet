@@ -229,16 +229,16 @@ __device__ unsigned int dev_cur_edge = 0;
  */
 constexpr int MAX_INTERSECTION_CONCURRENCY = 128; // 一个warp一次做128个a数组中的元素（4*32），减少求前缀和的时间
 //目前性能较差（个人认为是shared memory读写次数较多），暂时别用这个函数，之后优化
-__device__ uint32_t do_intersection_128(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
+__device__ uint32_t do_intersection_more_concurrency(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
 {
-    __shared__ uint32_t block_out_offset[MAX_INTERSECTION_CONCURRENCY * WARPS_PER_BLOCK];
+    //__shared__ uint32_t block_out_offset[MAX_INTERSECTION_CONCURRENCY * WARPS_PER_BLOCK];
     __shared__ uint32_t block_tmp_prefix_sum[THREADS_PER_WARP * WARPS_PER_BLOCK];
     __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
 
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
     //uint32_t *out_offset = block_out_offset + wid * THREADS_PER_WARP;
-    uint32_t *out_offset = block_out_offset + wid * MAX_INTERSECTION_CONCURRENCY;
+    //uint32_t *out_offset = block_out_offset + wid * MAX_INTERSECTION_CONCURRENCY;
     uint32_t* tmp_prefix_sum = block_tmp_prefix_sum + wid * THREADS_PER_WARP;
     uint32_t &out_size = block_out_size[wid];
 
@@ -262,11 +262,19 @@ __device__ uint32_t do_intersection_128(uint32_t* out, const uint32_t* a, const 
 
     uint32_t v, num_done = 0;
     while (num_done < na) {
-        for (int start_offset = lid; start_offset < concurrency; start_offset += THREADS_PER_WARP)
+        uint32_t out_offset_buf[MAX_INTERSECTION_CONCURRENCY >> 5]; //32>>5=1, 64>>5=2, 128>>5=4
+        uint32_t u[MAX_INTERSECTION_CONCURRENCY >> 5];
+        bool found[MAX_INTERSECTION_CONCURRENCY >> 5];
+        int start_offset = (lid << shift);
+        //for (int start_offset = lid; start_offset < concurrency; start_offset += THREADS_PER_WARP)
+        /*for (int i = 0; i < (1 << shift); ++i)
+            if (start_offset + i + num_done < na)
+                u[i] = a[start_offset + i + num_done]; // u: an element in set a*/
+        for (int i = 0; i < (1 << shift); ++i)
         {
-            bool found = 0;
-            if (start_offset + num_done < na) {
-                uint32_t u = a[start_offset + num_done]; // u: an element in set a
+            found[i] = 0;
+            if (start_offset + i + num_done < na) {
+                u[i] = a[start_offset + i + num_done]; // u: an element in set a
                 /*
                 // 我这里这样写并没有变快，反而明显慢了
                 int x, s[3], &l = s[0], &r = s[1], &mid = s[2];
@@ -283,22 +291,24 @@ __device__ uint32_t do_intersection_128(uint32_t* out, const uint32_t* a, const 
                 int mid, l = 0, r = int(nb) - 1;
                 while (l <= r) {
                     mid = (l + r) >> 1;
-                    if (b[mid] < u) {
+                    if (b[mid] < u[i]) {
                         l = mid + 1;
-                    } else if (b[mid] > u) {
+                    } else if (b[mid] > u[i]) {
                         r = mid - 1;
                     } else {
-                        found = 1;
+                        found[i] = 1;
                         break;
                     }
                 }
             }
-            out_offset[start_offset] = found;
+            out_offset_buf[i] = found[i];
         }
-        __threadfence_block();
         uint32_t tmp_sum = 0;
-        for (int i = (lid << shift); i < ((lid + 1) << shift); ++i)
-            tmp_sum += out_offset[i];//TODO: 这里有比较严重的bank conflict，考虑之后能不能用位运算加速？
+        //for (int i = (lid << shift); i < ((lid + 1) << shift); ++i)
+        //for (int i = 0; i < (1 << shift); ++i)
+        //    out_offset_buf[i] = out_offset[start_offset + i];
+        for (int i = 0; i < (1 << shift); ++i)
+            tmp_sum += out_offset_buf[i];
         tmp_prefix_sum[lid] = tmp_sum;
         __threadfence_block();
         for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
@@ -311,14 +321,18 @@ __device__ uint32_t do_intersection_128(uint32_t* out, const uint32_t* a, const 
             tmp_sum = 0;
         else
             tmp_sum = tmp_prefix_sum[lid - 1];
-        for (int i = (lid << shift); i < ((lid + 1) << shift); ++i)
+        /*for (int i = (lid << shift); i < ((lid + 1) << shift); ++i)
         {
             tmp_sum += out_offset[i];//TODO: 这里有比较严重的bank conflict，考虑之后能不能用位运算加速？
             out_offset[i] = tmp_sum;
+        }*/
+        for (int i = 0; i < (1 << shift); ++i) // 这个可以和下一个循环合并，只不过可能会有数据依赖而stall，之后考虑一下
+        {
+            tmp_sum += out_offset_buf[i];
+            out_offset_buf[i] = tmp_sum;
         }
-        __threadfence_block();
 
-        bool found;
+        /*bool found;
         if (lid == 0)
             found = out_offset[0];
         else
@@ -334,7 +348,18 @@ __device__ uint32_t do_intersection_128(uint32_t* out, const uint32_t* a, const 
         }
 
         if (lid == 0)
-            out_size += tmp_prefix_sum[THREADS_PER_WARP - 1];
+            //out_size += tmp_prefix_sum[THREADS_PER_WARP - 1];
+            out_size += out_offset[THREADS_PER_WARP - 1];*/
+        for (int i = 0; i < (1 << shift); ++i)
+        {
+            if (found[i])
+            {
+                uint32_t offset = out_offset_buf[i] - 1;
+                out[out_size + offset] = u[i];
+            }
+        }
+        if (lid == 31)
+            out_size += out_offset_buf[(1 << shift) - 1];
         num_done += concurrency;
     }
 
