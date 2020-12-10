@@ -622,6 +622,51 @@ __device__ int unordered_subtraction_with_flag(uint32_t* lbases, const uint32_t*
     return ret;
 }
 
+//默认所有set1的都相同（所以rbases和size1不是数组）
+constexpr int MAX_SUBTRACTION_CNT = 8; //同时做8个subtraction
+__device__ int* unordered_subtraction_with_flag_parallel(uint32_t* lbases[], const uint32_t* rbases, int size0[], int size1, int subtraction_cnt)
+{
+    //if (size_after_restrict != -1)
+    //    size0 = size_after_restrict;
+
+    __shared__ int block_ret[WARPS_PER_BLOCK * MAX_SUBTRACTION_CNT];
+
+    int wid = threadIdx.x / THREADS_PER_WARP;
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    int total_size1 = size1 * subtraction_cnt;
+    int *ret = block_ret + wid * MAX_SUBTRACTION_CNT;
+    if (lid < subtraction_cnt)
+        ret[lid] = size0[lid];
+    __threadfence_block();
+
+    int done1 = lid;
+    while (done1 < total_size1)
+    {
+        int subtraction_index = done1 / size1;
+        uint32_t* lbase = lbases[subtraction_index];
+        int l = 0, r = size0[subtraction_index] - 1;
+        uint32_t val = rbases[done1 % size1] << 1;
+        //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+        while (l <= r)
+        {
+            int mid = (l + r) >> 1;
+            if (lbase[mid] < val)
+                l = mid + 1;
+            else if (lbase[mid] > val)
+                r = mid - 1;
+            else
+            {
+                ++lbase[mid];
+                atomicSub(&ret[subtraction_index], 1);
+                break;
+            }
+        }
+        done1 += THREADS_PER_WARP;
+    }
+    __threadfence_block();
+    return ret;
+}
+
 /**
  * @brief calculate | set0 - set1 |
  * @note set0 should be an ordered set, while set1 can be unordered
@@ -667,6 +712,48 @@ __device__ int unordered_subtraction_size(const uint32_t* lbases, const uint32_t
         done1 += THREADS_PER_WARP;
     }
 
+    __threadfence_block();
+    return ret;
+}
+
+__device__ int* unordered_subtraction_parallel(uint32_t* lbases[], const uint32_t* rbases, int size0[], int size1, int subtraction_cnt)
+{
+    //if (size_after_restrict != -1)
+    //    size0 = size_after_restrict;
+
+    __shared__ int block_ret[WARPS_PER_BLOCK * MAX_SUBTRACTION_CNT];
+
+    int wid = threadIdx.x / THREADS_PER_WARP;
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    int total_size1 = size1 * subtraction_cnt;
+    int *ret = block_ret + wid * MAX_SUBTRACTION_CNT;
+    if (lid < subtraction_cnt)
+        ret[lid] = size0[lid];
+    __threadfence_block();
+
+    int done1 = lid;
+    while (done1 < total_size1)
+    {
+        int subtraction_index = done1 / size1;
+        uint32_t* lbase = lbases[subtraction_index];
+        int l = 0, r = size0[subtraction_index] - 1;
+        uint32_t val = rbases[done1 % size1];
+        //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+        while (l <= r)
+        {
+            int mid = (l + r) >> 1;
+            if (lbase[mid] < val)
+                l = mid + 1;
+            else if (lbase[mid] > val)
+                r = mid - 1;
+            else
+            {
+                atomicSub(&ret[subtraction_index], 1);
+                break;
+            }
+        }
+        done1 += THREADS_PER_WARP;
+    }
     __threadfence_block();
     return ret;
 }
@@ -733,9 +820,31 @@ __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedul
 
         //首先对ABC求差集，就不用之后每次求完交集再次求差集了
         //real_X_size用于计算最终答案，X_size用于之后求交集（求差后X_size不变）
-        unsigned long long real_A_size = unordered_subtraction_with_flag(A_ptr, subtraction_ptr, A_size, subtraction_size);
-        unsigned long long real_B_size = unordered_subtraction_with_flag(B_ptr, subtraction_ptr, B_size, subtraction_size);
-        unsigned long long real_C_size = unordered_subtraction_with_flag(C_ptr, subtraction_ptr, C_size, subtraction_size);
+        //unsigned long long real_A_size = unordered_subtraction_with_flag(A_ptr, subtraction_ptr, A_size, subtraction_size);
+        //unsigned long long real_B_size = unordered_subtraction_with_flag(B_ptr, subtraction_ptr, B_size, subtraction_size);
+        //unsigned long long real_C_size = unordered_subtraction_with_flag(C_ptr, subtraction_ptr, C_size, subtraction_size);
+        __shared__ uint32_t *lbases_block[MAX_SUBTRACTION_CNT * WARPS_PER_BLOCK];
+        __shared__ int size0_block[MAX_SUBTRACTION_CNT * WARPS_PER_BLOCK];
+        int wid = threadIdx.x / THREADS_PER_WARP;
+        int lid = threadIdx.x % THREADS_PER_WARP;
+        uint32_t **lbases = lbases_block + wid * MAX_SUBTRACTION_CNT;
+        int *size0 = size0_block + wid * MAX_SUBTRACTION_CNT;
+        if (lid == 0)
+        {
+            lbases[0] = A_ptr;
+            lbases[1] = B_ptr;
+            lbases[2] = C_ptr;
+            size0[0] = A_size;
+            size0[1] = B_size;
+            size0[2] = C_size;
+        }
+        __threadfence_block();
+
+        int* ret = unordered_subtraction_with_flag_parallel(lbases, subtraction_ptr, size0, subtraction_size, 3);
+        unsigned long long real_A_size = ret[0];
+        unsigned long long real_B_size = ret[1];
+        unsigned long long real_C_size = ret[2];
+
         uint32_t* intersection_ptr = warp_mem_start + MAX_SHARED_SET_LENGTH * 3;
         //A & B
         unsigned long long AB_size = do_intersection_with_flag(intersection_ptr, A_ptr, B_ptr, A_size, B_size);
@@ -789,11 +898,36 @@ __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedul
         //B & C
         intersection_ptr = B_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
         unsigned long long BC_size = do_intersection(intersection_ptr, B_ptr, C_ptr, B_size, C_size);
-        BC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, BC_size, subtraction_size);
+        /*BC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, BC_size, subtraction_size);
     
         unsigned long long real_A_size = unordered_subtraction_size(A_ptr, subtraction_ptr, A_size, subtraction_size);
         unsigned long long real_B_size = unordered_subtraction_size(B_ptr, subtraction_ptr, B_size, subtraction_size);
-        unsigned long long real_C_size = unordered_subtraction_size(C_ptr, subtraction_ptr, C_size, subtraction_size);
+        unsigned long long real_C_size = unordered_subtraction_size(C_ptr, subtraction_ptr, C_size, subtraction_size);*/
+
+        __shared__ uint32_t *lbases_block[MAX_SUBTRACTION_CNT * WARPS_PER_BLOCK];
+        __shared__ int size0_block[MAX_SUBTRACTION_CNT * WARPS_PER_BLOCK];
+        int wid = threadIdx.x / THREADS_PER_WARP;
+        int lid = threadIdx.x % THREADS_PER_WARP;
+        uint32_t **lbases = lbases_block + wid * MAX_SUBTRACTION_CNT;
+        int *size0 = size0_block + wid * MAX_SUBTRACTION_CNT;
+        if (lid == 0)
+        {
+            lbases[0] = A_ptr;
+            lbases[1] = B_ptr;
+            lbases[2] = C_ptr;
+            lbases[3] = intersection_ptr;
+            size0[0] = A_size;
+            size0[1] = B_size;
+            size0[2] = C_size;
+            size0[3] = BC_size;
+        }
+        __threadfence_block();
+
+        int* ret = unordered_subtraction_parallel(lbases, subtraction_ptr, size0, subtraction_size, 4);
+        unsigned long long real_A_size = ret[0];
+        unsigned long long real_B_size = ret[1];
+        unsigned long long real_C_size = ret[2];
+        BC_size = ret[3];
         //if (threadIdx.x == 0)
         //    printf("T %llu %llu %llu %llu %llu %llu %llu\n", real_A_size, real_B_size,real_C_size, AB_size, BC_size, AC_size, ABC_size);
         return real_A_size * real_B_size * real_C_size - real_A_size * BC_size - real_B_size * AC_size - real_C_size * AB_size + (ABC_size << 1);
