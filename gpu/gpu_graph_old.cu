@@ -658,7 +658,7 @@ __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* sched
 {
     int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
     //int* loop_set_prefix_ids[ in_exclusion_optimize_num ];
-    int loop_set_prefix_ids[8];//偷懒用了static，之后考虑改成dynamic
+    __shared__ int loop_set_prefix_ids[8];//偷懒用了static，之后考虑改成dynamic
     // 这里有硬编码的数字，之后考虑修改。
     loop_set_prefix_ids[0] = schedule->get_loop_set_prefix_id(depth);
     for(int i = 1; i < in_exclusion_optimize_num; ++i)

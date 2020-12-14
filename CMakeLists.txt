@@ -20,7 +20,7 @@ if(OPENMP_FOUND)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}  ${OpenMP_CXX_FLAGS}" )
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}  ${OpenMP_CXX_FLAGS}" )
     
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_70 -Xcompiler=\"${OpenMP_CXX_FLAGS}\"" )
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_70 -Xcompiler=\"${OpenMP_CXX_FLAGS}\" --ptxas-options=-warn-lmem-usage --ptxas-options=-warn-spills --ptxas-options=-Werror")
     set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE}" )
     set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --ptxas-options=-v" )
     #set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -lineinfo --ptxas-options=-v" )
