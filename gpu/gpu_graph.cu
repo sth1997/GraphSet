@@ -17,6 +17,7 @@
 
 #include <sys/time.h>
 #include <chrono>
+//#define DO_INTERSECTION_128
 
 constexpr int THREADS_PER_BLOCK = 64;
 constexpr int THREADS_PER_WARP = 32;
@@ -371,6 +372,139 @@ __device__ uint32_t do_intersection_more_concurrency(uint32_t* out, const uint32
     return out_size;
 }
 
+#ifdef DO_INTERSECTION_128
+__device__ uint32_t do_intersection_128(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
+{
+    //__shared__ uint32_t block_out_offset[MAX_INTERSECTION_CONCURRENCY * WARPS_PER_BLOCK];
+    __shared__ uint32_t block_tmp_prefix_sum[THREADS_PER_WARP * WARPS_PER_BLOCK];
+    __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
+    uint32_t out_offset0, out_offset1, out_offset2, out_offset3;
+    uint32_t u0, u1, u2, u3;
+    bool found0, found1, found2, found3;
+
+    int wid = threadIdx.x / THREADS_PER_WARP; // warp id
+    int lid = threadIdx.x % THREADS_PER_WARP; // lane id
+    uint32_t* tmp_prefix_sum = block_tmp_prefix_sum + wid * THREADS_PER_WARP;
+    uint32_t &out_size = block_out_size[wid];
+
+    if (lid == 0)
+        out_size = 0;
+    //constexpr int concurrency = 128;
+    //constexpr int shift = 2;
+
+    uint32_t v, num_done = 0;
+    int start_offset = (lid << 2);
+
+    //while (num_done < na) {
+        found0 = found1 = found2 = found3 = 0;
+        if (start_offset < na) {
+            u0 = a[start_offset]; // u: an element in set a
+            int mid, l = 0, r = int(nb) - 1;
+            while (l <= r) {
+                mid = (l + r) >> 1;
+                if (b[mid] < u0) {
+                    l = mid + 1;
+                } else if (b[mid] > u0) {
+                    r = mid - 1;
+                } else {
+                    found0 = 1;
+                    break;
+                }
+            }
+        }
+        out_offset0 = found0;
+        if (start_offset + 1 < na) {
+            u1 = a[start_offset + 1]; // u: an element in set a
+            int mid, l = 0, r = int(nb) - 1;
+            while (l <= r) {
+                mid = (l + r) >> 1;
+                if (b[mid] < u1) {
+                    l = mid + 1;
+                } else if (b[mid] > u1) {
+                    r = mid - 1;
+                } else {
+                    found1 = 1;
+                    break;
+                }
+            }
+        }
+        out_offset1 = found1;
+        if (start_offset + 2 < na) {
+            u2 = a[start_offset + 2]; // u: an element in set a
+            int mid, l = 0, r = int(nb) - 1;
+            while (l <= r) {
+                mid = (l + r) >> 1;
+                if (b[mid] < u2) {
+                    l = mid + 1;
+                } else if (b[mid] > u2) {
+                    r = mid - 1;
+                } else {
+                    found2 = 1;
+                    break;
+                }
+            }
+        }
+        out_offset2 = found2;
+        if (start_offset + 3 < na) {
+            u3 = a[start_offset + 3]; // u: an element in set a
+            int mid, l = 0, r = int(nb) - 1;
+            while (l <= r) {
+                mid = (l + r) >> 1;
+                if (b[mid] < u3) {
+                    l = mid + 1;
+                } else if (b[mid] > u3) {
+                    r = mid - 1;
+                } else {
+                    found3 = 1;
+                    break;
+                }
+            }
+        }
+        out_offset3 = found3;
+
+        uint32_t tmp_sum = (out_offset0 + out_offset1) + (out_offset2 + out_offset3);
+        tmp_prefix_sum[lid] = tmp_sum;
+        __threadfence_block();
+        for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
+            uint32_t v = lid >= s ? tmp_prefix_sum[lid - s] : 0; //TODO: 考虑之后直接用寄存器shuffle而不是shared memory
+            __threadfence_block();
+            tmp_prefix_sum[lid] += v;
+            __threadfence_block();
+        }
+        if (lid == 0)
+            tmp_sum = 0;
+        else
+            tmp_sum = tmp_prefix_sum[lid - 1];
+        
+        tmp_sum += out_offset0;//这几行可以直接用out_offset+=，不需要tmp_sum
+        out_offset0 = tmp_sum;
+        tmp_sum += out_offset1;
+        out_offset1 = tmp_sum;
+        tmp_sum += out_offset2;
+        out_offset2 = tmp_sum;
+        tmp_sum += out_offset3;
+        out_offset3 = tmp_sum;
+
+        if (found0)
+            out[out_size - 1 + out_offset0] = u0;
+        if (found1)
+            out[out_size - 1 + out_offset1] = u1;
+        if (found2)
+            out[out_size - 1 + out_offset2] = u2;
+        if (found3)
+            out[out_size - 1 + out_offset3] = u3;
+
+        if (lid == 31)
+            out_size += out_offset3;
+    /*    num_done += 128;
+        start_offset += 128;
+    }*/
+
+    __threadfence_block();
+    return out_size;
+}
+#endif
+
 __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
 {
     __shared__ uint32_t block_out_offset[THREADS_PER_BLOCK];
@@ -385,6 +519,15 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         out_size = 0;
 
     uint32_t v, num_done = 0;
+    #ifdef DO_INTERSECTION_128
+    while (na - num_done >= 128)
+    {
+        uint32_t ret = do_intersection_128(out, a, b, na, nb);
+        if (lid == 0)
+            out_size += ret;
+        num_done += 128;
+    }
+    #endif
     while (num_done < na) {
         bool found = 0;
         uint32_t u = 0;
@@ -1268,6 +1411,22 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     uint32_t edge_num = g->e_cnt;
     uint32_t buffer_size = VertexSet::max_intersection_size;
     uint32_t block_shmem_size = (schedule.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet);
+
+    int device;
+    cudaDeviceProp prop;
+    int activeWarps;
+    int maxWarps;
+    int numBlocks;
+    cudaGetDevice(&device);
+    cudaGetDeviceProperties(&prop, device);
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+    &numBlocks,
+    gpu_pattern_matching,
+    WARPS_PER_BLOCK,
+    0);
+    activeWarps = numBlocks * THREADS_PER_BLOCK / prop.warpSize;
+    maxWarps = prop.maxThreadsPerMultiProcessor / prop.warpSize;
+    printf("Occupancy: numBlocks = %d THREADS_PER_BLOCK = %d activeWarp = %d maxWarps = %d\n", numBlocks, THREADS_PER_BLOCK, activeWarps, maxWarps);
     // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
