@@ -1,13 +1,121 @@
-#include "../include/dataloader.h"
-#include "../include/graph.h"
-#include "../include/vertex_set.h"
-#include "../include/common.h"
+#include "dataloader.h"
+#include "graph.h"
+#include "vertex_set.h"
+#include "common.h"
 #include <cstdlib>
 #include <cstring>
 
-bool DataLoader::load_data(Graph* &g, DataType type, const char* path, int oriented_type) {
+struct FileGuard {
+    FILE *fp;
+
+    FileGuard(FILE* p) : fp(p) {}
+    ~FileGuard() { fclose(fp); }
+};
+
+struct GraphHeader {
+    uint32_t v_cnt, e_cnt, max_intersection_size, checksum;
+    int64_t tri_cnt;
+};
+
+static void calculate_checksum(GraphHeader& h)
+{
+    h.checksum = 0;
+    uint32_t sum = 0;
+    uint32_t *p = reinterpret_cast<uint32_t*>(&h);
+    int len = sizeof(h) / sizeof(uint32_t);
+    for (int i = 0; i < len; ++i)
+        sum += p[i];
+    h.checksum = -sum;
+}
+
+static bool do_checksum(GraphHeader& h)
+{
+    uint32_t sum = 0;
+    uint32_t *p = reinterpret_cast<uint32_t*>(&h);
+    int len = sizeof(h) / sizeof(uint32_t);
+    for (int i = 0; i < len; ++i)
+        sum += p[i];
+    return sum == 0;
+}
+
+/**
+ * @brief dump graph data into a file
+ * @note for internal use only
+ * @return true if graph successfully dumped
+ */
+static bool dump_graph(Graph& g, const char* filename)
+{
+    GraphHeader h;
+    h.v_cnt = g.v_cnt;
+    h.e_cnt = g.e_cnt;
+    h.tri_cnt = g.tri_cnt;
+    h.max_intersection_size = VertexSet::max_intersection_size; // ...
+    calculate_checksum(h);
+
+    FILE *fp = fopen(filename, "wb");
+    if (!fp)
+        return false;
+    fwrite(&h, sizeof(h), 1, fp);
+    fwrite(g.vertex, sizeof(uint32_t), g.v_cnt + 1, fp);
+    fwrite(g.edge, sizeof(uint32_t), g.e_cnt, fp);
+    fclose(fp);
+    return true;
+}
+
+/**
+ * @brief load graph from a file
+ * @note for internal use only
+ * @return true if graph is successfully loaded
+ */
+static bool load_graph(Graph& g, const char* filename)
+{
+    GraphHeader h;
+
+    FILE *fp = fopen(filename, "rb");
+    if (!fp)
+        return false;
+
+    FileGuard guard(fp);
+    if (fread(&h, sizeof(h), 1, fp) != 1) {
+        printf("load_graph: bad header.\n");
+        return false;
+    }
+    if (!do_checksum(h)) {
+        printf("load_graph: checksum != 0. stop.\n");
+        return false;
+    }
+
+    g.v_cnt = h.v_cnt;
+    g.e_cnt = h.e_cnt;
+    g.tri_cnt = h.tri_cnt;
+    VertexSet::max_intersection_size = h.max_intersection_size; // ...
+
+    g.vertex = new unsigned int[h.v_cnt + 1];
+    g.edge = new int[g.e_cnt];
+
+    if (fread(g.vertex, sizeof(uint32_t), h.v_cnt + 1, fp) != h.v_cnt + 1) {
+        printf("load_graph: failed to load vertexes.\n");
+        return false;
+    }
+    if (fread(g.edge, sizeof(uint32_t), h.e_cnt, fp) != h.e_cnt) {
+        printf("load_graph: failed to load edges.\n");
+        return false;
+    }
+    return true;
+}
+
+bool DataLoader::fast_load(Graph* &g, const char* path)
+{
+    g = new Graph();
+    bool success = load_graph(*g, path);
+    if (!success)
+        delete g;
+    return success;
+}
+
+bool DataLoader::load_data(Graph* &g, DataType type, const char* path, bool binary_input, int oriented_type) {
     if(type == Patents || type == Orkut || type == complete8 || type == LiveJournal || type == MiCo || type == CiteSeer || type == Wiki_Vote) {
-        return general_load_data(g, type, path, oriented_type);
+        return general_load_data(g, type, path, binary_input, oriented_type);
     }
 
     if( type == Twitter) {
@@ -17,13 +125,27 @@ bool DataLoader::load_data(Graph* &g, DataType type, const char* path, int orien
     return false;
 }
 
-bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, int oriented_type) {
-    if (freopen(path, "r", stdin) == NULL)
-    {
-        printf("File not found. %s\n", path);
+static inline bool read_u32_pair(FILE* fp, bool binary, uint32_t& u, uint32_t& v)
+{
+    if (!binary) {
+        return fscanf(fp, "%u%u", &u, &v) == 2;
+    } else {
+        bool f1 = (fread(&u, sizeof(uint32_t), 1, fp) == 1);
+        bool f2 = (fread(&v, sizeof(uint32_t), 1, fp) == 1);
+        return f1 && f2;
+    }
+}
+
+bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, bool binary, int oriented_type) {
+    FILE *fp = fopen(path, binary ? "rb" : "r");
+
+    if (!fp) {
+        printf("File %s not found.\n", path);
         return false;
     }
-    printf("Load begin in %s\n",path);
+
+    FileGuard guard(fp);
+    printf("Load begin in %s\n", path);
     g = new Graph();
 
     //load triangle counting information
@@ -58,18 +180,18 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, i
         }
     }
 
-    scanf("%d%u",&g->v_cnt,&g->e_cnt);
-    int* degree = new int[g->v_cnt];
+    uint32_t x, y, tmp_v, tmp_e;
+    read_u32_pair(fp, binary, x, y);
+    g->v_cnt = x, g->e_cnt = y * 2; 
+
+    int *degree = new int[g->v_cnt];
     memset(degree, 0, g->v_cnt * sizeof(int));
-    g->e_cnt *= 2;
-    std::pair<int,int> *e = new std::pair<int,int>[g->e_cnt];
+    auto e = new std::pair<uint32_t, uint32_t>[g->e_cnt];
     id.clear();
-    int x,y;
-    int tmp_v;
-    unsigned int tmp_e;
+
     tmp_v = 0;
     tmp_e = 0;
-    while(scanf("%d%d",&x,&y)!=EOF) {
+    while (read_u32_pair(fp, binary, x, y)) {
         if(x == y) {
             printf("find self circle\n");
             g->e_cnt -=2;
@@ -84,8 +206,8 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, i
         e[tmp_e++] = std::make_pair(y,x);
         ++degree[x];
         ++degree[y];
-        if(tmp_e % 1000000u == 0u) {
-            printf("load %u edges\n",tmp_e);
+        if (tmp_e % 1000000 == 0) {
+            printf("%u edges loaded\n",tmp_e);
             fflush(stdout);
         }
     }
@@ -122,7 +244,6 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, i
         printf("edge number error!\n");
     }
     if(tmp_v != g->v_cnt || tmp_e != g->e_cnt) {
-        fclose(stdin);
         delete g;
         delete[] e;
         return false;
@@ -132,7 +253,6 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, i
     for(unsigned int i = 0; i < g->e_cnt - 1; ++i)
         if(e[i] == e[i+1]) {
             printf("have same edge\n");
-            fclose(stdin);
             delete g;
             delete[] e;
             return false;
@@ -141,7 +261,7 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, i
     g->vertex = new unsigned int[g->v_cnt + 1];
     bool* have_edge = new bool[g->v_cnt];
     int lst_v = -1;
-    for(int i = 0; i < g->v_cnt; ++i) have_edge[i] = false;
+    memset(have_edge, 0, g->v_cnt * sizeof(bool));
     for(unsigned int i = 0; i < g->e_cnt; ++i) {
         if(e[i].first != lst_v) {
             have_edge[e[i].first] = true;
@@ -159,6 +279,9 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, i
             g->vertex[i] = g->vertex[i+1];
         }
     delete[] have_edge;
+
+    bool ok = dump_graph(*g, "patents.g");
+    printf("dump graph %d\n", ok);
 
     return true;
 }
@@ -189,6 +312,9 @@ bool DataLoader::twitter_load_data(Graph *&g, DataType type, const char* path, i
     return true;
 }
 
+/**
+ * @note：好奇怪啊。已经是完全图了，有些操作是多余的。
+ */
 bool DataLoader::load_data(Graph* &g, int clique_size) {
     g = new Graph();
 
@@ -241,7 +367,7 @@ bool DataLoader::load_data(Graph* &g, int clique_size) {
     g->vertex = new unsigned int[g->v_cnt + 1];
     bool* have_edge = new bool[g->v_cnt];
     int lst_v = -1;
-    for(int i = 0; i < g->v_cnt; ++i) have_edge[i] = false;
+    memset(have_edge, 0, g->v_cnt * sizeof(bool));
     for(unsigned int i = 0; i < g->e_cnt; ++i) {
         if(e[i].first != lst_v) {
             have_edge[e[i].first] = true;
