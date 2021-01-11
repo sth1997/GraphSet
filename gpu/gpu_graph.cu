@@ -279,7 +279,7 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         #pragma unroll
         for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
             uint32_t v = lid >= s ? out_offset[lid - s] : 0;
-            __threadfence_block();
+            // __threadfence_block(); // 在以warp为基本单位执行时，这句应该不需要吧？
             out_offset[lid] += v;
             __threadfence_block();
         }
