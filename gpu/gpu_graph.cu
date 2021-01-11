@@ -276,13 +276,33 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         out_offset[lid] = found;
         __threadfence_block();
 
+        #pragma unroll
         for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
             uint32_t v = lid >= s ? out_offset[lid - s] : 0;
             __threadfence_block();
             out_offset[lid] += v;
             __threadfence_block();
         }
+        
+        /*
+        // work-efficient parallel scan，但常数大，实测速度不行
+        #pragma unroll
+        for (int s = 1; s < THREADS_PER_WARP; s <<= 1) {
+            int i = (lid + 1) * s * 2 - 1;
+            if (i < THREADS_PER_WARP)
+                out_offset[i] += out_offset[i - s];
+            __threadfence_block();
+        }
 
+        #pragma unroll
+        for (int s = THREADS_PER_WARP / 4; s > 0; s >>= 1) {
+            int i = (lid + 1) * s * 2 - 1;
+            if ((i + s) < THREADS_PER_WARP)
+                out_offset[i + s] += out_offset[i];
+            __threadfence_block();
+        }
+        */
+        
         if (found) {
             uint32_t offset = out_offset[lid] - 1;
             out[out_size + offset] = u;
@@ -290,6 +310,23 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
         if (lid == 0)
             out_size += out_offset[THREADS_PER_WARP - 1];
+
+        /*
+        // 使用warp shuffle的scan，但实测速度更不行
+        uint32_t offset = found;
+        #pragma unroll
+        for (int i = 1; i < THREADS_PER_WARP; i *= 2) {
+            uint32_t t = __shfl_up_sync(0xffffffff, offset, i);
+            if (lid >= i)
+                offset += t;
+        }
+
+        if (found)
+            out[out_size + offset - 1] = u;
+        if (lid == THREADS_PER_WARP - 1) // 总和被warp中最后一个线程持有
+            out_size += offset;
+        */
+
         num_done += THREADS_PER_WARP;
     }
 
@@ -578,6 +615,9 @@ __device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
     // assert(false);
 }
 
+/**
+ * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
+ */
 __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
     __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
@@ -670,26 +710,20 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 }
 
 void pattern_matching_init(Graph *g, const Schedule& schedule) {
+    int num_blocks = 4096;
+    int num_total_warps = num_blocks * WARPS_PER_BLOCK;
+
+    size_t size_edge = g->e_cnt * sizeof(uint32_t);
+    size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
+    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+
     schedule.print_schedule();
     uint32_t *edge_from = new uint32_t[g->e_cnt];
     for(uint32_t i = 0; i < g->v_cnt; ++i)
         for(uint32_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
             edge_from[j] = i;
 
-    uint32_t *edge = new uint32_t[g->e_cnt];
-    uint32_t *vertex = new uint32_t[g->v_cnt + 1];
-
-    for(uint32_t i = 0;i < g->e_cnt; ++i) edge[i] = g->edge[i];
-    for(uint32_t i = 0;i <= g->v_cnt; ++i) vertex[i] = g->vertex[i];
-
     tmpTime.check(); 
-
-    int num_blocks = 4096;
-    int num_total_warps = num_blocks * WARPS_PER_BLOCK;
-
-    uint32_t size_edge = g->e_cnt * sizeof(uint32_t);
-    uint32_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
-    uint32_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule.get_total_prefix_num() + 2); //prefix + subtraction + tmp
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
@@ -701,9 +735,9 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     gpuErrchk( cudaMalloc((void**)&dev_vertex, size_vertex));
     gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
 
-    gpuErrchk( cudaMemcpy(dev_edge, edge, size_edge, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpy(dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(dev_vertex, vertex, size_vertex, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpy(dev_vertex, g->vertex, size_vertex, cudaMemcpyHostToDevice));
 
     unsigned long long sum = 0;
 
@@ -750,13 +784,12 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     tmpTime.print("Prepare time cost");
     tmpTime.check();
 
-    uint32_t edge_num = g->e_cnt;
     uint32_t buffer_size = VertexSet::max_intersection_size;
     uint32_t block_shmem_size = (schedule.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet);
     // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
-        (edge_num, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
+        (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
@@ -782,7 +815,7 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     gpuErrchk(cudaFree(dev_schedule->restrict_index));
     gpuErrchk(cudaFree(dev_schedule));
 
-    delete[] edge, edge_from, vertex;
+    delete[] edge_from;
 }
 
 int main(int argc,char *argv[]) {
@@ -838,6 +871,7 @@ int main(int argc,char *argv[]) {
     const char *pattern_str = "0111010011100011100001100"; // 5 house p1
     // const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
     // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
+    // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
     Pattern p(5, pattern_str);
     printf("pattern = \n");
