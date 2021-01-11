@@ -101,6 +101,7 @@ static bool load_graph(Graph& g, const char* filename)
         printf("load_graph: failed to load edges.\n");
         return false;
     }
+    printf("load_graph: %u vertexes, %u edges\n", g.v_cnt, g.e_cnt);
     return true;
 }
 
