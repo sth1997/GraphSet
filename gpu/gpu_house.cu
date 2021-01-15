@@ -27,7 +27,8 @@ public:
         struct timeval tp_end, tp_res;
         gettimeofday(&tp_end, NULL);
         timersub(&tp_end, &tp, &tp_res);
-        std::cout << title << ": " << tp_res.tv_sec << " s " << tp_res.tv_usec << " us.\n";
+        printf("%s: %d s %06d us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
+        //std::cout << title << ": " << tp_res.tv_sec << " s " << tp_res.tv_usec << " us.\n";
     }
 private:
     struct timeval tp;
