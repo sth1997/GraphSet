@@ -1036,9 +1036,10 @@ __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedul
         //A & B，由于A.size < B.size，只要A.size < MAX_SHARED_SET_LENGTH，则求交后大小一定 < MAX_SHARED_SET_LENGTH，可以放到shared memory
         uint32_t* intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
         unsigned long long AB_size = do_intersection(intersection_ptr, A_ptr, B_ptr, A_size, B_size);
+        unsigned long long tmp_AB_size = AB_size;
         AB_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AB_size, subtraction_size);
         //(A & B) & C
-        unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, C_ptr, AB_size, C_size);
+        unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, C_ptr, tmp_AB_size, C_size);
         ABC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, ABC_size, subtraction_size);
         //A & C
         intersection_ptr = A_size < MAX_SHARED_SET_LENGTH ? (warp_mem_start + MAX_SHARED_SET_LENGTH * 3) : tmp_set.get_data_ptr();
@@ -1107,9 +1108,10 @@ __device__ unsigned long long IEP_3_layer(const GPUSchedule* schedule, GPUVertex
     //A & B，由于A.size < B.size，只要A.size < MAX_SHARED_SET_LENGTH，则求交后大小一定 < MAX_SHARED_SET_LENGTH，可以放到shared memory
     uint32_t* intersection_ptr = vertex_set[loop_set_prefix_ids0].get_size() < MAX_SHARED_SET_LENGTH ? warp_mem_start : tmp_set.get_data_ptr();
     unsigned long long AB_size = do_intersection(intersection_ptr, vertex_set[loop_set_prefix_ids0].get_data_ptr(), vertex_set[loop_set_prefix_ids1].get_data_ptr(), vertex_set[loop_set_prefix_ids0].get_size(), vertex_set[loop_set_prefix_ids1].get_size());
+    unsigned long long tmp_AB_size = AB_size;
     AB_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, AB_size, subtraction_size);
     //(A & B) & C
-    unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, vertex_set[loop_set_prefix_ids2].get_data_ptr(), AB_size, vertex_set[loop_set_prefix_ids2].get_size());
+    unsigned long long ABC_size = do_intersection(intersection_ptr, intersection_ptr, vertex_set[loop_set_prefix_ids2].get_data_ptr(), tmp_AB_size, vertex_set[loop_set_prefix_ids2].get_size());
     ABC_size = unordered_subtraction_size(intersection_ptr, subtraction_ptr, ABC_size, subtraction_size);
     //A & C
     intersection_ptr = vertex_set[loop_set_prefix_ids0].get_size() < MAX_SHARED_SET_LENGTH ? warp_mem_start : tmp_set.get_data_ptr();
