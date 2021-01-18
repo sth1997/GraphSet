@@ -271,7 +271,7 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
         //printf("local_ans %d %lld\n", omp_get_thread_num(), local_ans);
         
     }
-    return global_ans;
+    return global_ans / schedule.get_in_exclusion_optimize_redundancy();
 }
 
 void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth)

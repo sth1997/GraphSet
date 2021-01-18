@@ -38,6 +38,8 @@ public:
 
     bool fast_load(Graph* &g, const char* path);
 
+    bool load_complete(Graph* &g, int clique_size);
+
 private:
     static bool cmp_pair(std::pair<int,int>a, std::pair<int,int>b);
     static bool cmp_degree_gt(std::pair<int,int> a,std::pair<int,int> b);
