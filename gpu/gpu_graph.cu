@@ -19,6 +19,7 @@
 #include <sys/time.h>
 #include <chrono>
 //#define DO_INTERSECTION_128
+#define IEP_MORE_SHARED
 
 constexpr int THREADS_PER_BLOCK = 64;
 constexpr int THREADS_PER_WARP = 32;
@@ -931,6 +932,7 @@ __device__ void global_to_shared_double(const GPUVertexSet& set, uint32_t* smem)
         smem[i] = (set.get_data(i) << 1); //频繁调用get_data，编译器应该会用寄存器缓存一下set.data_ptr吧？之后改一下手动存ptr试试
 }
 
+#ifdef IEP_MORE_SHARED
 //减少容斥原理中的计算量，并使用更多shared memory。但是性能却下降了
 __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
     GPUVertexSet& tmp_set, int in_exclusion_optimize_num, int depth)
@@ -1083,7 +1085,7 @@ __device__ unsigned long long IEP_3_layer_more_shared(const GPUSchedule* schedul
         return real_A_size * real_B_size * real_C_size - real_A_size * BC_size - real_B_size * AC_size - real_C_size * AB_size + (ABC_size << 1);
     }
 }
-
+#else
 //减少容斥原理中的计算量，并利用一定shared memory
 __device__ unsigned long long IEP_3_layer(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
     GPUVertexSet& tmp_set, int in_exclusion_optimize_num, int depth)
@@ -1127,6 +1129,7 @@ __device__ unsigned long long IEP_3_layer(const GPUSchedule* schedule, GPUVertex
     unsigned long long C_size = unordered_subtraction_size(vertex_set[loop_set_prefix_ids2], subtraction_set);
     return A_size * B_size * C_size - A_size * BC_size - B_size * AC_size - C_size * AB_size + (ABC_size << 1);
 }
+#endif
 
 /**
  * @brief 最终层的容斥原理优化计算。
@@ -1136,7 +1139,11 @@ __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* sched
 {
     int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
     if (in_exclusion_optimize_num == 3) {
+        #ifdef IEP_MORE_SHARED
         local_ans += IEP_3_layer_more_shared(schedule, vertex_set, subtraction_set, tmp_set, in_exclusion_optimize_num, depth);
+        #else
+        local_ans += IEP_3_layer(schedule, vertex_set, subtraction_set, tmp_set, in_exclusion_optimize_num, depth);
+        #endif
         return;
     }
     //int* loop_set_prefix_ids[ in_exclusion_optimize_num ];
