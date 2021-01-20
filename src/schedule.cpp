@@ -3,15 +3,15 @@
 #include "../include/dataloader.h"
 #include <cstdio>
 #include <cstring>
-#include <assert.h>
+#include <cassert>
 #include <algorithm>
+#include <stdexcept>
 
 Schedule::Schedule(const Pattern& pattern, bool &is_pattern_valid, int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize ,int v_cnt, unsigned int e_cnt, long long tri_cnt)
 {
     if( performance_modeling_type != 0 && tri_cnt == -1) {
         printf("Fatal: Can not use performance modeling if not have triangle number of this dataset.\n");
-        fflush(stdout);
-        assert(0);
+        throw std::exception{};
     }
 
     is_pattern_valid = true;
@@ -291,8 +291,8 @@ Schedule::Schedule(const int* _adj_mat, int _size)
             }
         if (valid == false)
         {
-            printf("invalid schedule!\n");
-            assert(0);
+            printf("Fatal: invalid schedule!\n");
+            throw std::exception{};
         }
     }
 

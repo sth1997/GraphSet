@@ -1,7 +1,3 @@
-/**
- * 这个版本里面没有细粒度计时。有计时的在gpu_graph_with_timer.cu里面。
- * 而且计时的方式与zms版本略有区别。
- */
 #include <graph.h>
 #include <dataloader.h>
 #include <vertex_set.h>
@@ -10,7 +6,9 @@
 #include <cassert>
 #include <cstring>
 #include <cstdint>
-#include <string>
+#include <cmath>
+
+#include <limits> 
 #include <algorithm>
 
 #include <cuda_runtime.h>
@@ -62,8 +60,10 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
     r = vertex[v + 1]; \
 } while(0)
 
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 template <typename T>
-__device__ inline void swap(T& a, T& b)
+__device__ inline void dev_swap(T& a, T& b)
 {
     T t(std::move(a));
     a = std::move(b);
@@ -85,6 +85,9 @@ struct GPUGroupDim0 {
     int size;
 };
 
+/**
+ * @todo 增加处理IEP造成的重复计数
+ */
 class GPUSchedule {
 public:
     __host__ void transform_in_exclusion_optimize_group_val(const Schedule& schedule)
@@ -111,6 +114,64 @@ public:
                     in_exclusion_optimize_group.data[i].data[j].data[k] = schedule.in_exclusion_optimize_group[i][j][k];
             }
         }
+    }
+
+    __host__ void init_from(const Schedule& schedule)
+    {
+        transform_in_exclusion_optimize_group_val(schedule);
+
+        int schedule_size = schedule.get_size();
+        int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
+
+        gpuErrchk( cudaMallocManaged(&adj_mat, sizeof(int) * schedule_size * schedule_size));
+        gpuErrchk( cudaMemcpy(adj_mat, schedule.get_adj_mat_ptr(), sizeof(int) * schedule_size * schedule_size, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged(&father_prefix_id, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(father_prefix_id, schedule.get_father_prefix_id_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged(&last, sizeof(int) * schedule_size));
+        gpuErrchk( cudaMemcpy(last, schedule.get_last_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged(&next, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(next, schedule.get_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged(&loop_set_prefix_id, sizeof(int) * schedule_size));
+        gpuErrchk( cudaMemcpy(loop_set_prefix_id, schedule.get_loop_set_prefix_id_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged(&restrict_last, sizeof(int) * schedule_size));
+        gpuErrchk( cudaMemcpy(restrict_last, schedule.get_restrict_last_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
+    
+        gpuErrchk( cudaMallocManaged(&restrict_next, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(restrict_next, schedule.get_restrict_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+    
+        gpuErrchk( cudaMallocManaged(&restrict_index, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(restrict_index, schedule.get_restrict_index_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        size = schedule.get_size();
+        total_prefix_num = schedule.get_total_prefix_num();
+        total_restrict_num = schedule.get_total_restrict_num();
+        in_exclusion_optimize_num = schedule.get_in_exclusion_optimize_num();
+        k_val = schedule.get_k_val();
+    }
+
+    __host__ void release()
+    {
+        gpuErrchk(cudaFree(in_exclusion_optimize_val));
+        for (int i = 0; i < in_exclusion_optimize_group.size; ++i) {
+            for (int j = 0; j < in_exclusion_optimize_group.data[i].size; ++j)
+                gpuErrchk(cudaFree(in_exclusion_optimize_group.data[i].data[j].data));
+            gpuErrchk(cudaFree(in_exclusion_optimize_group.data[i].data));
+        }
+        gpuErrchk(cudaFree(in_exclusion_optimize_group.data));
+
+        gpuErrchk(cudaFree(adj_mat));
+        gpuErrchk(cudaFree(father_prefix_id));
+        gpuErrchk(cudaFree(last));
+        gpuErrchk(cudaFree(next));
+        gpuErrchk(cudaFree(loop_set_prefix_id));
+        gpuErrchk(cudaFree(restrict_last));
+        gpuErrchk(cudaFree(restrict_next));
+        gpuErrchk(cudaFree(restrict_index));
     }
 
     inline __device__ int get_total_prefix_num() const { return total_prefix_num;}
@@ -247,19 +308,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         uint32_t u = 0;
         if (num_done + lid < na) {
             u = a[num_done + lid]; // u: an element in set a
-            /*
-            // 我这里这样写并没有变快，反而明显慢了
-            int x, s[3], &l = s[0], &r = s[1], &mid = s[2];
-            l = 0, r = int(nb) - 1, mid = (int(nb) - 1) >> 1;
-            while (l <= r && !found) {
-                uint32_t v = b[mid];
-                found = (v == u);
-                x = (v < u);
-                mid += 2 * x - 1;
-                swap(mid, s[!x]);
-                mid = (l + r) >> 1;
-            }
-            */
             int mid, l = 0, r = int(nb) - 1;
             while (l <= r) {
                 mid = (l + r) >> 1;
@@ -283,7 +331,7 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
             out_offset[lid] += v;
             __threadfence_block();
         }
-        
+
         /*
         // work-efficient parallel scan，但常数大，实测速度不行
         #pragma unroll
@@ -343,8 +391,8 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
 {
     // make sure ln <= rn
     if (ln > rn) {
-        swap(ln, rn);
-        swap(lbases, rbases);
+        dev_swap(ln, rn);
+        dev_swap(lbases, rbases);
     }
     /**
      * @todo 考虑ln < rn <= 32时，每个线程在lbases里面找rbases的一个元素可能会更快
@@ -376,8 +424,9 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     int &ret = block_ret[wid];
     if (lid == 0)
         ret = size0;
-    __threadfence_block();
+    // __threadfence_block(); // 也不用吧？有atomicSub和最后的barrier顶着
 
+/*
     int done1 = 0;
     while (done1 < size1)
     {
@@ -389,8 +438,7 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
             while (l <= r)
             {
                 int mid = (l + r) >> 1;
-                if (set0.get_data(mid) == val)
-                {
+                if (unlikely(set0.get_data(mid) == val)) {
                     atomicSub(&ret, 1);
                     break;
                 }
@@ -403,7 +451,27 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
         }
         done1 += THREADS_PER_WARP;
     }
+*/
 
+    int i = lid;
+    while (i < size1) {
+        int l = 0, r = size0 - 1;
+        uint32_t val = set1.get_data(i);
+        //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+        while (l <= r) {
+            int mid = (l + r) >> 1;
+            if (unlikely(set0.get_data(mid) == val)) {
+                atomicSub(&ret, 1);
+                break;
+            }
+            if (set0.get_data(mid) < val)
+                l = mid + 1;
+            else
+                r = mid - 1;
+        }
+        i += THREADS_PER_WARP;
+    }
+    
     __threadfence_block();
     return ret;
 }
@@ -413,7 +481,7 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
  * @note 调用处初始深度为2（已经匹配了一条边对应的两个点）
  */
 __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, uint32_t *vertex)
+    GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, const uint32_t *vertex)
 {
     int loop_set_prefix_id = schedule->get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -512,12 +580,13 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
 /**
  * @brief 最终层的容斥原理优化计算。
  */
-__device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, uint32_t *vertex)
+__device__ inline void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
+    GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, const uint32_t *vertex)
 {
     int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
     //int* loop_set_prefix_ids[ in_exclusion_optimize_num ];
-    int loop_set_prefix_ids[8];//偷懒用了static，之后考虑改成dynamic
+    __shared__ int loop_set_prefix_ids_block[8 * WARPS_PER_BLOCK];//偷懒用了static，之后考虑改成dynamic
+    int *loop_set_prefix_ids = loop_set_prefix_ids_block + threadIdx.x / THREADS_PER_WARP * 8;
     // 这里有硬编码的数字，之后考虑修改。
     loop_set_prefix_ids[0] = schedule->get_loop_set_prefix_id(depth);
     for(int i = 1; i < in_exclusion_optimize_num; ++i)
@@ -557,7 +626,7 @@ constexpr int MAX_DEPTH = 5; // 非递归pattern matching支持的最大深度
 
 template <int depth>
 __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, uint32_t *vertex)
+    GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, const uint32_t *vertex)
 {
     int loop_set_prefix_id = schedule->get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -566,7 +635,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
 
     if (depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num()) {
         GPU_pattern_matching_final_in_exclusion(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth, edge, vertex);
-        return;    
+        return;
     }
 
     uint32_t* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
@@ -610,15 +679,17 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
 
 template <>
 __device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, uint32_t *vertex)
+    GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, const uint32_t *vertex)
 {
     // assert(false);
 }
 
 /**
- * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
+ * @note `buffer_size`实际上是第二大节点度数，而非所用空间大小
+ * @todo 接口类型可能需要修改
  */
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size,
+    const uint32_t *edge_from, uint32_t *edge, const uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
     __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
@@ -634,7 +705,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 
     if (lid == 0) {
         edge_idx = 0;
-        uint32_t offset = buffer_size * global_wid * num_vertex_sets_per_warp;
+        ptrdiff_t offset = ptrdiff_t(1) * buffer_size * global_wid * num_vertex_sets_per_warp;
         for (int i = 0; i < num_vertex_sets_per_warp; ++i)
         {
             vertex_set[i].set_data_ptr(tmp + offset); // 注意这是个指针+整数运算，自带*4
@@ -646,11 +717,10 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 
     __threadfence_block(); //之后考虑把所有的syncthreads都改成syncwarp
 
-
     uint32_t v0, v1;
     uint32_t l, r;
 
-    unsigned long long sum = 0;
+    unsigned long long local_sum, sum = 0;
 
     while (true) {
         if (lid == 0) {
@@ -698,7 +768,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         if (is_zero)
             continue;
         
-        unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
+        local_sum = 0; // local sum (corresponding to an edge index)
         GPU_pattern_matching_func<2>(schedule, vertex_set, subtraction_set, tmp_set, local_sum, edge, vertex);
         // GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
         sum += local_sum;
@@ -709,21 +779,60 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
     }
 }
 
-void pattern_matching_init(Graph *g, const Schedule& schedule) {
-    int num_blocks = 4096;
+template <typename T, std::size_t S>
+T sum_of_dev_array(T (&arr)[S])
+{
+    T sum = 0;
+    T *tmp = new T[S];
+    gpuErrchk( cudaMemcpyFromSymbol(tmp, arr, sizeof(arr)) );
+    for (std::size_t i = 0; i < S; ++i)
+        sum += tmp[i];
+    delete[] tmp;
+    return sum;
+}
+
+/**
+ * @return counting time in seconds
+ */ 
+double pattern_matching_entry(const Graph *g, const Schedule& schedule)
+{
+    int device;
+    gpuErrchk( cudaGetDevice(&device) );
+
+    int num_sms; // number of Streaming Multiprocessors
+    cudaDeviceGetAttribute(&num_sms, cudaDevAttrMultiProcessorCount, device);
+
+    size_t buffer_size = VertexSet::max_intersection_size;
+    size_t block_shmem_size = (schedule.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet);
+
+    printf("schedule.prefix_num: %d\n", schedule.get_total_prefix_num());
+    printf("shared memory for vertex set per block: %lu bytes\n", block_shmem_size);
+
+    int max_active_blocks_per_sm;
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, block_shmem_size);
+    printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
+    
+    int num_blocks = max_active_blocks_per_sm * num_sms;
     int num_total_warps = num_blocks * WARPS_PER_BLOCK;
+    printf("number of blocks: %d number of total warps: %d\n", num_blocks, num_total_warps);
 
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
     size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
-    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+    size_t size_tmp = buffer_size * sizeof(uint32_t) * num_total_warps * (schedule.get_total_prefix_num() + 2); //prefix + subtraction + tmp
 
     schedule.print_schedule();
+    printf("Restrictions:");
+    for (const auto& pair : schedule.restrict_pair)
+            printf(" (%d,%d)", pair.first, pair.second);
+    printf("\n");
+
     uint32_t *edge_from = new uint32_t[g->e_cnt];
     for(uint32_t i = 0; i < g->v_cnt; ++i)
         for(uint32_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
             edge_from[j] = i;
 
-    tmpTime.check(); 
+    using std::chrono::system_clock;
+    auto t1 = system_clock::now();
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
@@ -740,53 +849,24 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     gpuErrchk( cudaMemcpy(dev_vertex, g->vertex, size_vertex, cudaMemcpyHostToDevice));
 
     unsigned long long sum = 0;
+    unsigned int initial_edge_index = 0;
+
+    // initialize global device variables
+    gpuErrchk( cudaMemcpyToSymbol(dev_cur_edge, &initial_edge_index, sizeof(dev_cur_edge)) );
+    gpuErrchk( cudaMemcpyToSymbol(dev_sum, &sum, sizeof(dev_sum)) );
 
     //memcpy schedule
     GPUSchedule* dev_schedule;
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule, sizeof(GPUSchedule)));
-    dev_schedule->transform_in_exclusion_optimize_group_val(schedule);
-    int schedule_size = schedule.get_size();
-    int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->adj_mat, sizeof(int) * schedule_size * schedule_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->adj_mat, schedule.get_adj_mat_ptr(), sizeof(int) * schedule_size * schedule_size, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMallocManaged(&dev_schedule, sizeof(GPUSchedule)));
+    dev_schedule->init_from(schedule);
 
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->father_prefix_id, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->father_prefix_id, schedule.get_father_prefix_id_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+    auto t2 = system_clock::now();
+    auto prepare_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    printf("Prepare time cost: %g seconds\n", 1e-6 * prepare_time.count());
+    fflush(stdout);
 
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->last, sizeof(int) * schedule_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->last, schedule.get_last_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
+    auto t3 = system_clock::now();
 
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->next, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->next, schedule.get_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->loop_set_prefix_id, sizeof(int) * schedule_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->loop_set_prefix_id, schedule.get_loop_set_prefix_id_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->restrict_last, sizeof(int) * schedule_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->restrict_last, schedule.get_restrict_last_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->restrict_next, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->restrict_next, schedule.get_restrict_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->restrict_index, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->restrict_index, schedule.get_restrict_index_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
-    dev_schedule->size = schedule.get_size();
-    dev_schedule->total_prefix_num = schedule.get_total_prefix_num();
-    dev_schedule->total_restrict_num = schedule.get_total_restrict_num();
-    dev_schedule->in_exclusion_optimize_num = schedule.get_in_exclusion_optimize_num();
-    dev_schedule->k_val = schedule.get_k_val();
-
-    printf("schedule.prefix_num: %d\n", schedule.get_total_prefix_num());
-    printf("shared memory for vertex set per block: %ld bytes\n", 
-        (schedule.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet));
-
-    tmpTime.print("Prepare time cost");
-    tmpTime.check();
-
-    uint32_t buffer_size = VertexSet::max_intersection_size;
-    uint32_t block_shmem_size = (schedule.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet);
-    // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
         (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
@@ -795,27 +875,87 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
-    printf("count %llu\n", sum);
-    tmpTime.print("Counting time cost");
-    //之后需要加上cudaFree
+    auto t4 = system_clock::now();
+    double counting_time = 1e-6 * std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
 
-    // 尝试释放一些内存
+    printf("count %llu\n", sum);
+    printf("Counting time cost: %g seconds\n", counting_time);
+    fflush(stdout);
+
+    // 释放内存
     gpuErrchk(cudaFree(dev_edge));
     gpuErrchk(cudaFree(dev_edge_from));
     gpuErrchk(cudaFree(dev_vertex));
     gpuErrchk(cudaFree(dev_tmp));
 
-    gpuErrchk(cudaFree(dev_schedule->adj_mat));
-    gpuErrchk(cudaFree(dev_schedule->father_prefix_id));
-    gpuErrchk(cudaFree(dev_schedule->last));
-    gpuErrchk(cudaFree(dev_schedule->next));
-    gpuErrchk(cudaFree(dev_schedule->loop_set_prefix_id));
-    gpuErrchk(cudaFree(dev_schedule->restrict_last));
-    gpuErrchk(cudaFree(dev_schedule->restrict_next));
-    gpuErrchk(cudaFree(dev_schedule->restrict_index));
+    dev_schedule->release();
     gpuErrchk(cudaFree(dev_schedule));
 
     delete[] edge_from;
+
+    return counting_time;
+}
+
+static inline bool is_adj_matrix(const char* s, int& pattern_size)
+{
+    int n, i;
+    for (i = 0; s[i] == '0' || s[i] == '1'; ++i)
+        ;
+    if (i <= 1)
+        return false;
+    n = static_cast<int>(std::sqrt(i));
+    if (n * n != i)
+        return false;
+    pattern_size = n;
+    return true;
+}
+
+/**
+ * @return minimum counting time of all schedules
+ */
+double test_all_schedules(Graph *g, int pattern_size, const char* adj_mat)
+{
+    int size = pattern_size;
+    int rank[size], perm_id = 0;
+    for (int i = 0; i < size; ++i)
+        rank[i] = i;
+
+    double min_counting_time = std::numeric_limits<double>::max();
+    
+    do {
+        printf("\n-------------- permutation id = %d ---------------\n", ++perm_id);
+
+        Pattern cur_pattern(size);
+        for (int i = 0; i < size; ++i)
+            for (int j = 0; j < size; ++j)
+                if (adj_mat[INDEX(i, j, size)] == '1')
+                    cur_pattern.add_edge(rank[i], rank[j]);
+        
+        bool valid;
+        Schedule *schedule_ptr = nullptr;
+        try {
+            schedule_ptr = new Schedule(cur_pattern, valid, 0, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
+        } catch (const std::exception& e) {
+            valid = false;
+        }
+        if (!valid || !schedule_ptr) {
+            printf("invalid schedule.\n");
+            continue;
+        }
+
+        if (schedule_ptr->get_in_exclusion_optimize_num() == 0) {
+            printf("in-exclusion optimization is not available.\n");
+            continue;
+        }
+
+        double counting_time = pattern_matching_entry(g, *schedule_ptr);
+        if (min_counting_time > counting_time)
+            min_counting_time = counting_time;
+
+        printf("----------------------------------------------------\n");
+    } while (std::next_permutation(rank, rank + size));
+
+    return min_counting_time;
 }
 
 int main(int argc,char *argv[]) {
@@ -823,26 +963,38 @@ int main(int argc,char *argv[]) {
     DataLoader D;
 
     if (argc < 2) {
-        printf("Usage: %s dataset_name graph_file [binary/text]\n", argv[0]);
-        printf("Example: %s Patents ~hzx/data/patents_bin binary\n", argv[0]);
+        printf("Usage: %s dataset_name graph_file\n", argv[0]);
         printf("Example: %s Patents ~zms/patents_input\n", argv[0]);
 
-        printf("\nExperimental usage: %s [graph_file.g]\n", argv[0]);
+        printf("\nExperimental usage: %s [graph_file.g] [adjacency_matrix]\n", argv[0]);
         printf("Example: %s ~hzx/data/patents.g\n", argv[0]);
+        printf("Example: %s ~hzx/data/mico.g 0111010011100011100001100", argv[0]);
         return 0;
     }
 
-    bool binary_input = false;
-    if (argc >= 4)
-        binary_input = (strcmp(argv[3], "binary") == 0);
+    // default pattern: house p1
+    int pattern_size = 5;
+    const char *adj_mat = "0111010011100011100001100"; // 5 house p1
+    // const char *adj_mat = "011011101110110101011000110000101000"; // 6 p2
+    // const char *adj_mat = "0111111101111111011101110100111100011100001100000"; // 7 p5
+    // const char *adj_mat = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
+    bool binary_input = true;
     DataType my_type;
-    if (argc >= 3) {
-        GetDataType(my_type, argv[1]);
 
-        if (my_type == DataType::Invalid) {
-            printf("Dataset not found!\n");
-            return 0;
+    if (argc >= 3) {
+        if (is_adj_matrix(argv[2], pattern_size)) {
+            adj_mat = argv[2];
+        } else {
+            printf("'%s' is not an adjacency matrix. Assume old-style input.\n", argv[2]);
+
+            binary_input = false;
+            GetDataType(my_type, argv[1]);
+
+            if (my_type == DataType::Invalid) {
+                printf("Dataset not found!\n");
+                return 0;
+            }
         }
     }
 
@@ -850,11 +1002,12 @@ int main(int argc,char *argv[]) {
     auto t1 = system_clock::now();
 
     bool ok;
-    if (argc >= 3) {
-        // 注：load_data的第四个参数用于指定是否读取二进制文件输入，默认为false
-        ok = D.load_data(g, my_type, argv[2], binary_input);
+    if (!binary_input) {
+        // 注：load_data的第四个参数用于指定是否读取【旧式】二进制文件输入，默认为false
+        // 另注：【旧式】二进制输入已不再使用
+        ok = D.load_data(g, my_type, argv[2], false);
     } else {
-        ok = D.fast_load(g, argv[1]);
+        ok = D.fast_load(g, argv[1]); // 快速读取预处理过的.g图文件
     }
     if (!ok) {
         printf("data load failure :-(\n");
@@ -868,26 +1021,36 @@ int main(int argc,char *argv[]) {
 
     allTime.check();
 
-    const char *pattern_str = "0111010011100011100001100"; // 5 house p1
-    // const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
-    // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
-    // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
-
-    Pattern p(5, pattern_str);
-    printf("pattern = \n");
+    Pattern p(pattern_size, adj_mat);
+    printf("pattern(%d)=\n", pattern_size);
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);
+    fflush(stdout);
+
     bool is_pattern_valid;
     bool use_in_exclusion_optimize = true;
+
+    // use the best schedule
     Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
     //Schedule schedule(p, is_pattern_valid, 0, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // use the best schedule
-
     if (!is_pattern_valid) {
         printf("pattern is invalid!\n");
         return 0;
     }
 
-    pattern_matching_init(g, schedule);
+    
+    double default_counting_time = pattern_matching_entry(g, schedule);
+
+    /*
+    double min_counting_time = test_all_schedules(g, pattern_size, adj_mat);
+    printf("\n\n------------- summary --------------\n\n");
+    if (min_counting_time < default_counting_time) {
+        printf("current schedule: %g seconds; best: %g seconds\n", default_counting_time, min_counting_time);
+        printf("current schedule => %g%% slower.\n", 100.0 * (default_counting_time - min_counting_time) / min_counting_time);
+    } else {
+        printf("current schedule is the best.\n");
+    }
+    */
 
     allTime.print("Total time cost");
 
