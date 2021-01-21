@@ -15,11 +15,13 @@ p6 = "0111111101111111011001110100111100011000001100000"
 
 if __name__ == '__main__':
     graphs = {'wv': wv, 'pt': pt, 'mc': mc}
+    # graphs = {'wv': wv, 'pt': pt}
+    # graphs = {'mc': mc}
     patterns = [p1, p2, p3, p4, p5, p6]
 
     for i, p in enumerate(patterns):
         for g_name, g_file in graphs.items():
-            log_file1 = '%s-p%d.txt' % (g_name, i + 1)
+            log_file1 = '%s-p%d.txt.5' % (g_name, i + 1)
 
             print('\n>>> Graph: %s Pattern: p%d\n' % (g_name, i + 1))
             os.system('bin/gpu_graph %s %s | tee %s' % (g_file, p, log_file1))
