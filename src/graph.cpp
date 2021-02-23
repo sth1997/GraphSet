@@ -13,6 +13,7 @@
 #include <atomic>
 #include <queue>
 #include <iostream>
+#include <vector>
 
 int Graph::intersection_size(int v1,int v2) {
     unsigned int l1, r1;
@@ -544,4 +545,40 @@ void Graph::pattern_matching_aggressive_func_mpi(const Schedule& schedule, Verte
         pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1);
         subtraction_set.pop_back();
     }
+}
+
+void Graph::edge_rearrangement(int thread_count) {
+    stack_edge_exist = true;
+    stack_edge = new int[e_cnt];
+    #pragma omp parallel num_threads(thread_count)
+    {
+        #pragma omp for schedule(dynamic)
+        for(int i = 0; i < v_cnt; ++i) {
+            
+            if(vertex[i] < vertex[i + 1])
+                trans_to_stack(vertex[i], 0, vertex[i], vertex[i + 1] - 1);
+
+        }
+    }
+}
+    
+void Graph::trans_to_stack(int stack_begin_pos, int pos, int l, int r) {
+    if(l > r) return;
+
+    if(l == r) {
+        stack_edge[stack_begin_pos + pos] = edge[l];
+        return;
+    }
+    
+    int size = r - l + 1;
+    int p = 1;
+    while( p <= size) p <<= 1;
+
+    int last_level = size - (p / 2 - 1);
+    int left_cnt = (last_level <= p / 4 ? last_level : p / 4 ) + (p / 4 - 1);
+
+    stack_edge[stack_begin_pos + pos] = edge[l + left_cnt];
+
+    trans_to_stack(stack_begin_pos, pos * 2 + 1, l, l + left_cnt - 1);
+    trans_to_stack(stack_begin_pos, pos * 2 + 2, l + left_cnt + 1, r);
 }

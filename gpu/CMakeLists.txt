@@ -9,3 +9,7 @@ TARGET_LINK_LIBRARIES(gpu_graph graph_mining)
 ADD_EXECUTABLE(gpu_graph_old gpu_graph_old.cu)
 SET_PROPERTY(TARGET gpu_graph_old PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_graph_old graph_mining)
+
+ADD_EXECUTABLE(gpu_graph_data_rearrange gpu_graph_data_rearrange.cu)
+SET_PROPERTY(TARGET gpu_graph_data_rearrange PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_graph_data_rearrange graph_mining)
