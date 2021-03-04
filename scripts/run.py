@@ -14,16 +14,21 @@ p5 = "0111111101111111011101110100111100011100001100000"
 p6 = "0111111101111111011001110100111100011000001100000"
 
 if __name__ == '__main__':
-    graphs = {'wv': wv, 'pt': pt, 'mc': mc}
+    graphs = {'wv': wv, 'pt': pt, 'mc': mc, 'lj': lj, 'ok': ok}
+    # graphs = {'wv': wv, 'pt': pt, 'mc': mc}
     # graphs = {'wv': wv, 'pt': pt}
     # graphs = {'mc': mc}
     patterns = [p1, p2, p3, p4, p5, p6]
 
+    from math import sqrt
+
     for i, p in enumerate(patterns):
         for g_name, g_file in graphs.items():
-            log_file1 = '%s-p%d.txt.5' % (g_name, i + 1)
+            log_file1 = 'logs-2/%s-p%d-gpu.txt' % (g_name, i + 1)
+            log_file2 = 'logs-2/%s-p%d-cpu.txt' % (g_name, i + 1)
 
             print('\n>>> Graph: %s Pattern: p%d\n' % (g_name, i + 1))
             os.system('bin/gpu_graph %s %s | tee %s' % (g_file, p, log_file1))
+            os.system('bin/baseline_test %s %d %s | tee %s' % (g_file, int(sqrt(len(p))), p, log_file2))
             print('\n<<< Graph: %s Pattern: p%d\n' % (g_name, i + 1))
     

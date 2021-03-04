@@ -5,6 +5,7 @@
  * 比较标准的做法是使用size_t。但全部换为相关类型后似乎寄存器使用数量上升了，并且发生了local memory spill。
  * 暂时维持现状。
  */
+#include "common.cuh"
 
 /**
  * @brief search-based intersection

@@ -17,9 +17,7 @@
 #include <sys/time.h>
 #include <chrono>
 
-constexpr int THREADS_PER_BLOCK = 256;
-constexpr int THREADS_PER_WARP = 32;
-constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
+#include "common.cuh"
 
 // 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
@@ -45,30 +43,10 @@ private:
 TimeInterval allTime;
 TimeInterval tmpTime;
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
-
 #define get_edge_index(v, l, r) do { \
     l = vertex[v]; \
     r = vertex[v + 1]; \
 } while(0)
-
-#define unlikely(x) __builtin_expect(!!(x), 0)
-
-template <typename T>
-__device__ inline void dev_swap(T& a, T& b)
-{
-    T t(std::move(a));
-    a = std::move(b);
-    b = std::move(t);
-}
 
 struct GPUGroupDim2 {
     int* data;
@@ -565,6 +543,27 @@ __device__ unsigned long long IEP_3_layer_baseline(const GPUSchedule* schedule, 
     return A_size * B_size * C_size - A_size * BC_size - B_size * AC_size - C_size * AB_size + ABC_size * 2; 
 }
 
+__device__ unsigned long long IEP_2_layer_v1(const GPUSchedule* schedule, GPUVertexSet* vertex_set, const GPUSubtractionSet& subtraction_set,
+    GPUVertexSet& tmp_set, int depth)
+{
+    int i = schedule->get_loop_set_prefix_id(depth);
+    int j = schedule->get_loop_set_prefix_id(depth + 1);
+    if (vertex_set[j].get_size() < vertex_set[i].get_size())
+        dev_swap(j, i);
+    
+    const GPUVertexSet &A = vertex_set[i];
+    const GPUVertexSet &B = vertex_set[j];
+    const GPUSubtractionSet &D = subtraction_set;
+    uint32_t *buffer = tmp_set.get_data_ptr();
+
+    auto ret_sizes = set_difference_size_c2(A, B, D);
+    unsigned long long A_size = ret_sizes[0]; // A - D
+    unsigned long long B_size = ret_sizes[1]; // B - D
+
+    unsigned long long AB_size = set_fused_op1(A, B, D);
+    return A_size * B_size - AB_size;
+}
+
 /**
  * @brief 最终层的容斥原理优化计算。
  */
@@ -574,8 +573,9 @@ __device__ inline void GPU_pattern_matching_final_in_exclusion(const GPUSchedule
     int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
     
     if (in_exclusion_optimize_num == 3) {
-        local_ans += IEP_3_layer_v2(schedule, vertex_set, subtraction_set, tmp_set, depth);
-        return;
+        local_ans += IEP_3_layer_v1(schedule, vertex_set, subtraction_set, tmp_set, depth);
+    } else if (in_exclusion_optimize_num == 2) {
+        local_ans += IEP_2_layer_v1(schedule, vertex_set, subtraction_set, tmp_set, depth);
     }
 
     /*
@@ -808,7 +808,7 @@ double pattern_matching_entry(const Graph *g, const Schedule& schedule)
     size_t block_shmem_size = warp_shmem_size * WARPS_PER_BLOCK;
 
     printf("schedule.prefix_num: %d\n", schedule.get_total_prefix_num());
-    printf("shared memory for vertex set per block: %lu bytes\n", block_shmem_size);
+    printf("shared memory size per block: %lu bytes\n", block_shmem_size);
 
     int max_active_blocks_per_sm;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, block_shmem_size);
