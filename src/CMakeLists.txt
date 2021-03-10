@@ -5,6 +5,7 @@ dataloader.cpp
 pattern.cpp
 prefix.cpp
 schedule.cpp
+schedule_IEP.cpp
 vertex_set.cpp
 motif_generator.cpp
 graphmpi.cpp
