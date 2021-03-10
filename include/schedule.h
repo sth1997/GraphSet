@@ -55,7 +55,9 @@ public:
     std::vector< std::vector<int> > get_isomorphism_vec() const;
     static std::vector< std::vector<int> > calc_permutation_group(const std::vector<int> vec, int size);
     inline const int* get_adj_mat_ptr() const {return adj_mat;}
-        
+    
+    inline long long get_in_exclusion_optimize_redundancy() const { return in_exclusion_optimize_redundancy; } 
+    inline void set_in_exclusion_optimize_num(int num) { in_exclusion_optimize_num = num; }
 
     void print_schedule() const;
 
@@ -79,6 +81,8 @@ private:
     int k_val; // inner k loop, WARNING: this val not always meaningful @TODO here
                // only when performance_modeling_type == 1 , this val will be calculated.
 
+    long long in_exclusion_optimize_redundancy;
+
     void build_loop_invariant();
     int find_father_prefix(int data_size, const int* data);
     void get_full_permutation(std::vector< std::vector<int> >& vec, bool use[], std::vector<int> tmp_vec, int depth) const;
@@ -98,5 +102,7 @@ private:
     int get_vec_optimize_num(const std::vector<int> &vec);
 
     void remove_invalid_permutation(std::vector< std::vector<int> > &candidate_permutations);
+
+    void set_in_exclusion_optimize_redundancy();
 };
 

@@ -817,6 +817,8 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
+    sum /= schedule.get_in_exclusion_optimize_redundancy();
+
     printf("count %llu\n", sum);
     tmpTime.print("Counting time cost");
     //之后需要加上cudaFree
