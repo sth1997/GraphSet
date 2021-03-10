@@ -370,18 +370,10 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                         }
                 }
 
-                for(int i = 0; i < cur_graph[cur_graph_rank].size(); ++i)
-                    printf("%d ", cur_graph[cur_graph_rank][i]);
-                printf(":");
-                for(int i = 0; i < data_size; ++i)
-                    printf("%d ", tmp_data[i]);
-                puts("");
-                
                 int id = find_father_prefix(data_size, tmp_data);
                 in_exclusion_optimize_vertex_id.push_back(id);
                 
                 if(cur_graph_rank == cur_graph.size() - 1) {
-                    printf("val is %d\n", val);
                     in_exclusion_optimize_coef.push_back(val);
                     in_exclusion_optimize_flag.push_back(true);
                 }
@@ -391,8 +383,6 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 }
                 
             }
-
-            printf("rank end\n");
         }
     }
 }
