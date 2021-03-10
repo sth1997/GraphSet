@@ -740,7 +740,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 }
 
 void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
-    int num_blocks = 4096;
+    int num_blocks = 1024;
     int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
@@ -938,7 +938,7 @@ int main(int argc,char *argv[]) {
     // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
     // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
-    Pattern p(7, pattern_str);
+    Pattern p(6, pattern_str);
     printf("pattern = \n");
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);
