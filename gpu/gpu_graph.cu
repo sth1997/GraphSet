@@ -591,7 +591,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
  * @brief 最终层的容斥原理优化计算。
  */
 __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans, int depth, uint32_t *edge, uint32_t *vertex)
+    GPUVertexSet& tmp_set, unsigned long long& local_ans,  uint32_t *edge, uint32_t *vertex)
 {
     /*
     int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
@@ -633,11 +633,9 @@ __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* sched
     */
     int last_pos = -1;
     long long val;
-    int wid = threadIdx.x / THREADS_PER_WARP;
 
     extern __shared__ char ans_array[];
-    int* ans_base = (int*) (ans_array + schedule->ans_array_offset);
-    int* ans = ans_base + schedule->in_exclusion_optimize_vertex_id_size * wid;
+    int* ans = ((int*) (ans_array + schedule->ans_array_offset)) + schedule->in_exclusion_optimize_vertex_id_size * (threadIdx.x / THREADS_PER_WARP);
     
     for(int i = 0; i < schedule->in_exclusion_optimize_vertex_id_size; ++i) {
         if(schedule->in_exclusion_optimize_vertex_flag[i]) {
@@ -693,7 +691,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
 {
 
     if (depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num()) {
-        GPU_pattern_matching_final_in_exclusion(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth, edge, vertex);
+        GPU_pattern_matching_final_in_exclusion(schedule, vertex_set, subtraction_set, tmp_set, local_ans,  edge, vertex);
         return;    
     }
 

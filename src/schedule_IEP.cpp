@@ -431,6 +431,31 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
             }
         }
     }
+
+    for(int i = 0; i < size; ++i) 
+        if(last[i] != -1) {
+            int* buf = new int[size];
+            int cnt = 0;
+
+            for(int id = last[i]; id != -1; id  = next[id]) {
+                buf[cnt++] = id;
+            }
+
+            last[i] = buf[cnt - 1];
+            for(int id = cnt - 1; id > 0; --id) {
+                next[buf[id]] = buf[id - 1];
+            }
+            next[buf[0]] = -1;
+
+            delete[] buf;
+        }
+
+    for(int i = 0; i < size; ++i) {
+        printf("node %d:", i);
+        for(int id = last[i]; id != -1; id = next[id])
+            printf(" %d", id);
+        puts("");
+    }
 }
 
 int Schedule_IEP::find_father_prefix(int data_size, const int *data)
