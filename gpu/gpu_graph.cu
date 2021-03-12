@@ -881,7 +881,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule, sizeof(GPUSchedule)));
     //dev_schedule->transform_in_exclusion_optimize_group_val(schedule);
     int schedule_size = schedule_iep.get_size();
-    int max_prefix_num = schedule_iep.get_total_prefix_num();
+    int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
 
     int in_exclusion_optimize_vertex_id_size = schedule_iep.in_exclusion_optimize_vertex_id.size();
     int in_exclusion_optimize_array_size  = schedule_iep.in_exclusion_optimize_coef.size();
