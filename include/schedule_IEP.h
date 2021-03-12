@@ -31,6 +31,7 @@ public:
     inline int* get_last_ptr() const { return last;}
     inline int get_next(int i) const { return next[i];}
     inline int* get_next_ptr() const {return next;}
+    inline int* get_break_size_ptr() const {return break_size;}
     inline int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
     int get_in_exclusion_optimize_num_when_not_optimize();
     void add_restrict(const std::vector< std::pair<int, int> >& restricts);
@@ -75,6 +76,7 @@ private:
     int* father_prefix_id;
     int* last;
     int* next;
+    int* break_size;
     int* loop_set_prefix_id;
     Prefix* prefix;
     int* restrict_last;

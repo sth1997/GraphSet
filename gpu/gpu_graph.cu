@@ -125,6 +125,7 @@ public:
     inline __device__ int get_size() const { return size;}
     inline __device__ int get_last(int i) const { return last[i];}
     inline __device__ int get_next(int i) const { return next[i];}
+    inline __device__ int get_break_size(int i) const { return break_size[i];}
     inline __device__ int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
     inline __device__ int get_total_restrict_num() const { return total_restrict_num;}
     inline __device__ int get_restrict_last(int i) const { return restrict_last[i];}
@@ -136,6 +137,7 @@ public:
     int* father_prefix_id;
     int* last;
     int* next;
+    int* break_size;
     int* loop_set_prefix_id;
     int* restrict_last;
     int* restrict_next;
@@ -718,7 +720,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
         for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-            if (vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule->get_basic_prefix_num()) {
+            if (vertex_set[prefix_id].get_size() == schedule->get_break_size(prefix_id)) {
                 is_zero = true;
                 break;
             }
@@ -879,7 +881,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule, sizeof(GPUSchedule)));
     //dev_schedule->transform_in_exclusion_optimize_group_val(schedule);
     int schedule_size = schedule_iep.get_size();
-    int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
+    int max_prefix_num = schedule_iep.get_total_prefix_num();
 
     int in_exclusion_optimize_vertex_id_size = schedule_iep.in_exclusion_optimize_vertex_id.size();
     int in_exclusion_optimize_array_size  = schedule_iep.in_exclusion_optimize_coef.size();
@@ -890,9 +892,9 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     printf("array size %d\n", in_exclusion_optimize_array_size);
     fflush(stdout);
 
-    int* in_exclusion_optimize_vertex_id  = new int[in_exclusion_optimize_vertex_id_size];
-    bool* in_exclusion_optimize_vertex_flag  = new bool[in_exclusion_optimize_vertex_id_size];
-    int* in_exclusion_optimize_vertex_coef  = new int[in_exclusion_optimize_vertex_id_size];
+    int* in_exclusion_optimize_vertex_id = new int[in_exclusion_optimize_vertex_id_size];
+    bool* in_exclusion_optimize_vertex_flag = new bool[in_exclusion_optimize_vertex_id_size];
+    int* in_exclusion_optimize_vertex_coef = new int[in_exclusion_optimize_vertex_id_size];
     
     int* in_exclusion_optimize_coef = new int[in_exclusion_optimize_array_size];
     bool* in_exclusion_optimize_flag = new bool[in_exclusion_optimize_array_size];
@@ -939,6 +941,9 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule->next, sizeof(int) * max_prefix_num));
     gpuErrchk( cudaMemcpy(dev_schedule->next, schedule_iep.get_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+    
+    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->break_size, sizeof(int) * max_prefix_num));
+    gpuErrchk( cudaMemcpy(dev_schedule->break_size, schedule_iep.get_break_size_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
 
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule->loop_set_prefix_id, sizeof(int) * schedule_size));
     gpuErrchk( cudaMemcpy(dev_schedule->loop_set_prefix_id, schedule_iep.get_loop_set_prefix_id_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
