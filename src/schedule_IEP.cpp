@@ -342,7 +342,7 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
     else {
         int *tmp_data = new int[size];
         loop_set_prefix_id[0] = -1;
-        for(int i = 1; i < size - in_exclusion_optimize_num; ++i) {
+        for(int i = 1; i < size; ++i) {
             int data_size = 0;
             for (int j = 0; j < i; ++j)
                 if (adj_mat[INDEX(i, j, size)])
@@ -359,6 +359,7 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
         for(int optimize_rank = 0; optimize_rank < in_exclusion_optimize_group.size(); ++optimize_rank) {
             const std::vector< std::vector<int> >& cur_graph = in_exclusion_optimize_group[optimize_rank];
             long long val = in_exclusion_optimize_val[optimize_rank];
+
             for(int cur_graph_rank = 0; cur_graph_rank < cur_graph.size(); ++cur_graph_rank) {
                 
                 int data_size = 0;
@@ -370,8 +371,53 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                         }
                 }
 
-                int id = find_father_prefix(data_size, tmp_data);
-                in_exclusion_optimize_vertex_id.push_back(id);
+                int my_id = find_father_prefix(data_size, tmp_data);
+
+                for(int i = 0; i < data_size; ++i) printf("%d,", tmp_data[i]);
+                printf(": id %d\n", my_id);
+                //in_exclusion_optimize_vertex_id.push_back(id);
+
+                int equal = -1;
+                for(int i = 0; i < in_exclusion_optimize_vertex_id.size(); ++i)
+                    if(in_exclusion_optimize_vertex_id[i] == my_id) {
+                        equal = i;
+                        break;
+                    }
+                if(equal == -1) {
+                    in_exclusion_optimize_vertex_id.push_back(my_id);
+                    equal = in_exclusion_optimize_vertex_id.size() - 1;
+
+                    int in_set = 0;
+                    int full_connect = 0;
+                    for(int i = 0; i < size - in_exclusion_optimize_num; ++i) {
+                        int cnt = 0;
+                        bool hit = false;
+                        for(int j = 0; j < data_size; ++j) {
+                            if(tmp_data[j] == i) {
+                                hit = true;
+                                break;
+                            }
+                            if(adj_mat[INDEX(i, tmp_data[j], size)])
+                                ++cnt;
+                        }
+                        if(hit) ++in_set;
+                        else {
+                            if(cnt == data_size)
+                                ++full_connect;
+                        }
+                        
+                    }
+                    if(in_set + full_connect == size - in_exclusion_optimize_num) {
+                        in_exclusion_optimize_vertex_flag.push_back(true);
+                        in_exclusion_optimize_vertex_coef.push_back(full_connect);
+                    }
+                    else {
+                        in_exclusion_optimize_vertex_flag.push_back(false);
+                        in_exclusion_optimize_vertex_coef.push_back(full_connect);
+                    }
+                }
+
+                in_exclusion_optimize_ans_pos.push_back(equal);
                 
                 if(cur_graph_rank == cur_graph.size() - 1) {
                     in_exclusion_optimize_coef.push_back(val);

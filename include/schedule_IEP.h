@@ -63,8 +63,12 @@ public:
     std::vector< std::pair<int,int> > restrict_pair;
 
     std::vector<int> in_exclusion_optimize_vertex_id;
+    std::vector<bool> in_exclusion_optimize_vertex_flag;
+    std::vector<int> in_exclusion_optimize_vertex_coef;
+
     std::vector<int> in_exclusion_optimize_coef;
     std::vector<bool> in_exclusion_optimize_flag;
+    std::vector<int> in_exclusion_optimize_ans_pos;
 
 private:
     int* adj_mat;
