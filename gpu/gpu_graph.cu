@@ -229,7 +229,10 @@ public:
                 if (threadIdx.x % THREADS_PER_WARP == 0)
                     init(input_size, input_data);
                 __threadfence_block();
-                this->size -= unordered_subtraction_size(*this, vertex_set[father_id], -1);
+                if(input_size > vertex_set[father_id].get_size())
+                    this->size -= unordered_subtraction_size(*this, vertex_set[father_id], -1);
+                else
+                    this->size = vertex_set[father_id].get_size() - unordered_subtraction_size(vertex_set[father_id], *this, -1);
             }
             else {
                 intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
