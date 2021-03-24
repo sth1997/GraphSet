@@ -26,6 +26,7 @@ public:
     inline int* get_father_prefix_id_ptr() const { return father_prefix_id;}
     inline int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
     inline int* get_loop_set_prefix_id_ptr() const { return loop_set_prefix_id;}
+    inline bool get_prefix_only_need_size(int prefix_id) const { return prefix[prefix_id].get_only_need_size(); }
     inline int get_size() const { return size;}
     inline int get_last(int i) const { return last[i];}
     inline int* get_last_ptr() const { return last;}

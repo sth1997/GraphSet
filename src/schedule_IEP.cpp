@@ -440,6 +440,13 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 
             }
         }
+
+        for(int i = 0; i < in_exclusion_optimize_vertex_flag.size(); ++i)
+            if(in_exclusion_optimize_vertex_flag[i]){
+                int prefix_id = in_exclusion_optimize_vertex_id[i];
+                if(prefix[prefix_id].get_has_child() == false)
+                    prefix[prefix_id].set_only_need_size(true);
+            }
     }
 
     for(int i = 0; i < size; ++i) 
@@ -475,6 +482,7 @@ int Schedule_IEP::find_father_prefix(int data_size, const int *data)
     
     // not found, create new prefix and find its father prefix id recursively
     int father = find_father_prefix(data_size - 1, data);
+    prefix[father].set_has_child(true);
     father_prefix_id[total_prefix_num] = father;
     next[total_prefix_num] = last[num];
     last[num] = total_prefix_num;

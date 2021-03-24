@@ -142,6 +142,7 @@ public:
     int* restrict_last;
     int* restrict_next;
     int* restrict_index;
+    bool* only_need_size;
     //int* in_exclusion_optimize_val;
     //GPUGroupDim0 in_exclusion_optimize_group;
     //int in_exclusion_optimize_val_size;
@@ -168,6 +169,8 @@ public:
 // __device__ void intersection1(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
 __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
 static __device__ uint32_t do_intersection(uint32_t*, const uint32_t*, const uint32_t*, uint32_t, uint32_t);
+class GPUVertexSet;
+__device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, int size_after_restrict);
 
 class GPUVertexSet
 {
@@ -221,7 +224,16 @@ public:
         }
         else
         {
-            intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
+            bool only_need_size = schedule->only_need_size[prefix_id];
+            if(only_need_size) {
+                if (threadIdx.x % THREADS_PER_WARP == 0)
+                    init(input_size, input_data);
+                __threadfence_block();
+                this->size -= unordered_subtraction_size(*this, vertex_set[father_id], -1);
+            }
+            else {
+                intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
+            }
         }
     }
 
@@ -882,6 +894,10 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     //dev_schedule->transform_in_exclusion_optimize_group_val(schedule);
     int schedule_size = schedule_iep.get_size();
     int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
+    
+    bool *only_need_size = new bool[max_prefix_num];
+    for(int i = 0; i < max_prefix_num; ++i)
+        only_need_size[i] = schedule_iep.get_prefix_only_need_size(i);
 
     int in_exclusion_optimize_vertex_id_size = schedule_iep.in_exclusion_optimize_vertex_id.size();
     int in_exclusion_optimize_array_size  = schedule_iep.in_exclusion_optimize_coef.size();
@@ -941,6 +957,9 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule->next, sizeof(int) * max_prefix_num));
     gpuErrchk( cudaMemcpy(dev_schedule->next, schedule_iep.get_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+    
+    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->only_need_size, sizeof(bool) * max_prefix_num));
+    gpuErrchk( cudaMemcpy(dev_schedule->only_need_size, only_need_size, sizeof(bool) * max_prefix_num, cudaMemcpyHostToDevice));
     
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule->break_size, sizeof(int) * max_prefix_num));
     gpuErrchk( cudaMemcpy(dev_schedule->break_size, schedule_iep.get_break_size_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
@@ -1021,6 +1040,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     delete[] in_exclusion_optimize_vertex_id;
     delete[] in_exclusion_optimize_coef;
     delete[] in_exclusion_optimize_flag;
+    delete[] only_need_size;
 }
 
 int main(int argc,char *argv[]) {
