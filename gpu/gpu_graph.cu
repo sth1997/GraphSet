@@ -24,6 +24,8 @@ constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
+//#define PRINT_ANS_TO_FILE //用于scripts/small_graph_check.py
+
 // 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
 public:
@@ -680,7 +682,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-            if (vertex_set[prefix_id].get_size() == 0) {
+            if (vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule->get_basic_prefix_num()) {
                 is_zero = true;
                 break;
             }
@@ -817,6 +819,11 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
+    #ifdef PRINT_ANS_TO_FILE
+    freopen("1.out", "w", stdout);
+    printf("count %llu\n", sum);
+    fclose(stdout);
+    #endif
     printf("count %llu\n", sum);
     tmpTime.print("Counting time cost");
     //之后需要加上cudaFree
