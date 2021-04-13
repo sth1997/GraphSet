@@ -4,6 +4,8 @@
 Prefix::Prefix()
 {
     data = nullptr;
+    has_child = false;
+    only_need_size = false;
 }
 
 Prefix::~Prefix()

@@ -36,6 +36,41 @@ private:
 TimeInterval allTime;
 TimeInterval tmpTime;
 
+#define COUNT_INTERSECTION 0
+#define COUNT_TIME 1
+
+#if COUNT_TIME
+__device__ uint32_t i_count = 0;
+__device__ uint64_t i_time = 0;
+
+__device__ static inline uint64_t read_timer()
+{
+    // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
+    // around after the upper bits have already been read. Work around this by
+    // reading the high bits a second time. Use the second value to detect a
+    // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
+    // would be valid, it's passed over during the duration of the reading. If no
+    // rollover occurred, just return the initial reading.
+    volatile uint64_t first_reading;
+    volatile uint32_t second_reading;
+    uint32_t high_bits_first;
+    asm volatile ("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
+    high_bits_first = first_reading >> 32;
+    asm volatile ("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
+    if (high_bits_first == second_reading) {
+        return first_reading;
+    }
+    // Return the value with the updated high bits, but the low bits set to 0.
+    return ((uint64_t) second_reading) << 32;
+}
+#endif
+
+#if COUNT_INTERSECTION
+__device__ uint64_t i_inter_size_0 = 0, i_inter_time_0 = 0;
+__device__ uint64_t i_inter_size_1 = 0, i_inter_time_1 = 0;
+__device__ uint64_t i_inter_size_2 = 0, i_inter_time_2 = 0;
+#endif
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -52,6 +87,9 @@ __device__ unsigned long long dev_sum;
 __device__ unsigned int dev_nowEdge;
 
 __device__ void intersection(uint32_t *out, uint32_t *a, uint32_t *b, uint32_t na, uint32_t nb, uint32_t* result_size) {
+#if COUNT_TIME
+        auto  t1 = read_timer();
+#endif
     __shared__ uint32_t out_offset[THREADS_PER_BLOCK];
     __shared__ uint32_t out_size;
     
@@ -101,6 +139,12 @@ __device__ void intersection(uint32_t *out, uint32_t *a, uint32_t *b, uint32_t n
     __syncthreads();
     if( lid == 0)
         *result_size = out_size;
+#if COUNT_TIME
+    auto t3 = read_timer();
+    if (threadIdx.x % 32 == 0) {
+        atomicAdd((unsigned long long*)&i_time, t3 - t1);
+    }
+#endif
     
 }
 
@@ -118,6 +162,12 @@ __device__ void upd_ans(uint32_t *a, uint32_t *b, uint32_t na, uint32_t nb, unsi
     __shared__ uint32_t out_size[32];
     
     int lid = threadIdx.x;
+#if COUNT_INTERSECTION
+    if(lid == 0) {
+        atomicAdd((unsigned long long*)&i_inter_size_1, (uint64_t)na + nb);
+        atomicAdd((unsigned long long*)&i_inter_time_1, (uint64_t)1);
+    }
+#endif
     
     out_size[lid] = 0;
 
@@ -143,7 +193,7 @@ __device__ void upd_ans(uint32_t *a, uint32_t *b, uint32_t na, uint32_t nb, unsi
         out_size[lid] += found;
         num_done += THREADS_PER_BLOCK;
     }
-    __syncthreads();
+   __syncthreads();
 
     for (int s = 1; s < THREADS_PER_BLOCK; s *= 2) {
         uint32_t v = lid >= s ? out_size[lid - s] : 0;
@@ -226,6 +276,13 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
 
     __shared__ bool have_v2;
 
+#if COUNT_INTERSECTION
+    int lid = threadIdx.x;
+#endif
+#if COUNT_TIME
+    bool do_work = false;
+#endif
+
     while(true) {
         if(threadIdx.x == 0) {
             //printf("%d at %u\n", blockIdx.x, edgeI);
@@ -239,12 +296,15 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
 
         unsigned int i = edgeI;
         if(i >= edge_num) break;
+#if COUNT_TIME
+        do_work = true;
+#endif
 
         // for edge in E
         v0 = edge_from[i];
         v1 = edge[i];
 
-        if(v0 > v1) continue; // optimize
+        if(v0 < v1) continue; // optimize
 
         lb = vertex[v0];
         le = vertex[v0+1];
@@ -253,21 +313,33 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
         rb = vertex[v1];
         re = vertex[v1+1];
         rn = re - rb;
+#if COUNT_INTERSECTION
+    if(lid == 0) {
+        atomicAdd((unsigned long long*)&i_inter_size_0, (uint64_t)ln + rn);
+        atomicAdd((unsigned long long*)&i_inter_time_0, (uint64_t)1);
+    }
+#endif
 
         intersection(tmp + tmp1_begin, edge + lb, edge + rb, ln, rn, &tmp1_size); // v3's set = tmp1 = N(v0) & N(v1)
         __syncthreads();
         
         if(tmp1_size == 0) continue;
 
-        loop_begin = vertex[v1];
-        loop_limit = vertex[v1+1];
+        loop_begin = vertex[v0];
+        loop_limit = vertex[v0+1];
         for(uint32_t j = loop_begin; j < loop_limit; ++j) {
             v2 = edge[j]; // for v2 in N(v1)
-            if(v0==v2) continue;
+            if(v1==v2) continue;
 
-            rb = vertex[v2];
-            re = vertex[v2+1];
-            rn = re - rb;
+            lb = vertex[v2];
+            le = vertex[v2+1];
+            ln = le - lb;
+#if COUNT_INTERSECTION
+    if(lid == 0) {
+        atomicAdd((unsigned long long*)&i_inter_size_2, (uint64_t)ln + rn);
+        atomicAdd((unsigned long long*)&i_inter_time_2, (uint64_t)1);
+    }
+#endif
 
             intersection(tmp + tmp2_begin, edge + lb, edge + rb, ln, rn, &tmp2_size); // v4's set = tmp2 = N(v0) & N(v2)
             __syncthreads();
@@ -305,6 +377,9 @@ __global__ void __dfs(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_fr
 
     if (threadIdx.x == 0) {
         atomicAdd(&dev_sum, sdata[0]);
+#if COUNT_TIME
+        if(do_work) atomicAdd(&i_count, 1);
+#endif
     }
     
 }
@@ -357,6 +432,31 @@ void gpu_pattern_matching(Graph *g) {
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
+
+#if COUNT_INTERSECTION
+    uint64_t i_inter_size_cpu_0, i_inter_time_cpu_0;
+    gpuErrchk( cudaMemcpyFromSymbol(&i_inter_size_cpu_0, i_inter_size_0, sizeof(i_inter_size_0)));
+    gpuErrchk( cudaMemcpyFromSymbol(&i_inter_time_cpu_0, i_inter_time_0, sizeof(i_inter_time_0)));
+    printf("inter time0 %llu, inter size0 %llu \n", i_inter_time_cpu_0, i_inter_size_cpu_0);
+    
+    uint64_t i_inter_size_cpu_1, i_inter_time_cpu_1;
+    gpuErrchk( cudaMemcpyFromSymbol(&i_inter_size_cpu_1, i_inter_size_1, sizeof(i_inter_size_1)));
+    gpuErrchk( cudaMemcpyFromSymbol(&i_inter_time_cpu_1, i_inter_time_1, sizeof(i_inter_time_1)));
+    printf("inter time1 %llu, inter size1 %llu \n", i_inter_time_cpu_1, i_inter_size_cpu_1);
+    
+    uint64_t i_inter_size_cpu_2, i_inter_time_cpu_2;
+    gpuErrchk( cudaMemcpyFromSymbol(&i_inter_size_cpu_2, i_inter_size_2, sizeof(i_inter_size_2)));
+    gpuErrchk( cudaMemcpyFromSymbol(&i_inter_time_cpu_2, i_inter_time_2, sizeof(i_inter_time_2)));
+    printf("inter time2 %llu, inter size2 %llu \n", i_inter_time_cpu_2, i_inter_size_cpu_2);
+#endif
+
+#if COUNT_TIME
+    int i_count_cpu;
+    uint64_t t_time_cpu, i_time_cpu, ihead_time_cpu;
+    gpuErrchk( cudaMemcpyFromSymbol(&i_count_cpu, i_count, sizeof(i_count)));
+    gpuErrchk( cudaMemcpyFromSymbol(&i_time_cpu, i_time, sizeof(i_time)));
+    printf("Warp count: %d\nIntersection time: %ld\n", i_count_cpu, i_time_cpu);
+#endif
 
     printf("house count %llu\n", sum);
     tmpTime.print("Counting time cost");

@@ -215,6 +215,7 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
     father_prefix_id = new int[max_prefix_num];
     last = new int[size];
     next = new int[max_prefix_num];
+    break_size = new int[max_prefix_num];
     loop_set_prefix_id = new int[size];
     prefix = new Prefix[max_prefix_num];
     restrict_last = new int[size];
@@ -223,6 +224,7 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
     memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
     memset(last, -1, size * sizeof(int));
     memset(next, -1, max_prefix_num * sizeof(int));
+    memset(break_size, -1, max_prefix_num * sizeof(int));
     memset(restrict_last, -1, size * sizeof(int));
     memset(restrict_next, -1, max_prefix_num * sizeof(int));
 
@@ -264,6 +266,7 @@ Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
     father_prefix_id = new int[max_prefix_num];
     last = new int[size];
     next = new int[max_prefix_num];
+    break_size = new int[max_prefix_num];
     loop_set_prefix_id = new int[size];
     prefix = new Prefix[max_prefix_num];
     restrict_last = new int[size];
@@ -272,6 +275,7 @@ Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
     memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
     memset(last, -1, size * sizeof(int));
     memset(next, -1, max_prefix_num * sizeof(int));
+    memset(break_size, -1, max_prefix_num * sizeof(int));
     memset(restrict_last, -1, size * sizeof(int));
     memset(restrict_next, -1, max_prefix_num * sizeof(int));
 
@@ -325,32 +329,42 @@ int Schedule_IEP::get_max_degree() const{
 
 void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
 {
-    if (in_exclusion_optimize_num == 0) {
-        int *tmp_data = new int[size];
-        loop_set_prefix_id[0] = -1;
-        for (int i = 1; i < size; ++i)
-        {
-            int data_size = 0;
-            for (int j = 0; j < i; ++j)
-                if (adj_mat[INDEX(i, j, size)])
-                    tmp_data[data_size++] = j;
-            loop_set_prefix_id[i] = find_father_prefix(data_size, tmp_data);
-        }
-        assert(total_prefix_num <= size * (size - 1) / 2);
-        delete[] tmp_data;
+    int *tmp_data = new int[size];
+    loop_set_prefix_id[0] = -1;
+    for(int i = 1; i < size; ++i) {
+        int data_size = 0;
+        for (int j = 0; j < i; ++j)
+            if (adj_mat[INDEX(i, j, size)])
+                tmp_data[data_size++] = j;
+        loop_set_prefix_id[i] = find_father_prefix(data_size, tmp_data);
     }
-    else {
-        int *tmp_data = new int[size];
-        loop_set_prefix_id[0] = -1;
-        for(int i = 1; i < size - in_exclusion_optimize_num; ++i) {
-            int data_size = 0;
-            for (int j = 0; j < i; ++j)
-                if (adj_mat[INDEX(i, j, size)])
-                    tmp_data[data_size++] = j;
-            loop_set_prefix_id[i] = find_father_prefix(data_size, tmp_data);
-        }
-        basic_prefix_num = total_prefix_num;
+    basic_prefix_num = total_prefix_num;
 
+    for(int prefix_id = 0; prefix_id < basic_prefix_num; ++prefix_id) {
+        const int* data = prefix[prefix_id].get_data_ptr();
+        int data_size = prefix[prefix_id].get_size();
+
+        int full_connect_cnt = 0;
+        for(int node = 0; node < data[data_size - 1]; ++node) {
+            bool in_data = false;
+            bool not_connect = false;
+            for(int i = 0; i < data_size; ++i) {
+                if(node == data[i]) {
+                    in_data = true;
+                    break;
+                }
+                if(!adj_mat[INDEX(node, data[i], size)]) {
+                    not_connect = true;
+                    break;
+                }
+            }
+            if(in_data == false && not_connect == false)
+                ++full_connect_cnt;
+        }
+        break_size[prefix_id] = full_connect_cnt;
+    }
+
+    if( in_exclusion_optimize_num > 0) {
         //IEP loop invariant
         in_exclusion_optimize_vertex_id.clear();
         in_exclusion_optimize_coef.clear();
@@ -359,6 +373,7 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
         for(int optimize_rank = 0; optimize_rank < in_exclusion_optimize_group.size(); ++optimize_rank) {
             const std::vector< std::vector<int> >& cur_graph = in_exclusion_optimize_group[optimize_rank];
             long long val = in_exclusion_optimize_val[optimize_rank];
+
             for(int cur_graph_rank = 0; cur_graph_rank < cur_graph.size(); ++cur_graph_rank) {
                 
                 int data_size = 0;
@@ -370,18 +385,51 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                         }
                 }
 
-                for(int i = 0; i < cur_graph[cur_graph_rank].size(); ++i)
-                    printf("%d ", cur_graph[cur_graph_rank][i]);
-                printf(":");
-                for(int i = 0; i < data_size; ++i)
-                    printf("%d ", tmp_data[i]);
-                puts("");
-                
-                int id = find_father_prefix(data_size, tmp_data);
-                in_exclusion_optimize_vertex_id.push_back(id);
+                int my_id = find_father_prefix(data_size, tmp_data);
+
+                int equal = -1;
+                for(int i = 0; i < in_exclusion_optimize_vertex_id.size(); ++i)
+                    if(in_exclusion_optimize_vertex_id[i] == my_id) {
+                        equal = i;
+                        break;
+                    }
+                if(equal == -1) {
+                    in_exclusion_optimize_vertex_id.push_back(my_id);
+                    equal = in_exclusion_optimize_vertex_id.size() - 1;
+
+                    int in_set = 0;
+                    int full_connect = 0;
+                    for(int i = 0; i < size - in_exclusion_optimize_num; ++i) {
+                        int cnt = 0;
+                        bool hit = false;
+                        for(int j = 0; j < data_size; ++j) {
+                            if(tmp_data[j] == i) {
+                                hit = true;
+                                break;
+                            }
+                            if(adj_mat[INDEX(i, tmp_data[j], size)])
+                                ++cnt;
+                        }
+                        if(hit) ++in_set;
+                        else {
+                            if(cnt == data_size)
+                                ++full_connect;
+                        }
+                        
+                    }
+                    if(in_set + full_connect == size - in_exclusion_optimize_num) {
+                        in_exclusion_optimize_vertex_flag.push_back(true);
+                        in_exclusion_optimize_vertex_coef.push_back(full_connect);
+                    }
+                    else {
+                        in_exclusion_optimize_vertex_flag.push_back(false);
+                        in_exclusion_optimize_vertex_coef.push_back(full_connect);
+                    }
+                }
+
+                in_exclusion_optimize_ans_pos.push_back(equal);
                 
                 if(cur_graph_rank == cur_graph.size() - 1) {
-                    printf("val is %d\n", val);
                     in_exclusion_optimize_coef.push_back(val);
                     in_exclusion_optimize_flag.push_back(true);
                 }
@@ -391,10 +439,36 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 }
                 
             }
-
-            printf("rank end\n");
         }
+
+        for(int i = 0; i < in_exclusion_optimize_vertex_flag.size(); ++i)
+            if(in_exclusion_optimize_vertex_flag[i]){
+                int prefix_id = in_exclusion_optimize_vertex_id[i];
+                if(prefix[prefix_id].get_has_child() == false)
+                    prefix[prefix_id].set_only_need_size(true);
+            }
     }
+
+    for(int i = 0; i < size; ++i) 
+        if(last[i] != -1) {
+            int* buf = new int[size];
+            int cnt = 0;
+
+            for(int id = last[i]; id != -1; id  = next[id]) {
+                buf[cnt++] = id;
+            }
+
+            last[i] = buf[cnt - 1];
+            for(int id = cnt - 1; id > 0; --id) {
+                next[buf[id]] = buf[id - 1];
+            }
+            next[buf[0]] = -1;
+
+            delete[] buf;
+        }
+
+    delete[] tmp_data;
+
 }
 
 int Schedule_IEP::find_father_prefix(int data_size, const int *data)
@@ -408,10 +482,12 @@ int Schedule_IEP::find_father_prefix(int data_size, const int *data)
     
     // not found, create new prefix and find its father prefix id recursively
     int father = find_father_prefix(data_size - 1, data);
+    prefix[father].set_has_child(true);
     father_prefix_id[total_prefix_num] = father;
     next[total_prefix_num] = last[num];
     last[num] = total_prefix_num;
     prefix[total_prefix_num].init(data_size, data);
+
     ++total_prefix_num;
     return total_prefix_num - 1;
 }

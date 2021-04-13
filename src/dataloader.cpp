@@ -101,6 +101,7 @@ static bool load_graph(Graph& g, const char* filename)
         printf("load_graph: failed to load edges.\n");
         return false;
     }
+    printf("load_graph: %u vertexes, %u edges\n", g.v_cnt, g.e_cnt);
     return true;
 }
 
@@ -368,6 +369,78 @@ bool DataLoader::load_data(Graph* &g, int clique_size) {
     bool* have_edge = new bool[g->v_cnt];
     int lst_v = -1;
     memset(have_edge, 0, g->v_cnt * sizeof(bool));
+    for(unsigned int i = 0; i < g->e_cnt; ++i) {
+        if(e[i].first != lst_v) {
+            have_edge[e[i].first] = true;
+            g->vertex[e[i].first] = i;
+        }
+        lst_v = e[i].first;
+        g->edge[i] = e[i].second;
+    }
+    delete[] e;
+    g->vertex[g->v_cnt] = g->e_cnt;
+    for(int i = g->v_cnt - 1; i >= 0; --i)
+        if(!have_edge[i]) {
+            g->vertex[i] = g->vertex[i+1];
+        }
+    delete[] have_edge;
+    return true;
+}
+
+bool DataLoader::load_complete(Graph* &g, int clique_size) {
+    g = new Graph();
+
+    g->v_cnt = clique_size;
+    g->e_cnt = clique_size * (clique_size - 1) / 2;
+
+    int* degree = new int[g->v_cnt];
+    memset(degree, 0, g->v_cnt * sizeof(int));
+    g->e_cnt *= 2;
+    std::pair<int,int> *e = new std::pair<int,int>[g->e_cnt];
+    id.clear();
+    int tmp_v;
+    unsigned int tmp_e;
+    tmp_v = 0;
+    tmp_e = 0;
+    for(int i = 0; i < clique_size; ++i)
+        for(int j = 0; j < i; ++j) {
+            int x = i, y = j;
+            if(!id.count(x)) id[x] = tmp_v ++;
+            if(!id.count(y)) id[y] = tmp_v ++;
+            x = id[x];
+            y = id[y];
+            e[tmp_e++] = std::make_pair(x,y);
+            e[tmp_e++] = std::make_pair(y,x);
+            ++degree[x];
+            ++degree[y];
+        }
+
+    std::sort(degree, degree + g->v_cnt);
+
+    // The max size of intersections is the second largest degree.
+    //TODO VertexSet::max_intersection_size has different value with different dataset, but we use a static variable now.
+    VertexSet::max_intersection_size = std::max( VertexSet::max_intersection_size, degree[g->v_cnt - 2]);
+    //g->max_degree = degree[g->v_cnt - 1];
+    delete[] degree;
+    if(tmp_v != g->v_cnt) {
+        printf("vertex number error!\n");
+    }
+    if(tmp_e != g->e_cnt) {
+        printf("edge number error!\n");
+    }
+    if(tmp_v != g->v_cnt || tmp_e != g->e_cnt) {
+        fclose(stdin);
+        delete g;
+        delete[] e;
+        return false;
+    }
+    std::sort(e,e+tmp_e,cmp_pair);
+    g->e_cnt = unique(e,e+tmp_e) - e;
+    g->edge = new int[g->e_cnt];
+    g->vertex = new unsigned int[g->v_cnt + 1];
+    bool* have_edge = new bool[g->v_cnt];
+    int lst_v = -1;
+    for(int i = 0; i < g->v_cnt; ++i) have_edge[i] = false;
     for(unsigned int i = 0; i < g->e_cnt; ++i) {
         if(e[i].first != lst_v) {
             have_edge[e[i].first] = true;

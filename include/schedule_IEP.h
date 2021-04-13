@@ -26,11 +26,13 @@ public:
     inline int* get_father_prefix_id_ptr() const { return father_prefix_id;}
     inline int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
     inline int* get_loop_set_prefix_id_ptr() const { return loop_set_prefix_id;}
+    inline bool get_prefix_only_need_size(int prefix_id) const { return prefix[prefix_id].get_only_need_size(); }
     inline int get_size() const { return size;}
     inline int get_last(int i) const { return last[i];}
     inline int* get_last_ptr() const { return last;}
     inline int get_next(int i) const { return next[i];}
     inline int* get_next_ptr() const {return next;}
+    inline int* get_break_size_ptr() const {return break_size;}
     inline int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
     int get_in_exclusion_optimize_num_when_not_optimize();
     void add_restrict(const std::vector< std::pair<int, int> >& restricts);
@@ -56,21 +58,28 @@ public:
     std::vector< std::vector<int> > get_isomorphism_vec() const;
     static std::vector< std::vector<int> > calc_permutation_group(const std::vector<int> vec, int size);
     inline const int* get_adj_mat_ptr() const {return adj_mat;}
-        
+    
+    inline void set_in_exclusion_optimize_redundancy(long long redundancy) { in_exclusion_optimize_redundancy = redundancy; }
+    inline long long get_in_exclusion_optimize_redundancy() const { return in_exclusion_optimize_redundancy; } 
 
     void print_schedule() const;
 
     std::vector< std::pair<int,int> > restrict_pair;
 
     std::vector<int> in_exclusion_optimize_vertex_id;
+    std::vector<bool> in_exclusion_optimize_vertex_flag;
+    std::vector<int> in_exclusion_optimize_vertex_coef;
+
     std::vector<int> in_exclusion_optimize_coef;
     std::vector<bool> in_exclusion_optimize_flag;
+    std::vector<int> in_exclusion_optimize_ans_pos;
 
 private:
     int* adj_mat;
     int* father_prefix_id;
     int* last;
     int* next;
+    int* break_size;
     int* loop_set_prefix_id;
     Prefix* prefix;
     int* restrict_last;
@@ -83,6 +92,8 @@ private:
     int in_exclusion_optimize_num;
     int k_val; // inner k loop, WARNING: this val not always meaningful @TODO here
                // only when performance_modeling_type == 1 , this val will be calculated.
+    long long in_exclusion_optimize_redundancy;
+
     std::vector< std::vector< std::vector<int> > >in_exclusion_optimize_group;
     std::vector< int > in_exclusion_optimize_val;
 
