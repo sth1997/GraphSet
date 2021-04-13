@@ -57,7 +57,6 @@ public:
     inline const int* get_adj_mat_ptr() const {return adj_mat;}
     
     inline long long get_in_exclusion_optimize_redundancy() const { return in_exclusion_optimize_redundancy; } 
-    inline void set_in_exclusion_optimize_num(int num) { in_exclusion_optimize_num = num; }
 
     void print_schedule() const;
 
@@ -103,6 +102,7 @@ private:
 
     void remove_invalid_permutation(std::vector< std::vector<int> > &candidate_permutations);
 
+    inline void set_in_exclusion_optimize_num(int num) { in_exclusion_optimize_num = num; }
     void set_in_exclusion_optimize_redundancy();
 };
 

@@ -26,6 +26,8 @@ constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
+//#define PRINT_ANS_TO_FILE //用于scripts/small_graph_check.py
+
 // 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
 public:
@@ -838,7 +840,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-            if (vertex_set[prefix_id].get_size() == 0) {
+            if (vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule->get_basic_prefix_num()) {
                 is_zero = true;
                 break;
             }
@@ -1012,8 +1014,13 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
-    //sum /= schedule.get_in_exclusion_optimize_redundancy();
-
+    sum /= schedule_iep.get_in_exclusion_optimize_redundancy();
+    
+    #ifdef PRINT_ANS_TO_FILE
+    freopen("1.out", "w", stdout);
+    printf("count %llu\n", sum);
+    fclose(stdout);
+    #endif
     printf("count %llu\n", sum);
     tmpTime.print("Counting time cost");
     //之后需要加上cudaFree
@@ -1117,6 +1124,8 @@ int main(int argc,char *argv[]) {
     bool is_pattern_valid;
     bool use_in_exclusion_optimize = true;
     Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // schedule is only used for getting redundancy
+    schedule_iep.set_in_exclusion_optimize_redundancy(schedule.get_in_exclusion_optimize_redundancy());
 
     if (!is_pattern_valid) {
         printf("pattern is invalid!\n");

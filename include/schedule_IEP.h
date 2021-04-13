@@ -58,7 +58,9 @@ public:
     std::vector< std::vector<int> > get_isomorphism_vec() const;
     static std::vector< std::vector<int> > calc_permutation_group(const std::vector<int> vec, int size);
     inline const int* get_adj_mat_ptr() const {return adj_mat;}
-        
+    
+    inline void set_in_exclusion_optimize_redundancy(long long redundancy) { in_exclusion_optimize_redundancy = redundancy; }
+    inline long long get_in_exclusion_optimize_redundancy() const { return in_exclusion_optimize_redundancy; } 
 
     void print_schedule() const;
 
@@ -90,6 +92,8 @@ private:
     int in_exclusion_optimize_num;
     int k_val; // inner k loop, WARNING: this val not always meaningful @TODO here
                // only when performance_modeling_type == 1 , this val will be calculated.
+    long long in_exclusion_optimize_redundancy;
+
     std::vector< std::vector< std::vector<int> > >in_exclusion_optimize_group;
     std::vector< int > in_exclusion_optimize_val;
 
