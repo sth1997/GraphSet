@@ -133,6 +133,7 @@ public:
     inline __device__ int get_restrict_last(int i) const { return restrict_last[i];}
     inline __device__ int get_restrict_next(int i) const { return restrict_next[i];}
     inline __device__ int get_restrict_index(int i) const { return restrict_index[i];}
+    inline __device__ int get_only_need_size_concurrency() const { return only_need_size_concurrency;}
     //inline __device__ int get_k_val() const { return k_val;} // see below (the k_val's definition line) before using this function
 
     int* adj_mat;
@@ -166,6 +167,7 @@ public:
     int* in_exclusion_optimize_ans_pos;
 
     uint32_t ans_array_offset;
+    int only_need_size_concurrency;
 };
 
 // __device__ void intersection1(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
@@ -184,6 +186,7 @@ public:
     }
     __device__ int get_size() const { return size;}
     __device__ uint32_t get_data(int i) const { return data[i];}
+    __device__ void set_size(uint32_t input_size) { size = input_size;} //用于only_need_size的vertex
     __device__ void push_back(uint32_t val) { data[size++] = val;}
     __device__ void pop_back() { --size;}
     __device__ uint32_t get_last() const {return data[size - 1];}
@@ -445,6 +448,53 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
 
     __threadfence_block();
     return ret;
+}
+
+// result[i] = inter(sets[0],common_set).size, 0 <= i < num_sets
+// 注意，sizes是集合大小的前缀和，且下标从1开始！！！即sizes[0] == 0, sets[0].size == sizes[1], sets[1].size == sizes[2]-sizes[1]
+// 如果num_sets == 1会出错
+__device__ void multi_intersection_size(int num_sets, int* results, uint32_t** sets, uint32_t* sizes, uint32_t* common_set, uint32_t common_size) {
+    //为了整齐，不判断大小并交换，而是统一和common_set求交
+
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    if (lid < num_sets)
+        results[lid] = 0;
+    
+    uint32_t& total_task = sizes[num_sets];
+
+    int done1 = 0;
+    int l,r;
+    uint32_t val;
+    int set_index = 0;
+    while (done1 < total_task)
+    {
+        if (lid + done1 < total_task) //这里和外层while会不会有些重复？
+        {
+            while (lid + done1 >= sizes[set_index + 1])
+                ++set_index;
+            l = 0;
+            r = common_size - 1;
+            val = sets[set_index][lid + done1 - sizes[set_index]];
+            //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+            while (l <= r)
+            {
+                int mid = (l + r) >> 1;
+                if (common_set[mid] == val)
+                {
+                    atomicAdd(&results[set_index], 1);
+                    break;//这里的break会不会导致更慢？
+                }
+                if (common_set[mid] < val)
+                    l = mid + 1;
+                else
+                    r = mid - 1;
+            }
+            //binary search
+        }
+        done1 += THREADS_PER_WARP;
+    }
+    
+    __threadfence_block();
 }
 
 __device__ void triple_unordered_subtraction_size(int &ans0, int&ans1, int&ans2, const GPUVertexSet& set00, const GPUVertexSet& set01, const GPUVertexSet& set02, const GPUVertexSet& set1)
@@ -734,14 +784,51 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
         unsigned int l, r;
         get_edge_index(v, l, r);
         bool is_zero = false;
-        for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
-        {
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-            if (vertex_set[prefix_id].get_size() == schedule->get_break_size(prefix_id)) {
-                is_zero = true;
-                break;
+        //TODO: 目前默认IEP外的最后一层循环的所有prefix都是only_need_size，但是实际上可能有反例，之后需要修改
+        //其实这个if可以放在循环外，这样就不用循环内每次都判断if了，只不过多了一些重复代码，可能导致i-cache命中率降低
+        int num_sets = schedule->get_only_need_size_concurrency();
+        if (depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num() - 1 && num_sets > 1) {
+            int wid = threadIdx.x / THREADS_PER_WARP;
+            int lid = threadIdx.x % THREADS_PER_WARP;
+            //__shared__ int block_ret[WARPS_PER_BLOCK * num_sets]; // ret在函数内初始化为0
+            //__shared__ uint32_t* block_sets[WARPS_PER_BLOCK * num_sets];
+            //__shared__ uint32_t block_sizes[WARPS_PER_BLOCK * (num_sets + 1)]; //多开一位是因为要做前缀和
+            //TODO: 因为num_sets必须是一个常量，所以现在省事先开成几个pattern里的最大值（p2最大， 是3）
+            __shared__ int block_ret[WARPS_PER_BLOCK * 3]; // ret在函数内初始化为0
+            __shared__ uint32_t* block_sets[WARPS_PER_BLOCK * 3];
+            __shared__ uint32_t block_sizes[WARPS_PER_BLOCK * 4]; //多开一位是因为要做前缀和
+            uint32_t** my_sets = &block_sets[wid * num_sets];
+            uint32_t* my_sizes = &block_sizes[wid * (num_sets + 1)];
+            int* my_ret = &block_ret[wid * num_sets];
+            if (lid == 0)
+            {
+                int i = 0;
+                my_sizes[0] = 0;
+                for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id), ++i)
+                {
+                    int father_id = schedule->get_father_prefix_id(prefix_id);
+                    my_sizes[i + 1] = vertex_set[father_id].get_size() + my_sizes[i];
+                    my_sets[i] = vertex_set[father_id].get_data_ptr();
+                }
+            }
+            __threadfence_block();
+            multi_intersection_size(num_sets, my_ret, my_sets, my_sizes, &edge[l], r - l);
+            int i = 0;
+            for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id), ++i) // 不用判断break_size，因为IEP外最后一层的prefix不是basic prefix，一定不需要break
+                vertex_set[prefix_id].set_size(my_ret[i]);
+                
+        }
+        else {
+            for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
+            {
+                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+                if (vertex_set[prefix_id].get_size() == schedule->get_break_size(prefix_id)) {
+                    is_zero = true;
+                    break;
+                }
             }
         }
+        
         if (is_zero)
             continue;
         if (depth + 1 != MAX_DEPTH) {
@@ -1000,6 +1087,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     uint32_t buffer_size = VertexSet::max_intersection_size;
     uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
     dev_schedule->ans_array_offset = block_shmem_size - in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
+    dev_schedule->only_need_size_concurrency = schedule_iep.get_only_need_size_concurrency();
     // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     

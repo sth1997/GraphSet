@@ -447,6 +447,10 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 if(prefix[prefix_id].get_has_child() == false)
                     prefix[prefix_id].set_only_need_size(true);
             }
+        
+        only_need_size_concurrency = 0;
+        for (int i = last[size - in_exclusion_optimize_num - 1]; i != -1; i = next[i])
+            ++only_need_size_concurrency; 
     }
 
     for(int i = 0; i < size; ++i) 

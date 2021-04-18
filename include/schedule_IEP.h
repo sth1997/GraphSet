@@ -61,6 +61,7 @@ public:
     
     inline void set_in_exclusion_optimize_redundancy(long long redundancy) { in_exclusion_optimize_redundancy = redundancy; }
     inline long long get_in_exclusion_optimize_redundancy() const { return in_exclusion_optimize_redundancy; } 
+    inline int get_only_need_size_concurrency() const { return only_need_size_concurrency; }
 
     void print_schedule() const;
 
@@ -93,6 +94,7 @@ private:
     int k_val; // inner k loop, WARNING: this val not always meaningful @TODO here
                // only when performance_modeling_type == 1 , this val will be calculated.
     long long in_exclusion_optimize_redundancy;
+    int only_need_size_concurrency; // IEP外的最后一层共有多少个prefix（都是only_need_size）
 
     std::vector< std::vector< std::vector<int> > >in_exclusion_optimize_group;
     std::vector< int > in_exclusion_optimize_val;
