@@ -450,15 +450,13 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     return ret;
 }
 
-// result[i] = inter(sets[0],common_set).size, 0 <= i < num_sets
+// result[i] = inter(sets[i],common_set).size, 0 <= i < num_sets
 // 注意，sizes是集合大小的前缀和，且下标从1开始！！！即sizes[0] == 0, sets[0].size == sizes[1], sets[1].size == sizes[2]-sizes[1]
 // 如果num_sets == 1会出错
-__device__ void multi_intersection_size(int num_sets, int* results, uint32_t** sets, uint32_t* sizes, uint32_t* common_set, uint32_t common_size) {
+/*__device__ void multi_intersection_size(int num_sets, int* results, uint32_t** sets, uint32_t* sizes, uint32_t* common_set, uint32_t common_size) {
     //为了整齐，不判断大小并交换，而是统一和common_set求交
 
     int lid = threadIdx.x % THREADS_PER_WARP;
-    if (lid < num_sets)
-        results[lid] = 0;
     
     uint32_t& total_task = sizes[num_sets];
 
@@ -485,6 +483,52 @@ __device__ void multi_intersection_size(int num_sets, int* results, uint32_t** s
                     break;//这里的break会不会导致更慢？
                 }
                 if (common_set[mid] < val)
+                    l = mid + 1;
+                else
+                    r = mid - 1;
+            }
+            //binary search
+        }
+        done1 += THREADS_PER_WARP;
+    }
+    
+    __threadfence_block();
+}*/
+
+
+// result[i] = inter(sets[i],sets[i + num_sets]).size, 0 <= i < num_sets
+// 注意，sizes是集合大小的前缀和，且下标从1开始！！！即sizes[0] == 0, sets[0].size == sizes[1], sets[1].size == sizes[2]-sizes[1]
+// 如果num_sets == 1会出错
+// 与v1的区别是，在函数外会先保证sizes[i] <= sizes[i + num_sets]
+__device__ void multi_intersection_size_v2(int num_sets, int* results, uint32_t** sets, uint32_t* sizes) {
+
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    
+    uint32_t& total_task = sizes[num_sets];
+
+    int done1 = 0;
+    int l,r;
+    uint32_t val;
+    int set_index = 0;
+    while (done1 < total_task)
+    {
+        if (lid + done1 < total_task) //这里和外层while会不会有些重复？
+        {
+            while (lid + done1 >= sizes[set_index + 1])
+                ++set_index;
+            l = 0;
+            r = sizes[set_index + num_sets + 1] - 1;
+            val = sets[set_index][lid + done1 - sizes[set_index]];
+            //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+            while (l <= r)
+            {
+                int mid = (l + r) >> 1;
+                if (sets[set_index + num_sets][mid] == val)
+                {
+                    atomicAdd(&results[set_index], 1);
+                    break;//这里的break会不会导致更慢？
+                }
+                if (sets[set_index + num_sets][mid] < val)
                     l = mid + 1;
                 else
                     r = mid - 1;
@@ -795,28 +839,40 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
             //__shared__ uint32_t block_sizes[WARPS_PER_BLOCK * (num_sets + 1)]; //多开一位是因为要做前缀和
             //TODO: 因为num_sets必须是一个常量，所以现在省事先开成几个pattern里的最大值（p2最大， 是3）
             __shared__ int block_ret[WARPS_PER_BLOCK * 3]; // ret在函数内初始化为0
-            __shared__ uint32_t* block_sets[WARPS_PER_BLOCK * 3];
-            __shared__ uint32_t block_sizes[WARPS_PER_BLOCK * 4]; //多开一位是因为要做前缀和
-            uint32_t** my_sets = &block_sets[wid * num_sets];
-            uint32_t* my_sizes = &block_sizes[wid * (num_sets + 1)];
+            __shared__ uint32_t* block_sets[WARPS_PER_BLOCK * 6];
+            __shared__ uint32_t block_sizes[WARPS_PER_BLOCK * 7]; //多开一位是因为要做前缀和
+            uint32_t** my_sets = &block_sets[wid * num_sets * 2];
+            uint32_t* my_sizes = &block_sizes[wid * (num_sets * 2 + 1)];
             int* my_ret = &block_ret[wid * num_sets];
+            
             if (lid == 0)
             {
-                int i = 0;
+                int j = 0;
                 my_sizes[0] = 0;
-                for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id), ++i)
+                for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id), ++j)
                 {
                     int father_id = schedule->get_father_prefix_id(prefix_id);
-                    my_sizes[i + 1] = vertex_set[father_id].get_size() + my_sizes[i];
-                    my_sets[i] = vertex_set[father_id].get_data_ptr();
+                    if (vertex_set[father_id].get_size() <= r - l) {
+                        my_sizes[j + 1] = vertex_set[father_id].get_size() + my_sizes[j];
+                        my_sizes[j + 1 + num_sets] = r - l;
+                        my_sets[j] = vertex_set[father_id].get_data_ptr();
+                        my_sets[j + num_sets] = &edge[l];
+                    }
+                    else {
+                        my_sizes[j + 1] = r - l + my_sizes[j];
+                        my_sizes[j + 1 + num_sets] = vertex_set[father_id].get_size();
+                        my_sets[j] = &edge[l];
+                        my_sets[j + num_sets] = vertex_set[father_id].get_data_ptr();
+                    }
                 }
             }
+            if (lid < num_sets)
+                my_ret[lid] = 0;
             __threadfence_block();
-            multi_intersection_size(num_sets, my_ret, my_sets, my_sizes, &edge[l], r - l);
-            int i = 0;
-            for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id), ++i) // 不用判断break_size，因为IEP外最后一层的prefix不是basic prefix，一定不需要break
-                vertex_set[prefix_id].set_size(my_ret[i]);
-                
+            multi_intersection_size_v2(num_sets, my_ret, my_sets, my_sizes);
+            int j = 0;
+            for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id), ++j) // 不用判断break_size，因为IEP外最后一层的prefix不是basic prefix，一定不需要break
+                vertex_set[prefix_id].set_size(my_ret[j]);
         }
         else {
             for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
