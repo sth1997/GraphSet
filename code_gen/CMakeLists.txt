@@ -1,0 +1,3 @@
+ADD_EXECUTABLE(final_generator final_generator.cu)
+SET_PROPERTY(TARGET final_generator PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(final_generator graph_mining)
