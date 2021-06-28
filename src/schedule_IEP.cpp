@@ -1601,7 +1601,8 @@ int Schedule_IEP::get_vec_optimize_num(const std::vector<int> &vec) {
     }
     if( !is_valid) return -1;
 
-    for(int k = 2; k <= size; ++k) {
+    //for(int k = 2; k <= size; ++k) {
+    for(int k = 2; k <= size - 2; ++k) { //之所以k最大可能为size - 2，是因为第一次取了一条边而不是一个点，所以前两个点都不可能在IEP内
         bool flag = true;
         for(int i = size - k + 1; i < size; ++i)
             if(adj_mat[INDEX(vec[size - k], vec[i], size)]) {
@@ -1610,8 +1611,7 @@ int Schedule_IEP::get_vec_optimize_num(const std::vector<int> &vec) {
             }
         if(flag == false) return k - 1;
     }
-    assert(0);
-    return -1;
+    return size - 2;
 }
 
 double Schedule_IEP::our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt) {
