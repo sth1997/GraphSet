@@ -1,7 +1,3 @@
-/**
- * 这个版本里面没有细粒度计时。有计时的在gpu_graph_with_timer.cu里面。
- * 而且计时的方式与zms版本略有区别。
- */
 #include <graph.h>
 #include <dataloader.h>
 #include <vertex_set.h>
@@ -26,9 +22,6 @@ constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
-//#define PRINT_ANS_TO_FILE //用于scripts/small_graph_check.py
-
-// 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
 public:
     TimeInterval(){
@@ -157,6 +150,8 @@ public:
     }
     __device__ int get_size() const { return size;}
     __device__ uint32_t get_data(int i) const { return data[i];}
+    __device__ void set_size(int new_size) { size = new_size; }
+    __device__ void set_data(int i, uint32_t val) { data[i] = val; } 
     __device__ void push_back(uint32_t val) { data[size++] = val;}
     __device__ void pop_back() { --size;}
     __device__ uint32_t get_last() const {return data[size - 1];}
@@ -210,7 +205,6 @@ __device__ unsigned int dev_cur_edge = 0;
  * 
  * returns the size of the intersection set
  * 
- * @note：a和b并不是地位相等的。如果要进行in-place操作，请把输入放在a而不是b。
  * @todo：shared memory缓存优化
  */
 __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
@@ -231,19 +225,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         uint32_t u = 0;
         if (num_done + lid < na) {
             u = a[num_done + lid]; // u: an element in set a
-            /*
-            // 我这里这样写并没有变快，反而明显慢了
-            int x, s[3], &l = s[0], &r = s[1], &mid = s[2];
-            l = 0, r = int(nb) - 1, mid = (int(nb) - 1) >> 1;
-            while (l <= r && !found) {
-                uint32_t v = b[mid];
-                found = (v == u);
-                x = (v < u);
-                mid += 2 * x - 1;
-                swap(mid, s[!x]);
-                mid = (l + r) >> 1;
-            }
-            */
             int mid, l = 0, r = int(nb) - 1;
             while (l <= r) {
                 mid = (l + r) >> 1;
@@ -263,29 +244,10 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         #pragma unroll
         for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
             uint32_t v = lid >= s ? out_offset[lid - s] : 0;
-            __threadfence_block();
+            // __threadfence_block();
             out_offset[lid] += v;
             __threadfence_block();
         }
-        
-        /*
-        // work-efficient parallel scan，但常数大，实测速度不行
-        #pragma unroll
-        for (int s = 1; s < THREADS_PER_WARP; s <<= 1) {
-            int i = (lid + 1) * s * 2 - 1;
-            if (i < THREADS_PER_WARP)
-                out_offset[i] += out_offset[i - s];
-            __threadfence_block();
-        }
-
-        #pragma unroll
-        for (int s = THREADS_PER_WARP / 4; s > 0; s >>= 1) {
-            int i = (lid + 1) * s * 2 - 1;
-            if ((i + s) < THREADS_PER_WARP)
-                out_offset[i + s] += out_offset[i];
-            __threadfence_block();
-        }
-        */
         
         if (found) {
             uint32_t offset = out_offset[lid] - 1;
@@ -294,24 +256,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
         if (lid == 0)
             out_size += out_offset[THREADS_PER_WARP - 1];
-
-        /*
-        // 使用warp shuffle的scan，但实测速度更不行
-        uint32_t offset = found;
-        #pragma unroll
-        for (int i = 1; i < THREADS_PER_WARP; i *= 2) {
-            uint32_t t = __shfl_up_sync(0xffffffff, offset, i);
-            if (lid >= i)
-                offset += t;
-        }
-
-        if (found)
-            out[out_size + offset - 1] = u;
-        if (lid == THREADS_PER_WARP - 1) // 总和被warp中最后一个线程持有
-            out_size += offset;
-        */
-
-        //num_done += THREADS_PER_WARP;
     }
 
     __threadfence_block();
@@ -321,8 +265,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
 /**
  * wrapper of search based intersection `do_intersection`
- * 
- * 注意：不能进行in-place操作。若想原地操作则应当把交换去掉。
  */
 __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size)
 {
@@ -389,63 +331,6 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
         done1 += THREADS_PER_WARP;
     }
 
-    __threadfence_block();
+    // __threadfence_block();
     return ret;
 }
-
-/*__device__ void triple_unordered_subtraction_size(int &ans0, int&ans1, int&ans2, const GPUVertexSet& set00, const GPUVertexSet& set01, const GPUVertexSet& set02, const GPUVertexSet& set1)
-{
-    __shared__ int block_ret[WARPS_PER_BLOCK * 3];
-
-    int size00 = set00.get_size();
-    int size01 = set01.get_size();
-    int size02 = set02.get_size();
-    int size1 = set1.get_size();
-
-    int wid = threadIdx.x / THREADS_PER_WARP;
-    int lid = threadIdx.x % THREADS_PER_WARP;
-    int &ret0 = block_ret[wid * 3 + 0];
-    int &ret1 = block_ret[wid * 3 + 1];
-    int &ret2 = block_ret[wid * 3 + 2];
-    if (lid == 0) {
-        ret0 = size00;
-        ret1 = size01;
-        ret2 = size02;
-    }
-    __threadfence_block();
-
-    
-    int done1 = 0;
-    while (done1 < size1 * 3)
-    {
-        if (lid + done1 < size1 * 3)
-        {
-            int l = 0, r ;//= (lid + done1 < size1) ? size00 - 1 : (lid + done1 < size1 * 2 ? size01 - 1 : size02 - 1);
-            uint32_t val ;//= set1.get_data((lid + done1 < size1) ? lid + done1 : (lid +done1 < size1 * 2 ? lid + done1 - size1 : lid + done1 - size1 * 2)); 
-            //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
-        
-            const GPUVertexSet& set0 = (lid + done1 < size1) ? (r=size00-1,val=set1.get_data(lid+done1),set00) : (lid + done1 < size1 * 2 ? (r=size01-1,val=set1.get_data(lid+done1-size1),set01) : (r=size02-1,val=set1.get_data(lid+done1-size1*2),set02));
-            int &ret = (lid + done1 < size1) ? ret0 : (lid + done1 < size1 * 2 ? ret1 : ret2);
-
-            while (l <= r)
-            {
-                int mid = (l + r) >> 1;
-                if (set0.get_data(mid) == val)
-                {
-                    atomicSub(&ret, 1);
-                    break;
-                }
-                if (set0.get_data(mid) < val)
-                    l = mid + 1;
-                else
-                    r = mid - 1;
-            }
-            //binary search
-        }
-        done1 += THREADS_PER_WARP;
-    }
-    __threadfence_block();
-    ans0 = ret0;
-    ans1 = ret1;
-    ans2 = ret2;
-}*/

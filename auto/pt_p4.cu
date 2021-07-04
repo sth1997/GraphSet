@@ -1,7 +1,3 @@
-/**
- * 这个版本里面没有细粒度计时。有计时的在gpu_graph_with_timer.cu里面。
- * 而且计时的方式与zms版本略有区别。
- */
 #include <graph.h>
 #include <dataloader.h>
 #include <vertex_set.h>
@@ -26,9 +22,6 @@ constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
-//#define PRINT_ANS_TO_FILE //用于scripts/small_graph_check.py
-
-// 是否要用<chrono>中的内容进行替代？
 class TimeInterval{
 public:
     TimeInterval(){
@@ -157,6 +150,8 @@ public:
     }
     __device__ int get_size() const { return size;}
     __device__ uint32_t get_data(int i) const { return data[i];}
+    __device__ void set_size(int new_size) { size = new_size; }
+    __device__ void set_data(int i, uint32_t val) { data[i] = val; } 
     __device__ void push_back(uint32_t val) { data[size++] = val;}
     __device__ void pop_back() { --size;}
     __device__ uint32_t get_last() const {return data[size - 1];}
@@ -210,7 +205,6 @@ __device__ unsigned int dev_cur_edge = 0;
  * 
  * returns the size of the intersection set
  * 
- * @note：a和b并不是地位相等的。如果要进行in-place操作，请把输入放在a而不是b。
  * @todo：shared memory缓存优化
  */
 __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
@@ -231,19 +225,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         uint32_t u = 0;
         if (num_done + lid < na) {
             u = a[num_done + lid]; // u: an element in set a
-            /*
-            // 我这里这样写并没有变快，反而明显慢了
-            int x, s[3], &l = s[0], &r = s[1], &mid = s[2];
-            l = 0, r = int(nb) - 1, mid = (int(nb) - 1) >> 1;
-            while (l <= r && !found) {
-                uint32_t v = b[mid];
-                found = (v == u);
-                x = (v < u);
-                mid += 2 * x - 1;
-                swap(mid, s[!x]);
-                mid = (l + r) >> 1;
-            }
-            */
             int mid, l = 0, r = int(nb) - 1;
             while (l <= r) {
                 mid = (l + r) >> 1;
@@ -263,29 +244,10 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
         #pragma unroll
         for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
             uint32_t v = lid >= s ? out_offset[lid - s] : 0;
-            __threadfence_block();
+            // __threadfence_block();
             out_offset[lid] += v;
             __threadfence_block();
         }
-        
-        /*
-        // work-efficient parallel scan，但常数大，实测速度不行
-        #pragma unroll
-        for (int s = 1; s < THREADS_PER_WARP; s <<= 1) {
-            int i = (lid + 1) * s * 2 - 1;
-            if (i < THREADS_PER_WARP)
-                out_offset[i] += out_offset[i - s];
-            __threadfence_block();
-        }
-
-        #pragma unroll
-        for (int s = THREADS_PER_WARP / 4; s > 0; s >>= 1) {
-            int i = (lid + 1) * s * 2 - 1;
-            if ((i + s) < THREADS_PER_WARP)
-                out_offset[i + s] += out_offset[i];
-            __threadfence_block();
-        }
-        */
         
         if (found) {
             uint32_t offset = out_offset[lid] - 1;
@@ -294,24 +256,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
         if (lid == 0)
             out_size += out_offset[THREADS_PER_WARP - 1];
-
-        /*
-        // 使用warp shuffle的scan，但实测速度更不行
-        uint32_t offset = found;
-        #pragma unroll
-        for (int i = 1; i < THREADS_PER_WARP; i *= 2) {
-            uint32_t t = __shfl_up_sync(0xffffffff, offset, i);
-            if (lid >= i)
-                offset += t;
-        }
-
-        if (found)
-            out[out_size + offset - 1] = u;
-        if (lid == THREADS_PER_WARP - 1) // 总和被warp中最后一个线程持有
-            out_size += offset;
-        */
-
-        //num_done += THREADS_PER_WARP;
     }
 
     __threadfence_block();
@@ -321,8 +265,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
 /**
  * wrapper of search based intersection `do_intersection`
- * 
- * 注意：不能进行in-place操作。若想原地操作则应当把交换去掉。
  */
 __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size)
 {
@@ -389,171 +331,132 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
         done1 += THREADS_PER_WARP;
     }
 
-    __threadfence_block();
+    // __threadfence_block();
     return ret;
 }
-
-/*__device__ void triple_unordered_subtraction_size(int &ans0, int&ans1, int&ans2, const GPUVertexSet& set00, const GPUVertexSet& set01, const GPUVertexSet& set02, const GPUVertexSet& set1)
-{
-    __shared__ int block_ret[WARPS_PER_BLOCK * 3];
-
-    int size00 = set00.get_size();
-    int size01 = set01.get_size();
-    int size02 = set02.get_size();
-    int size1 = set1.get_size();
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+    __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
+    extern __shared__ GPUVertexSet block_vertex_set[];
+    extern __shared__ char block_shmem[];
 
     int wid = threadIdx.x / THREADS_PER_WARP;
     int lid = threadIdx.x % THREADS_PER_WARP;
-    int &ret0 = block_ret[wid * 3 + 0];
-    int &ret1 = block_ret[wid * 3 + 1];
-    int &ret2 = block_ret[wid * 3 + 2];
+    int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid;
+    unsigned int &edge_idx = block_edge_idx[wid];
+    GPUVertexSet *vertex_set = block_vertex_set + wid * 6;
+
+    GPUVertexSet &subtraction_set = vertex_set[5];
     if (lid == 0) {
-        ret0 = size00;
-        ret1 = size01;
-        ret2 = size02;
-    }
-    __threadfence_block();
+        edge_idx = 0;
+        uint32_t offset = buffer_size * global_wid * 5;
 
-    
-    int done1 = 0;
-    while (done1 < size1 * 3)
-    {
-        if (lid + done1 < size1 * 3)
-        {
-            int l = 0, r ;//= (lid + done1 < size1) ? size00 - 1 : (lid + done1 < size1 * 2 ? size01 - 1 : size02 - 1);
-            uint32_t val ;//= set1.get_data((lid + done1 < size1) ? lid + done1 : (lid +done1 < size1 * 2 ? lid + done1 - size1 : lid + done1 - size1 * 2)); 
-            //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
-        
-            const GPUVertexSet& set0 = (lid + done1 < size1) ? (r=size00-1,val=set1.get_data(lid+done1),set00) : (lid + done1 < size1 * 2 ? (r=size01-1,val=set1.get_data(lid+done1-size1),set01) : (r=size02-1,val=set1.get_data(lid+done1-size1*2),set02));
-            int &ret = (lid + done1 < size1) ? ret0 : (lid + done1 < size1 * 2 ? ret1 : ret2);
+        uint32_t *block_subtraction_set_buf = (uint32_t *)(block_shmem + 768);
+        subtraction_set.set_data_ptr(block_subtraction_set_buf + wid * 3);
 
-            while (l <= r)
-            {
-                int mid = (l + r) >> 1;
-                if (set0.get_data(mid) == val)
-                {
-                    atomicSub(&ret, 1);
-                    break;
-                }
-                if (set0.get_data(mid) < val)
-                    l = mid + 1;
-                else
-                    r = mid - 1;
-            }
-            //binary search
+        for (int i = 0; i < 5; ++i) {
+            vertex_set[i].set_data_ptr(tmp + offset);
+            offset += buffer_size;
         }
-        done1 += THREADS_PER_WARP;
     }
+
     __threadfence_block();
-    ans0 = ret0;
-    ans1 = ret1;
-    ans2 = ret2;
-}*/__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
-__shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
-extern __shared__ GPUVertexSet block_vertex_set[];
-int wid = threadIdx.x / THREADS_PER_WARP;
-int lid = threadIdx.x % THREADS_PER_WARP;
-int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid;
-unsigned int &edge_idx = block_edge_idx[wid];
-GPUVertexSet *vertex_set = block_vertex_set + wid * 7;
-if (lid == 0) {
-edge_idx = 0;
-uint32_t offset = buffer_size * global_wid * 7;
-for (int i = 0; i < 7; ++i) {
-vertex_set[i].set_data_ptr(tmp + offset);
-offset += buffer_size;
-}
-}
-GPUVertexSet& subtraction_set = vertex_set[5];
-__threadfence_block();
-uint32_t v0, v1;
-uint32_t l, r;
-unsigned long long sum = 0;
-while (true) {
-if (lid == 0) {
-edge_idx = atomicAdd(&dev_cur_edge, 1);
-unsigned int i = edge_idx;
-if (i < edge_num) {
-subtraction_set.init();
-subtraction_set.push_back(edge_from[i]);
-subtraction_set.push_back(edge[i]);
-}
-}
-__threadfence_block();
-unsigned int i = edge_idx;
-if(i >= edge_num) break;
-v0 = edge_from[i];
-v1 = edge[i];
-get_edge_index(v0, l, r);
-if (threadIdx.x % THREADS_PER_WARP == 0)
-    vertex_set[0].init(r - l, &edge[l]);
-__threadfence_block();
-if(v0 <= v1) continue;
-get_edge_index(v1, l, r);
-GPUVertexSet* tmp_vset;
-intersection2(vertex_set[1].get_data_ptr(), vertex_set[0].get_data_ptr(), &edge[l], vertex_set[0].get_size(), r - l, &vertex_set[1].size);
-if (vertex_set[1].get_size() == 0) continue;
-if (threadIdx.x % THREADS_PER_WARP == 0)
-    vertex_set[2].init(r - l, &edge[l]);
-__threadfence_block();
-if (vertex_set[2].get_size() == 0) continue;
-extern __shared__ char ans_array[];
-int* ans = ((int*) (ans_array + 896)) + 3 * (threadIdx.x / THREADS_PER_WARP);
-int loop_size_depth2 = vertex_set[0].get_size();
-if( loop_size_depth2 <= 0) continue;
-uint32_t* loop_data_ptr_depth2 = vertex_set[0].get_data_ptr();
-for(int i_depth2 = 0; i_depth2 < loop_size_depth2; ++i_depth2) {
-uint32_t v_depth2 = loop_data_ptr_depth2[i_depth2];
-if(subtraction_set.has_data(v_depth2)) continue;
-unsigned int l_depth2, r_depth2;
-get_edge_index(v_depth2, l_depth2, r_depth2);
-{
-tmp_vset = &vertex_set[3];
-if (threadIdx.x % THREADS_PER_WARP == 0)
-    tmp_vset->init(r_depth2 - l_depth2, &edge[l_depth2]);
-__threadfence_block();
-if (r_depth2 - l_depth2 > vertex_set[2].get_size())
-    tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[2], -1);
-else
-    tmp_vset->size = vertex_set[2].get_size() - unordered_subtraction_size(vertex_set[2], *tmp_vset, -1);
-}
-if (vertex_set[3].get_size() == 1) continue;
-{
-tmp_vset = &vertex_set[4];
-if (threadIdx.x % THREADS_PER_WARP == 0)
-    tmp_vset->init(r_depth2 - l_depth2, &edge[l_depth2]);
-__threadfence_block();
-if (r_depth2 - l_depth2 > vertex_set[1].get_size())
-    tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[1], -1);
-else
-    tmp_vset->size = vertex_set[1].get_size() - unordered_subtraction_size(vertex_set[1], *tmp_vset, -1);
-}
-if (threadIdx.x % THREADS_PER_WARP == 0) subtraction_set.push_back(v_depth2);
-__threadfence_block();
-ans[0] = unordered_subtraction_size(vertex_set[1], subtraction_set);
-ans[1] = vertex_set[3].get_size() - 1;
-ans[2] = vertex_set[4].get_size() - 0;
-long long val;
-val = ans[0];
-val = val * ans[0];
-val = val * ans[1];
-sum += val * 1;
-val = ans[2];
-val = val * ans[0];
-sum += val * -1;
-val = ans[0];
-val = val * ans[2];
-sum += val * -1;
-val = ans[0];
-val = val * ans[1];
-sum += val * -1;
-val = ans[2];
-sum += val * 2;
-if (threadIdx.x % THREADS_PER_WARP == 0) subtraction_set.pop_back();
-__threadfence_block();
-}
-}
-if (lid == 0) atomicAdd(&dev_sum, sum);
+
+    uint32_t v0, v1, v2;
+    uint32_t l, r;
+    unsigned long long sum = 0;
+
+    while (true) {
+        if (lid == 0) {
+            edge_idx = atomicAdd(&dev_cur_edge, 1);
+        }
+        __threadfence_block();
+
+        unsigned int i = edge_idx;
+        if (i >= edge_num) break;
+
+        v0 = edge_from[i];
+        v1 = edge[i];
+        if (v0 <= v1) continue;
+
+        get_edge_index(v0, l, r);
+        if (threadIdx.x % THREADS_PER_WARP == 0)
+            vertex_set[0].init(r - l, &edge[l]);
+        __threadfence_block();
+        
+        get_edge_index(v1, l, r);
+        GPUVertexSet* tmp_vset;
+        intersection2(vertex_set[1].get_data_ptr(), vertex_set[0].get_data_ptr(), &edge[l], vertex_set[0].get_size(), r - l, &vertex_set[1].size);
+        if (vertex_set[1].get_size() == 0) continue;
+        
+        if (threadIdx.x % THREADS_PER_WARP == 0)
+            vertex_set[2].init(r - l, &edge[l]);
+        __threadfence_block();
+        if (vertex_set[2].get_size() == 0) continue;
+        
+        int loop_size_depth2 = vertex_set[0].get_size();
+        uint32_t* loop_data_ptr_depth2 = vertex_set[0].get_data_ptr();
+        for (int i_depth2 = 0; i_depth2 < loop_size_depth2; ++i_depth2) {
+            uint32_t v_depth2 = loop_data_ptr_depth2[i_depth2];
+            if (v0 == v_depth2 || v1 == v_depth2) continue;
+
+            unsigned int l_depth2, r_depth2;
+            get_edge_index(v_depth2, l_depth2, r_depth2);
+            {
+                tmp_vset = &vertex_set[3];
+                if (threadIdx.x % THREADS_PER_WARP == 0)
+                    tmp_vset->init(r_depth2 - l_depth2, &edge[l_depth2]);
+                __threadfence_block();
+                if (r_depth2 - l_depth2 > vertex_set[2].get_size())
+                    tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[2], -1);
+                else
+                    tmp_vset->size = vertex_set[2].get_size() - unordered_subtraction_size(vertex_set[2], *tmp_vset, -1);
+            }
+            if (vertex_set[3].get_size() == 1) continue;
+            
+            {
+                tmp_vset = &vertex_set[4];
+                if (threadIdx.x % THREADS_PER_WARP == 0)
+                    tmp_vset->init(r_depth2 - l_depth2, &edge[l_depth2]);
+                __threadfence_block();
+                if (r_depth2 - l_depth2 > vertex_set[1].get_size())
+                    tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[1], -1);
+                else
+                    tmp_vset->size = vertex_set[1].get_size() - unordered_subtraction_size(vertex_set[1], *tmp_vset, -1);
+            }
+            
+            v2 = v_depth2; // subtraction_set.push_back(v2);
+
+            if (lid == 0) {
+                uint32_t *p = subtraction_set.get_data_ptr();
+                p[0] = v0;
+                p[1] = v1;
+                p[2] = v2;
+                subtraction_set.set_size(3);
+            }
+            __threadfence_block();
+
+            int ans0 = unordered_subtraction_size(vertex_set[1], subtraction_set);
+            int ans1 = vertex_set[3].get_size() - 1;
+            int ans2 = vertex_set[4].get_size() - 0;
+            long long val;
+            val = ans0;
+            val = val * ans0;
+            val = val * ans1;
+            sum += val * 1;
+            val = ans2;
+            val = val * ans0;
+            sum += val * -1;
+            val = ans0;
+            val = val * ans2;
+            sum += val * -1;
+            val = ans0;
+            val = val * ans1;
+            sum += val * -1;
+            val = ans2;
+            sum += val * 2;
+        }
+    }
+    if (lid == 0) atomicAdd(&dev_sum, sum);
 }
 void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     printf("basic prefix %d, total prefix %d\n", schedule_iep.get_basic_prefix_num(), schedule_iep.get_total_prefix_num());
@@ -563,7 +466,8 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
     size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
-    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+    // size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * schedule_iep.get_total_prefix_num();
 
     schedule_iep.print_schedule();
     uint32_t *edge_from = new uint32_t[g->e_cnt];
@@ -687,21 +591,25 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     //dev_schedule->k_val = schedule.get_k_val();
 
     printf("schedule_iep.prefix_num: %d\n", schedule_iep.get_total_prefix_num());
-    printf("shared memory for vertex set per block: %ld bytes\n", 
-        (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int));
 
-    tmpTime.print("Prepare time cost");
-    tmpTime.check();
+    uint32_t buffer_size = VertexSet::max_intersection_size; // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
+    uint32_t block_subtraction_set_size = (schedule_iep.get_size() - schedule_iep.get_in_exclusion_optimize_num()) * WARPS_PER_BLOCK * sizeof(uint32_t);
+    uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 1) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + block_subtraction_set_size;
+    dev_schedule->ans_array_offset = block_shmem_size - block_subtraction_set_size;
+    // printf("block_shmem: %u subtraction reserve: %d offset: %u\n", block_shmem_size, block_subtraction_set_size, dev_schedule->ans_array_offset);
+    // ans_array_offset的意义已改变，是block内subtraction_set实际空间的偏移（以字节计）
+     
+    // uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
+    // dev_schedule->ans_array_offset = block_shmem_size - in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
 
-    uint32_t buffer_size = VertexSet::max_intersection_size;
-    uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
-    dev_schedule->ans_array_offset = block_shmem_size - in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
-    // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     
     int max_active_blocks_per_sm;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, block_shmem_size);
     printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
+
+    tmpTime.print("Prepare time cost");
+    tmpTime.check();
     
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
         (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);

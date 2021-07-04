@@ -6,7 +6,8 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
     size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
-    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+    // size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * schedule_iep.get_total_prefix_num();
 
     schedule_iep.print_schedule();
     uint32_t *edge_from = new uint32_t[g->e_cnt];
@@ -130,21 +131,25 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     //dev_schedule->k_val = schedule.get_k_val();
 
     printf("schedule_iep.prefix_num: %d\n", schedule_iep.get_total_prefix_num());
-    printf("shared memory for vertex set per block: %ld bytes\n", 
-        (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int));
 
-    tmpTime.print("Prepare time cost");
-    tmpTime.check();
+    uint32_t buffer_size = VertexSet::max_intersection_size; // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
+    uint32_t block_subtraction_set_size = (schedule_iep.get_size() - schedule_iep.get_in_exclusion_optimize_num()) * WARPS_PER_BLOCK * sizeof(uint32_t);
+    uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 1) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + block_subtraction_set_size;
+    dev_schedule->ans_array_offset = block_shmem_size - block_subtraction_set_size;
+    // printf("block_shmem: %u subtraction reserve: %d offset: %u\n", block_shmem_size, block_subtraction_set_size, dev_schedule->ans_array_offset);
+    // ans_array_offset的意义已改变，是block内subtraction_set实际空间的偏移（以字节计）
+     
+    // uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
+    // dev_schedule->ans_array_offset = block_shmem_size - in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
 
-    uint32_t buffer_size = VertexSet::max_intersection_size;
-    uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
-    dev_schedule->ans_array_offset = block_shmem_size - in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
-    // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
     
     int max_active_blocks_per_sm;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, block_shmem_size);
     printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
+
+    tmpTime.print("Prepare time cost");
+    tmpTime.check();
     
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
         (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);

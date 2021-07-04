@@ -263,8 +263,6 @@ __device__ unsigned int dev_cur_edge = 0;
  * search-based intersection
  * 
  * returns the size of the intersection set
- * 
- * @note：a和b并不是地位相等的。如果要进行in-place操作，请把输入放在a而不是b。
  * @todo：shared memory缓存优化
  */
 __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
@@ -375,8 +373,6 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
 /**
  * wrapper of search based intersection `do_intersection`
- * 
- * 注意：不能进行in-place操作。若想原地操作则应当把交换去掉。
  */
 __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size)
 {
