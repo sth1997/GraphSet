@@ -1561,7 +1561,7 @@ void Schedule_IEP::restrict_selection(int v_cnt, unsigned int e_cnt, long long t
 }
 
 void Schedule_IEP::restricts_generate(const int* cur_adj_mat, std::vector< std::vector< std::pair<int,int> > > &restricts) {
-    Schedule schedule(cur_adj_mat, get_size());
+    Schedule_IEP schedule(cur_adj_mat, get_size());
     schedule.aggressive_optimize_get_all_pairs(restricts);
     int size = schedule.get_size();
     Graph* complete;
@@ -1570,7 +1570,7 @@ void Schedule_IEP::restricts_generate(const int* cur_adj_mat, std::vector< std::
     long long ans = complete->pattern_matching( schedule, 1) / schedule.get_multiplicity();
     int thread_num = 1;
     for(int i = 0; i < restricts.size(); ) {
-        Schedule cur_schedule(schedule.get_adj_mat_ptr(), schedule.get_size());
+        Schedule_IEP cur_schedule(schedule.get_adj_mat_ptr(), schedule.get_size());
         cur_schedule.add_restrict(restricts[i]);
         long long cur_ans = complete->pattern_matching( cur_schedule, thread_num);
         if( cur_ans != ans) {
