@@ -7,6 +7,7 @@
 #include <vertex_set.h>
 #include <common.h>
 #include <schedule_IEP.h>
+#include <motif_generator.h>
 
 #include <cassert>
 #include <cstring>
@@ -449,3 +450,17 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     ans1 = ret1;
     ans2 = ret2;
 }*/
+
+__device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min_vertex)
+{
+    int l = 0, r = loop_size - 1;
+    while (l <= r)
+    {
+        int mid = r - ((r - l) >> 1);
+        if (loop_data_ptr[mid] < min_vertex)
+            l = mid + 1;
+        else
+            r = mid - 1;
+    }
+    return l;
+}

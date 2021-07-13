@@ -755,6 +755,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
         int size_after_restrict = lower_bound(loop_data_ptr, loop_size, min_vertex);
         //int size_after_restrict = -1;
         local_ans += unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
+        return;
     }
     for (int i = 0; i < loop_size; ++i)
     {
