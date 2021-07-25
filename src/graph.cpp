@@ -238,6 +238,7 @@ long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count
     {
      //   double start_time = get_wall_time();
      //   double current_time;
+        int* ans_buffer = new int[schedule.in_exclusion_optimize_vertex_id.size()];
         VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
         VertexSet subtraction_set;
         VertexSet tmp_set;
@@ -257,7 +258,7 @@ long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count
             subtraction_set.push_back(vertex);
             //if (schedule.get_total_restrict_num() > 0 && clique == false)
             if(true)
-                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1);
+                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1, ans_buffer);
             else
                 pattern_matching_func(schedule, vertex_set, subtraction_set, local_ans, 1, clique);
             subtraction_set.pop_back();
@@ -274,7 +275,7 @@ long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count
     return global_ans / schedule.get_in_exclusion_optimize_redundancy();
 }
 
-void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth)
+void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth, int* ans_buffer)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -288,23 +289,21 @@ void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, Verte
         int last_pos = -1;
         long long val;
 
-        int ans[schedule.in_exclusion_optimize_vertex_id.size()];
-
         for(int i = 0; i < schedule.in_exclusion_optimize_vertex_id.size(); ++i) {
             if(schedule.in_exclusion_optimize_vertex_flag[i]) {
-                ans[i] = vertex_set[schedule.in_exclusion_optimize_vertex_id[i]].get_size() - schedule.in_exclusion_optimize_vertex_coef[i];
+                ans_buffer[i] = vertex_set[schedule.in_exclusion_optimize_vertex_id[i]].get_size() - schedule.in_exclusion_optimize_vertex_coef[i];
             }
             else {
-                ans[i] = VertexSet::unordered_subtraction_size(vertex_set[schedule.in_exclusion_optimize_vertex_id[i]], subtraction_set);
+                ans_buffer[i] = VertexSet::unordered_subtraction_size(vertex_set[schedule.in_exclusion_optimize_vertex_id[i]], subtraction_set);
             }
         }
 
         for(int pos = 0; pos < schedule.in_exclusion_optimize_coef.size(); ++pos) {
             if(pos == last_pos + 1)
-                val = ans[schedule.in_exclusion_optimize_ans_pos[pos]];
+                val = ans_buffer[schedule.in_exclusion_optimize_ans_pos[pos]];
             else {
                 if( val != 0)
-                    val = val * ans[schedule.in_exclusion_optimize_ans_pos[pos]];
+                    val = val * ans_buffer[schedule.in_exclusion_optimize_ans_pos[pos]];
             }
             if(schedule.in_exclusion_optimize_flag[pos]) {
                 last_pos = pos;
@@ -360,7 +359,8 @@ void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, Verte
         for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, vertex);
-            if( vertex_set[prefix_id].get_size() == 0) {
+            //if( vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule.get_basic_prefix_num()) {
+            if( vertex_set[prefix_id].get_size() == schedule.break_size[prefix_id]) {
                 is_zero = true;
                 break;
             }
@@ -368,7 +368,7 @@ void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, Verte
         if( is_zero ) continue;
         //subtraction_set.insert_ans_sort(vertex);
         subtraction_set.push_back(vertex);
-        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1);
+        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, ans_buffer);
         subtraction_set.pop_back();
     }
 }
@@ -389,6 +389,7 @@ long long Graph::pattern_matching_mpi(const Schedule_IEP& schedule, int thread_c
             global_ans = gm.runmajor();
         }
         if (omp_get_thread_num()) {
+            int* ans_buffer = new int[schedule.in_exclusion_optimize_vertex_id.size()];
             VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
             long long local_ans = 0;
             VertexSet subtraction_set;
@@ -401,7 +402,7 @@ long long Graph::pattern_matching_mpi(const Schedule_IEP& schedule, int thread_c
                 }
                 //subtraction_set.insert_ans_sort(vertex);
                 subtraction_set.push_back(vertex);
-                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1);
+                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1, ans_buffer);
                 subtraction_set.pop_back();
             };
             for (std::pair<int, int> range;;)
@@ -486,7 +487,8 @@ void Graph::pattern_matching_aggressive_func_mpi(const Schedule_IEP& schedule, V
         if( is_zero ) continue;
         //subtraction_set.insert_ans_sort(vertex);
         subtraction_set.push_back(vertex);
-        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1);
+        int* ans_buffer = new int[schedule.in_exclusion_optimize_vertex_id.size()];
+        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, ans_buffer);
         subtraction_set.pop_back();
     }
 }

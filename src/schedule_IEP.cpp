@@ -251,6 +251,8 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
 
     build_loop_invariant(in_exclusion_optimize_num);
     if( restricts_type != 0) add_restrict(best_pairs);
+
+    set_in_exclusion_optimize_redundancy();
 }
 
 Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
@@ -301,6 +303,8 @@ Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
     }
 
     build_loop_invariant();
+
+    set_in_exclusion_optimize_redundancy();
 }
 
 Schedule_IEP::~Schedule_IEP()
@@ -365,6 +369,7 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
     }
 
     if( in_exclusion_optimize_num > 0) {
+        printf("begin to build IEP loop invariant, basic prefix num = %d\n", basic_prefix_num);
         //IEP loop invariant
         in_exclusion_optimize_vertex_id.clear();
         in_exclusion_optimize_coef.clear();
@@ -447,6 +452,8 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 if(prefix[prefix_id].get_has_child() == false)
                     prefix[prefix_id].set_only_need_size(true);
             }
+
+        printf("total prefix num = %d\n", total_prefix_num);
     }
 
     for(int i = 0; i < size; ++i) 
@@ -1871,4 +1878,24 @@ int Schedule_IEP::get_in_exclusion_optimize_num_when_not_optimize() {
     std::vector<int> I;
     for(int i = 0; i < size; ++i) I.push_back(i);
     return get_vec_optimize_num(I);
+}
+
+void Schedule_IEP::set_in_exclusion_optimize_redundancy() {
+    int tmp = get_in_exclusion_optimize_num();
+    if(tmp <= 1) {
+        in_exclusion_optimize_redundancy = 1;
+    }
+    else {
+        Graph* complete;
+        DataLoader* D = new DataLoader();
+        assert(D->load_complete(complete, get_size()));
+        delete D;
+        in_exclusion_optimize_redundancy = 1;
+        long long ans = complete->pattern_matching( *this, 1);
+        set_in_exclusion_optimize_num(0);
+        long long true_ans = complete->pattern_matching( *this, 1);
+        set_in_exclusion_optimize_num(tmp);
+        delete complete;
+        in_exclusion_optimize_redundancy = ans / true_ans;
+    }
 }
