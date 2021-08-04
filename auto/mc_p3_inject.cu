@@ -74,23 +74,23 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
             
             v2 = v_depth2; // subtraction_set.push_back(v2);
 
-            int ans0 = vertex_set[2].get_size() - 0;
-            int ans1 = vertex_set[1].get_size() - 1;
+            int ans0 = vertex_set[1].get_size() - 1;
+            int ans1 = vertex_set[2].get_size() - 0;
             long long val;
             val = ans0;
-            val = val * ans0;
+            val = val * ans1;
             val = val * ans1;
             sum += val * 1;
-            val = ans0;
-            val = val * ans0;
-            sum += val * -1;
-            val = ans0;
-            val = val * ans0;
+            val = ans1;
+            val = val * ans1;
             sum += val * -1;
             val = ans0;
             val = val * ans1;
             sum += val * -1;
-            val = ans0;
+            val = ans1;
+            val = val * ans1;
+            sum += val * -1;
+            val = ans1;
             sum += val * 2;
         }
     }

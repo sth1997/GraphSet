@@ -281,9 +281,6 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, b
         }
     delete[] have_edge;
 
-    bool ok = dump_graph(*g, "patents.g");
-    printf("dump graph %d\n", ok);
-
     return true;
 }
 

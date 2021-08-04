@@ -7,17 +7,17 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
     int lid = threadIdx.x % THREADS_PER_WARP;
     int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid;
     unsigned int &edge_idx = block_edge_idx[wid];
-    GPUVertexSet *vertex_set = block_vertex_set + wid * 6;
+    GPUVertexSet *vertex_set = block_vertex_set + wid * 5;
 
-    GPUVertexSet &subtraction_set = vertex_set[5];
+    GPUVertexSet &subtraction_set = vertex_set[4];
     if (lid == 0) {
         edge_idx = 0;
-        uint32_t offset = buffer_size * global_wid * 5;
+        uint32_t offset = buffer_size * global_wid * 4;
 
-        uint32_t *block_subtraction_set_buf = (uint32_t *)(block_shmem + 768);
+        uint32_t *block_subtraction_set_buf = (uint32_t *)(block_shmem + 640);
         subtraction_set.set_data_ptr(block_subtraction_set_buf + wid * 4);
 
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 4; ++i) {
             vertex_set[i].set_data_ptr(tmp + offset);
             offset += buffer_size;
         }
@@ -85,22 +85,10 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
                 }
                 if (vertex_set[3].get_size() == 0) continue;
                 
-                {
-                    tmp_vset = &vertex_set[4];
-                    if (threadIdx.x % THREADS_PER_WARP == 0)
-                        tmp_vset->init(r_depth3 - l_depth3, &edge[l_depth3]);
-                    __threadfence_block();
-                    if (r_depth3 - l_depth3 > vertex_set[1].get_size())
-                        tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[1], -1);
-                    else
-                        tmp_vset->size = vertex_set[1].get_size() - unordered_subtraction_size(vertex_set[1], *tmp_vset, -1);
-                }
-                if (vertex_set[4].get_size() == 1) continue;
-                
                 v3 = v_depth3; // subtraction_set.push_back(v3);
 
                 int ans0 = vertex_set[3].get_size() - 0;
-                int ans1 = vertex_set[4].get_size() - 1;
+                int ans1 = vertex_set[2].get_size() - 1;
                 int ans2 = vertex_set[1].get_size() - 2;
                 long long val;
                 val = ans0;
