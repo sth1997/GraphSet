@@ -97,6 +97,9 @@ private:
     std::vector< std::vector< std::vector<int> > >in_exclusion_optimize_group;
     std::vector< int > in_exclusion_optimize_val;
 
+    bool check_connectivity() const;
+    void setup_optimization_info(bool use_in_exclusion_optimize = true);
+    void copy_adj_mat_from(const std::vector<int>& vec, const int* src_adj_mat);
     void build_loop_invariant(int in_exclusion_optimize_num = 0);
     int find_father_prefix(int data_size, const int* data);
     void get_full_permutation(std::vector< std::vector<int> >& vec, bool use[], std::vector<int> tmp_vec, int depth) const;
@@ -105,6 +108,7 @@ private:
     void new_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt, long long tri_cnt);
     void GraphZero_performance_modeling(int* best_order, int v_cnt, unsigned int e_cnt);
 
+    double new_estimate_schedule_restrict(const std::vector<std::pair<int, int>>& restrictions, int v_cnt, unsigned int e_cnt, long long tri_cnt);
     double our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt);
     double GraphZero_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt);
     double Naive_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &paris, int v_cnt, unsigned int e_cnt);
