@@ -13,6 +13,7 @@ enum DataType {
     Twitter,
     CiteSeer,
     Wiki_Vote,
+    Patents_Labeled,
     Invalid
 };
 
@@ -23,6 +24,7 @@ constexpr long long CiteSeer_tri_cnt = 1166LL;
 constexpr long long Wiki_Vote_tri_cnt = 608389LL;
 constexpr long long Orkut_tri_cnt = 627584181LL;
 constexpr long long Twitter_tri_cnt = 34824916864LL;
+constexpr long long Patents_Labeled_tri_cnt = 6913764LL;
 
 class DataLoader {
 public:
