@@ -1,7 +1,7 @@
 #include <../include/graph.h>
 #include <../include/dataloader.h>
 #include "../include/pattern.h"
-#include "../include/schedule.h"
+#include "../include/schedule_IEP.h"
 #include "../include/common.h"
 #include "../include/motif_generator.h"
 #include "../include/vertex_set.h"
@@ -15,7 +15,7 @@ void three_motif_test(Graph* &g) {
     int thread_num = 24;
     Pattern triangle(3, true);
     bool is_pattern_valid;
-    Schedule schedule(triangle, is_pattern_valid, 1, 1, 1, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule_IEP schedule(triangle, is_pattern_valid, 1, 1, 1, g->v_cnt, g->e_cnt, g->tri_cnt);
     assert(is_pattern_valid);
 
     double t1 = get_wall_time();
@@ -33,7 +33,7 @@ void four_motif_test(Graph* &g) {
     double total_time = 0;
     for(auto p : patterns) {
         bool is_pattern_valid;
-        Schedule schedule(p, is_pattern_valid, 1, 1, 1, g->v_cnt, g->e_cnt, g->tri_cnt);
+        Schedule_IEP schedule(p, is_pattern_valid, 1, 1, 1, g->v_cnt, g->e_cnt, g->tri_cnt);
         assert(is_pattern_valid);
         double t1 = get_wall_time();
         long long ans = g->pattern_matching(schedule, thread_num);
@@ -66,7 +66,7 @@ int main(int argc,char *argv[]) {
     printf("Load data success!\n");
     fflush(stdout);
 
-//    three_motif_test(g);
+    three_motif_test(g);
 
     four_motif_test(g);
 

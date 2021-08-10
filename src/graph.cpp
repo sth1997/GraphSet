@@ -276,7 +276,7 @@ long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count
 }
 
 // input triangle's schedule, output <triangle_count, chair_count>
-std::pair<long long, long long> Graph::three_motifs(const Schedule& schedule, int thread_count) 
+std::pair<long long, long long> Graph::three_motifs(const Schedule_IEP& schedule, int thread_count) 
 {
     long long global_triangle_ans = 0;
     long long global_chain_ans = 0;

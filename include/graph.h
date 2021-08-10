@@ -49,7 +49,7 @@ public:
     long long pattern_matching(const Schedule_IEP& schedule, int thread_count, bool clique = false);
 
     //three motifs counting with multi threads
-    std::pair<long long, long long> three_motifs(const Schedule& schedule, int thread_count);
+    std::pair<long long, long long> three_motifs(const Schedule_IEP& schedule, int thread_count);
 
     //general pattern matching algorithm with multi thread ans multi process
     long long pattern_matching_mpi(const Schedule_IEP& schedule, int thread_count, bool clique = false);
