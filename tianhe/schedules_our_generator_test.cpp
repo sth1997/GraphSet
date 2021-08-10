@@ -12,8 +12,9 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <chrono>
 
-int node_cnt = 72;
+int node_cnt = 1;
 int my_rank;
 
 void test_pattern(Graph* g, Pattern &pattern) {
@@ -27,7 +28,7 @@ void test_pattern(Graph* g, Pattern &pattern) {
     bool use_in_exclusion_optimize;
 
     t1 = get_wall_time();
-    Schedule schedule_our(pattern, is_pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule_IEP schedule_our(pattern, is_pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
     assert(is_pattern_valid);
     t2 = get_wall_time();
 
@@ -84,7 +85,7 @@ void test_pattern(Graph* g, Pattern &pattern) {
         assert(my_k <= k_val);
         if(my_k != k_val) continue;
 
-        Schedule schedule(cur_pattern, is_pattern_valid, 0, 1, false, g->v_cnt, g->e_cnt, g->tri_cnt);
+        Schedule_IEP schedule(cur_pattern, is_pattern_valid, 0, 1, false, g->v_cnt, g->e_cnt, g->tri_cnt);
         if(is_pattern_valid == false) continue;
 
         ++work_cnt;
@@ -112,27 +113,26 @@ void test_pattern(Graph* g, Pattern &pattern) {
 int main(int argc,char *argv[]) {
     Graph *g;
     DataLoader D;
-
-    const std::string data_type = argv[1];
-    const std::string path = argv[2];
     
-    int size = atoi(argv[3]);
-    char* adj_mat = argv[4];
-    my_rank = atoi(argv[5]);
-    
-    DataType my_type;
+    using std::chrono::system_clock;
+    auto t1 = system_clock::now();
 
-    GetDataType(my_type, data_type);
+    bool ok;
+    ok = D.fast_load(g, argv[1]);
 
-    if( my_type == DataType::Invalid) {
-        printf("Dataset not found!\n");
+    if (!ok) {
+        printf("data load failure :-(\n");
         return 0;
     }
 
-    assert(D.load_data(g,my_type,path.c_str())==true); 
-
-    printf("Load data success!\n");
+    auto t2 = system_clock::now();
+    auto load_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    printf("Load data success! time: %g seconds\n", load_time.count() / 1.0e6);
     fflush(stdout);
+    
+    int size = atoi(argv[2]);
+    char* adj_mat = argv[3];
+    my_rank = atoi(argv[4]);
 
     Pattern p(size, adj_mat);
     test_pattern(g, p);

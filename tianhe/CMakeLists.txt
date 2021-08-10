@@ -4,3 +4,6 @@ TARGET_LINK_LIBRARIES(baseline_test graph_mining)
 ADD_EXECUTABLE(motifs_test motifs_test.cpp)
 TARGET_LINK_LIBRARIES(motifs_test graph_mining)
 
+ADD_EXECUTABLE(schedules_our_generator_test schedules_our_generator_test.cpp)
+TARGET_LINK_LIBRARIES(schedules_our_generator_test graph_mining)
+
