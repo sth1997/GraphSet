@@ -274,6 +274,42 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
     return global_ans / schedule.get_in_exclusion_optimize_redundancy();
 }
 
+// input triangle's schedule, output <triangle_count, chair_count>
+std::pair<long long, long long> Graph::three_motifs(const Schedule& schedule, int thread_count) 
+{
+    long long global_triangle_ans = 0;
+    long long global_chain_ans = 0;
+#pragma omp parallel num_threads(thread_count) reduction(+: global_triangle_ans,global_chain_ans)
+    {
+        VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
+        VertexSet subtraction_set;
+        VertexSet tmp_set;
+        subtraction_set.init();
+        long long local_triangle_ans = 0;
+        long long local_chain_ans = 0;
+#pragma omp for schedule(dynamic) nowait
+        for (int vertex = 0; vertex < v_cnt; ++vertex)
+        {
+            unsigned int l, r;
+            get_edge_index(vertex, l, r);
+            local_chain_ans += 1ll * (r - l) * (r - l - 1) / 2;
+            for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
+            {
+                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id);
+            }
+            subtraction_set.push_back(vertex);
+            pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_triangle_ans, 1);
+            subtraction_set.pop_back();
+        }
+        delete[] vertex_set;
+        // TODO : Computing multiplicty for a pattern
+        global_triangle_ans += local_triangle_ans;
+        global_chain_ans += local_chain_ans;
+        
+    }
+    return std::make_pair(global_triangle_ans / schedule.get_in_exclusion_optimize_redundancy(), global_chain_ans);
+}
+
 void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
