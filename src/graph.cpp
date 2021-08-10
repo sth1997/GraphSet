@@ -177,7 +177,7 @@ void Graph::get_edge_index(int v, unsigned int& l, unsigned int& r) const
     r = vertex[v + 1];
 }
 
-void Graph::pattern_matching_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, long long& local_ans, int depth, bool clique)
+void Graph::pattern_matching_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, long long& local_ans, int depth, bool clique)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -197,7 +197,7 @@ void Graph::pattern_matching_func(const Schedule& schedule, VertexSet* vertex_se
         if (clique == true)
             local_ans += loop_size;
         else if (loop_size > 0)
-            local_ans += VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
+            local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
         return;
     }
 
@@ -229,7 +229,7 @@ void Graph::pattern_matching_func(const Schedule& schedule, VertexSet* vertex_se
     }
 }
 
-long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bool clique)
+long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count, bool clique)
 {
 //    intersection_times_low = intersection_times_high = 0;
 //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
@@ -238,6 +238,7 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
     {
      //   double start_time = get_wall_time();
      //   double current_time;
+        int* ans_buffer = new int[schedule.in_exclusion_optimize_vertex_id.size()];
         VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
         VertexSet subtraction_set;
         VertexSet tmp_set;
@@ -257,7 +258,7 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
             subtraction_set.push_back(vertex);
             //if (schedule.get_total_restrict_num() > 0 && clique == false)
             if(true)
-                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1);
+                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1, ans_buffer);
             else
                 pattern_matching_func(schedule, vertex_set, subtraction_set, local_ans, 1, clique);
             subtraction_set.pop_back();
@@ -287,6 +288,7 @@ std::pair<long long, long long> Graph::three_motifs(const Schedule& schedule, in
         subtraction_set.init();
         long long local_triangle_ans = 0;
         long long local_chain_ans = 0;
+        int ans_buffer[5];
 #pragma omp for schedule(dynamic) nowait
         for (int vertex = 0; vertex < v_cnt; ++vertex)
         {
@@ -298,7 +300,7 @@ std::pair<long long, long long> Graph::three_motifs(const Schedule& schedule, in
                 vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id);
             }
             subtraction_set.push_back(vertex);
-            pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_triangle_ans, 1);
+            pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_triangle_ans, 1, ans_buffer);
             subtraction_set.pop_back();
         }
         delete[] vertex_set;
@@ -310,7 +312,7 @@ std::pair<long long, long long> Graph::three_motifs(const Schedule& schedule, in
     return std::make_pair(global_triangle_ans / schedule.get_in_exclusion_optimize_redundancy(), global_chain_ans);
 }
 
-void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth)
+void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth, int* ans_buffer)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -318,91 +320,34 @@ void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet
         return;
 
     int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
-/*
-    //Case: in_exclusion_optimize_num = 2
-    if (depth == schedule.get_size() - 2 && schedule.get_in_exclusion_optimize_num() == 2) { 
-        int loop_set_prefix_id_nxt = schedule.get_loop_set_prefix_id( depth + 1);
-        int loop_size_nxt = vertex_set[loop_set_prefix_id_nxt].get_size();
-        int size1 = VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
-        int size2 = VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_id_nxt], subtraction_set);
-        VertexSet tmp_set;
-        tmp_set.init();
-        tmp_set.intersection(vertex_set[loop_set_prefix_id], vertex_set[loop_set_prefix_id_nxt]);
-        int size3 = VertexSet::unorderd_subtraction_size(tmp_set, subtraction_set);
-        local_ans += 1ll * size1 * size2 - size3;
-        return;
-    }
-*/
-/*
-    //Case: in_exclusion_optimize_num = 3
-    if( depth == schedule.get_size() - 3 && schedule.get_in_exclusion_optimize_num() == 3) { 
-        int in_exclusion_optimize_num = 3;
-        int loop_set_prefix_ids[ in_exclusion_optimize_num];
-        for(int i = 0; i < in_exclusion_optimize_num; ++i)
-            loop_set_prefix_ids[i] = schedule.get_loop_set_prefix_id( depth + i );
-        
-        int loop_sizes[ in_exclusion_optimize_num ];
-        for(int i = 0; i < in_exclusion_optimize_num; ++i)
-            loop_sizes[i] = VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_ids[i]], subtraction_set);
-        
-        local_ans += 1ll * loop_sizes[0] * loop_sizes[1] * loop_sizes[2];
-
-        for(int i = 1; i < 3; ++i) 
-            for(int j = 0; j < i; ++j){
-                VertexSet tmp_set;
-                tmp_set.init();
-                tmp_set.intersection(vertex_set[loop_set_prefix_ids[i]], vertex_set[loop_set_prefix_ids[j]]);
-                int tmp_size = VertexSet::unorderd_subtraction_size(tmp_set, subtraction_set);
-                int size2;
-                for(int k = 0; k < 3; ++k)
-                    if( i != k && j != k) size2 = loop_sizes[k];
-                local_ans -= 1ll * tmp_size * size2;
-            }
-        VertexSet tmp1;
-        tmp1.init();
-        tmp1.intersection(vertex_set[loop_set_prefix_ids[0]], vertex_set[loop_set_prefix_ids[1]]);
-        VertexSet tmp2;
-        tmp2.init();
-        tmp2.intersection(vertex_set[loop_set_prefix_ids[2]], tmp1);
-        local_ans += 1ll * 2 * VertexSet::unorderd_subtraction_size(tmp2, subtraction_set);
-        return;
-    }
-*/
     //Case: in_exclusion_optimize_num > 1
     if( depth == schedule.get_size() - schedule.get_in_exclusion_optimize_num() ) {
-        int in_exclusion_optimize_num = schedule.get_in_exclusion_optimize_num();
-        int loop_set_prefix_ids[ in_exclusion_optimize_num ];
-        loop_set_prefix_ids[0] = loop_set_prefix_id;
-        for(int i = 1; i < in_exclusion_optimize_num; ++i)
-            loop_set_prefix_ids[i] = schedule.get_loop_set_prefix_id( depth + i );
-        for(int optimize_rank = 0; optimize_rank < schedule.in_exclusion_optimize_group.size(); ++optimize_rank) {
-            const std::vector< std::vector<int> >& cur_graph = schedule.in_exclusion_optimize_group[optimize_rank];
-            long long val = schedule.in_exclusion_optimize_val[optimize_rank];
-            for(int cur_graph_rank = 0; cur_graph_rank < cur_graph.size(); ++ cur_graph_rank) {
-//                VertexSet tmp_set;
-                
-                //if size == 1 , we will not call intersection(...)
-                //so we will not allocate memory for data
-                //otherwise, we need to copy the data to do intersection(...)
-                if(cur_graph[cur_graph_rank].size() == 1) {
-                    int id = loop_set_prefix_ids[cur_graph[cur_graph_rank][0]];
-                    val = val * VertexSet::unorderd_subtraction_size(vertex_set[id], subtraction_set);
-                }
-                else {
-                    int id = loop_set_prefix_ids[cur_graph[cur_graph_rank][0]];
-                    tmp_set.copy(vertex_set[id].get_size(), vertex_set[id].get_data_ptr());
+        
+        int last_pos = -1;
+        long long val;
 
-                    for(int i = 1; i < cur_graph[cur_graph_rank].size(); ++i) {
-                        int id = loop_set_prefix_ids[cur_graph[cur_graph_rank][i]];
-                        tmp_set.intersection_with(vertex_set[id]);
-                    }
-                    val = val * VertexSet::unorderd_subtraction_size(tmp_set, subtraction_set);
-                }
-                if( val == 0 ) break;
-
+        for(int i = 0; i < schedule.in_exclusion_optimize_vertex_id.size(); ++i) {
+            if(schedule.in_exclusion_optimize_vertex_flag[i]) {
+                ans_buffer[i] = vertex_set[schedule.in_exclusion_optimize_vertex_id[i]].get_size() - schedule.in_exclusion_optimize_vertex_coef[i];
             }
-            local_ans += val;
+            else {
+                ans_buffer[i] = VertexSet::unordered_subtraction_size(vertex_set[schedule.in_exclusion_optimize_vertex_id[i]], subtraction_set);
+            }
         }
+
+        for(int pos = 0; pos < schedule.in_exclusion_optimize_coef.size(); ++pos) {
+            if(pos == last_pos + 1)
+                val = ans_buffer[schedule.in_exclusion_optimize_ans_pos[pos]];
+            else {
+                if( val != 0)
+                    val = val * ans_buffer[schedule.in_exclusion_optimize_ans_pos[pos]];
+            }
+            if(schedule.in_exclusion_optimize_flag[pos]) {
+                last_pos = pos;
+                local_ans += val * schedule.in_exclusion_optimize_coef[pos];
+            }
+        }
+
         return;
             
     }
@@ -420,10 +365,10 @@ void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet
             const VertexSet& vset = vertex_set[loop_set_prefix_id];
             int size_after_restrict = std::lower_bound(vset.get_data_ptr(), vset.get_data_ptr() + vset.get_size(), min_vertex) - vset.get_data_ptr();
             if (size_after_restrict > 0)
-                local_ans += VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
+                local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
         }
         else
-            local_ans += VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
+            local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
         return;
     }
 
@@ -451,7 +396,8 @@ void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet
         for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, vertex);
-            if( vertex_set[prefix_id].get_size() == 0) {
+            //if( vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule.get_basic_prefix_num()) {
+            if( vertex_set[prefix_id].get_size() == schedule.break_size[prefix_id]) {
                 is_zero = true;
                 break;
             }
@@ -459,12 +405,12 @@ void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet
         if( is_zero ) continue;
         //subtraction_set.insert_ans_sort(vertex);
         subtraction_set.push_back(vertex);
-        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1);
+        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, ans_buffer);
         subtraction_set.pop_back();
     }
 }
 
-long long Graph::pattern_matching_mpi(const Schedule& schedule, int thread_count, bool clique)
+long long Graph::pattern_matching_mpi(const Schedule_IEP& schedule, int thread_count, bool clique)
 {
     Graphmpi &gm = Graphmpi::getinstance();
     long long global_ans = 0;
@@ -480,6 +426,7 @@ long long Graph::pattern_matching_mpi(const Schedule& schedule, int thread_count
             global_ans = gm.runmajor();
         }
         if (omp_get_thread_num()) {
+            int* ans_buffer = new int[schedule.in_exclusion_optimize_vertex_id.size()];
             VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
             long long local_ans = 0;
             VertexSet subtraction_set;
@@ -492,7 +439,7 @@ long long Graph::pattern_matching_mpi(const Schedule& schedule, int thread_count
                 }
                 //subtraction_set.insert_ans_sort(vertex);
                 subtraction_set.push_back(vertex);
-                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1);
+                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1, ans_buffer);
                 subtraction_set.pop_back();
             };
             for (std::pair<int, int> range;;)
@@ -513,7 +460,7 @@ long long Graph::pattern_matching_mpi(const Schedule& schedule, int thread_count
     return global_ans;
 }
 
-void Graph::pattern_matching_aggressive_func_mpi(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet &tmp_set, long long& local_ans, int depth)
+void Graph::pattern_matching_aggressive_func_mpi(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet &tmp_set, long long& local_ans, int depth)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
@@ -533,10 +480,10 @@ void Graph::pattern_matching_aggressive_func_mpi(const Schedule& schedule, Verte
             const VertexSet& vset = vertex_set[loop_set_prefix_id];
             int size_after_restrict = std::lower_bound(vset.get_data_ptr(), vset.get_data_ptr() + vset.get_size(), min_vertex) - vset.get_data_ptr();
             if (size_after_restrict > 0)
-                local_ans += VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
+                local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
         }
         else
-            local_ans += VertexSet::unorderd_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
+            local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
         return;
     }
     
@@ -577,7 +524,8 @@ void Graph::pattern_matching_aggressive_func_mpi(const Schedule& schedule, Verte
         if( is_zero ) continue;
         //subtraction_set.insert_ans_sort(vertex);
         subtraction_set.push_back(vertex);
-        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1);
+        int* ans_buffer = new int[schedule.in_exclusion_optimize_vertex_id.size()];
+        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, ans_buffer);
         subtraction_set.pop_back();
     }
 }
