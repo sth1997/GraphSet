@@ -12,6 +12,30 @@ wv="/home/hzx/data/wiki-vote.g"
 lj="/home/hzx/data/livejournal.g"
 or="/home/hzx/data/orkut.g"
 
+cat before_inj.cu > cs_p1.cu
+cat cs_p1_inject.cu >> cs_p1.cu
+cat after_inj.cu >> cs_p1.cu
+
+cat before_inj.cu > cs_p2.cu
+cat cs_p2_inject.cu >> cs_p2.cu
+cat after_inj.cu >> cs_p2.cu
+
+cat before_inj.cu > cs_p3.cu
+cat cs_p3_inject.cu >> cs_p3.cu
+cat after_inj.cu >> cs_p3.cu
+
+cat before_inj.cu > cs_p4.cu
+cat cs_p4_inject.cu >> cs_p4.cu
+cat after_inj.cu >> cs_p4.cu
+
+cat before_inj.cu > cs_p5.cu
+cat cs_p5_inject.cu >> cs_p5.cu
+cat after_inj.cu >> cs_p5.cu
+
+cat before_inj.cu > cs_p6.cu
+cat cs_p6_inject.cu >> cs_p6.cu
+cat after_inj.cu >> cs_p6.cu
+
 cat before_inj.cu > pt_p1.cu
 cat pt_p1_inject.cu >> pt_p1.cu
 cat after_inj.cu >> pt_p1.cu

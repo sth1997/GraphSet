@@ -9,20 +9,22 @@ patterns.append("0111111101111111011101110100111100011100001100000")
 patterns.append("0111111101111111011001110100111100011000001100000")
 pattern_sizes = [5, 6, 6, 6, 7, 7]
 graphs = []
-graphs.append("wiki-vote.g")
-graphs.append("patents.g")
-graphs.append("mico.g")
-graphs.append("livejournal.g")
-graphs.append("orkut.g")
+graphs.append("citeseer.g")
+#graphs.append("wiki-vote.g")
+#graphs.append("patents.g")
+#graphs.append("mico.g")
+#graphs.append("livejournal.g")
+#graphs.append("orkut.g")
 g = []
-g.append('wv')
-g.append("pt")
-g.append("mc")
-g.append("lj")
-g.append("or")
+g.append('cs')
+#g.append('wv')
+#g.append("pt")
+#g.append("mc")
+#g.append("lj")
+#g.append("or")
 for g_idx, graph in enumerate(graphs):
     for p in range(len(patterns)):
         #log_name = graph + "_" + "p" + str(p + 1) + ".log"
-        log_name = "../auto/" + g[g_idx] + "_p" + str(p + 1) + "_inject.cu" 
-        # os.system("srun -N 1 ./bin/final_generator /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
-        os.system("./bin/final_generator /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        log_name = "./auto/" + g[g_idx] + "_p" + str(p + 1) + "_inject.cu" 
+        # os.system("srun -p V132 ./bin/final_generator /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        os.system("srun -p V132 ./build/bin/final_generator /home/zms/GraphMining/graph_dataset/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
