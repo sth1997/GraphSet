@@ -40,6 +40,7 @@ public:
     bool check_connected() const;
     void count_all_isomorphism(std::set< std::set<int> >& s) const;
     void print() const;
+    void print_adjmat() const;
     bool is_dag() const;
 private:
     Pattern& operator =(const Pattern&);

@@ -122,3 +122,195 @@ ADD_EXECUTABLE(or_p6 or_p6.cu)
 SET_PROPERTY(TARGET or_p6 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(or_p6 graph_mining)
 
+ADD_EXECUTABLE(pt_motif_test1 pt_motif_test1.cu)
+SET_PROPERTY(TARGET pt_motif_test1 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test1 graph_mining)
+
+ADD_EXECUTABLE(pt_motif_test2 pt_motif_test2.cu)
+SET_PROPERTY(TARGET pt_motif_test2 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test2 graph_mining)
+
+ADD_EXECUTABLE(pt_motif_test3 pt_motif_test3.cu)
+SET_PROPERTY(TARGET pt_motif_test3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test3 graph_mining)
+
+ADD_EXECUTABLE(pt_motif_test4 pt_motif_test4.cu)
+SET_PROPERTY(TARGET pt_motif_test4 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test4 graph_mining)
+
+ADD_EXECUTABLE(pt_motif_test5 pt_motif_test5.cu)
+SET_PROPERTY(TARGET pt_motif_test5 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test5 graph_mining)
+
+ADD_EXECUTABLE(pt_motif_test6 pt_motif_test6.cu)
+SET_PROPERTY(TARGET pt_motif_test6 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test6 graph_mining)
+
+ADD_EXECUTABLE(pt_motif_test7 pt_motif_test7.cu)
+SET_PROPERTY(TARGET pt_motif_test7 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test7 graph_mining)
+
+ADD_EXECUTABLE(pt_motif_test8 pt_motif_test8.cu)
+SET_PROPERTY(TARGET pt_motif_test8 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(pt_motif_test8 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test1 cs_motif_test1.cu)
+SET_PROPERTY(TARGET cs_motif_test1 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test1 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test2 cs_motif_test2.cu)
+SET_PROPERTY(TARGET cs_motif_test2 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test2 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test3 cs_motif_test3.cu)
+SET_PROPERTY(TARGET cs_motif_test3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test3 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test4 cs_motif_test4.cu)
+SET_PROPERTY(TARGET cs_motif_test4 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test4 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test5 cs_motif_test5.cu)
+SET_PROPERTY(TARGET cs_motif_test5 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test5 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test6 cs_motif_test6.cu)
+SET_PROPERTY(TARGET cs_motif_test6 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test6 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test7 cs_motif_test7.cu)
+SET_PROPERTY(TARGET cs_motif_test7 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test7 graph_mining)
+
+ADD_EXECUTABLE(cs_motif_test8 cs_motif_test8.cu)
+SET_PROPERTY(TARGET cs_motif_test8 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(cs_motif_test8 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test1 mc_motif_test1.cu)
+SET_PROPERTY(TARGET mc_motif_test1 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test1 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test2 mc_motif_test2.cu)
+SET_PROPERTY(TARGET mc_motif_test2 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test2 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test3 mc_motif_test3.cu)
+SET_PROPERTY(TARGET mc_motif_test3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test3 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test4 mc_motif_test4.cu)
+SET_PROPERTY(TARGET mc_motif_test4 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test4 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test5 mc_motif_test5.cu)
+SET_PROPERTY(TARGET mc_motif_test5 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test5 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test6 mc_motif_test6.cu)
+SET_PROPERTY(TARGET mc_motif_test6 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test6 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test7 mc_motif_test7.cu)
+SET_PROPERTY(TARGET mc_motif_test7 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test7 graph_mining)
+
+ADD_EXECUTABLE(mc_motif_test8 mc_motif_test8.cu)
+SET_PROPERTY(TARGET mc_motif_test8 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(mc_motif_test8 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test1 wv_motif_test1.cu)
+SET_PROPERTY(TARGET wv_motif_test1 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test1 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test2 wv_motif_test2.cu)
+SET_PROPERTY(TARGET wv_motif_test2 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test2 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test3 wv_motif_test3.cu)
+SET_PROPERTY(TARGET wv_motif_test3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test3 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test4 wv_motif_test4.cu)
+SET_PROPERTY(TARGET wv_motif_test4 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test4 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test5 wv_motif_test5.cu)
+SET_PROPERTY(TARGET wv_motif_test5 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test5 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test6 wv_motif_test6.cu)
+SET_PROPERTY(TARGET wv_motif_test6 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test6 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test7 wv_motif_test7.cu)
+SET_PROPERTY(TARGET wv_motif_test7 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test7 graph_mining)
+
+ADD_EXECUTABLE(wv_motif_test8 wv_motif_test8.cu)
+SET_PROPERTY(TARGET wv_motif_test8 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(wv_motif_test8 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test1 or_motif_test1.cu)
+SET_PROPERTY(TARGET or_motif_test1 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test1 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test2 or_motif_test2.cu)
+SET_PROPERTY(TARGET or_motif_test2 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test2 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test3 or_motif_test3.cu)
+SET_PROPERTY(TARGET or_motif_test3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test3 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test4 or_motif_test4.cu)
+SET_PROPERTY(TARGET or_motif_test4 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test4 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test5 or_motif_test5.cu)
+SET_PROPERTY(TARGET or_motif_test5 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test5 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test6 or_motif_test6.cu)
+SET_PROPERTY(TARGET or_motif_test6 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test6 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test7 or_motif_test7.cu)
+SET_PROPERTY(TARGET or_motif_test7 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test7 graph_mining)
+
+ADD_EXECUTABLE(or_motif_test8 or_motif_test8.cu)
+SET_PROPERTY(TARGET or_motif_test8 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(or_motif_test8 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test1 lj_motif_test1.cu)
+SET_PROPERTY(TARGET lj_motif_test1 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test1 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test2 lj_motif_test2.cu)
+SET_PROPERTY(TARGET lj_motif_test2 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test2 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test3 lj_motif_test3.cu)
+SET_PROPERTY(TARGET lj_motif_test3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test3 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test4 lj_motif_test4.cu)
+SET_PROPERTY(TARGET lj_motif_test4 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test4 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test5 lj_motif_test5.cu)
+SET_PROPERTY(TARGET lj_motif_test5 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test5 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test6 lj_motif_test6.cu)
+SET_PROPERTY(TARGET lj_motif_test6 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test6 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test7 lj_motif_test7.cu)
+SET_PROPERTY(TARGET lj_motif_test7 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test7 graph_mining)
+
+ADD_EXECUTABLE(lj_motif_test8 lj_motif_test8.cu)
+SET_PROPERTY(TARGET lj_motif_test8 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(lj_motif_test8 graph_mining)
+

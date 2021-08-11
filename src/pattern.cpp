@@ -284,6 +284,14 @@ void Pattern::print() const
     printf("\n");
 }
 
+void Pattern::print_adjmat() const {
+    printf("%d ", size);
+    for(int i = 0; i < size; ++i)
+        for(int j = 0; j < size; ++j)
+            printf("%d", adj_mat[INDEX(i, j, size)]);
+    puts("");
+}
+
 bool Pattern::is_dag() const
 {
     int degree[size];
