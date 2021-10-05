@@ -152,7 +152,7 @@ void VertexSet::intersection_with(const VertexSet& set1) {
     }*/
 }
 
-void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vertex_set, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
+void VertexSet::build_vertex_set(const Schedule_IEP& schedule, const VertexSet* vertex_set, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
 {
     int father_id = schedule.get_father_prefix_id(prefix_id);
     if (father_id == -1)
@@ -190,7 +190,7 @@ bool VertexSet::has_data(int val)
     return false;
 }
 
-int VertexSet::unorderd_subtraction_size(const VertexSet& set0, const VertexSet& set1, int size_after_restrict)
+int VertexSet::unordered_subtraction_size(const VertexSet& set0, const VertexSet& set1, int size_after_restrict)
 {
     int size0 = set0.get_size();
     int size1 = set1.get_size();
