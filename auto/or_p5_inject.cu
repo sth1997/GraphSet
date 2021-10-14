@@ -1,4 +1,4 @@
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp) {
     __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
     extern __shared__ GPUVertexSet block_vertex_set[];
     extern __shared__ char block_shmem[];

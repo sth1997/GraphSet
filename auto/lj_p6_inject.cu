@@ -1,4 +1,4 @@
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp) {
     __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
     extern __shared__ GPUVertexSet block_vertex_set[];
     extern __shared__ char block_shmem[];
@@ -67,8 +67,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 
             int loop_size_depth3 = vertex_set[2].get_size();
             uint32_t* loop_data_ptr_depth3 = vertex_set[2].get_data_ptr();
-            uint32_t min_vertex_depth3 = 0xffffffff;
-            min_vertex_depth3 = min(min_vertex_depth3, v2);
+            uint32_t min_vertex_depth3 = v2;
             for (int i_depth3 = 0; i_depth3 < loop_size_depth3; ++i_depth3) {
                 uint32_t v_depth3 = loop_data_ptr_depth3[i_depth3];
                 if (min_vertex_depth3 <= v_depth3) break;

@@ -16,5 +16,5 @@ graphs.append("livejournal.g")
 graphs.append("orkut.g")
 for graph in graphs:
     for p in range(len(patterns)):
-        log_name = graph + "_" + "p" + str(p + 1) + ".log"
-        os.system("srun -N 1 ./bin/gpu_graph /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        log_name = "general_" + graph + "_" + "p" + str(p + 1) + ".log"
+        os.system("./bin/gpu_graph /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)

@@ -68,21 +68,6 @@ __device__ inline void swap(T& a, T& b)
     b = std::move(t);
 }
 
-struct GPUGroupDim2 {
-    int* data;
-    int size;
-};
-
-struct GPUGroupDim1 {
-    GPUGroupDim2* data;
-    int size;
-};
-
-struct GPUGroupDim0 {
-    GPUGroupDim1* data;
-    int size;
-};
-
 class GPUSchedule {
 public:
 
@@ -111,9 +96,6 @@ public:
     int* restrict_next;
     int* restrict_index;
     bool* only_need_size;
-    //int* in_exclusion_optimize_val;
-    //GPUGroupDim0 in_exclusion_optimize_group;
-    //int in_exclusion_optimize_val_size;
     int size;
     int total_prefix_num;
     int basic_prefix_num;
