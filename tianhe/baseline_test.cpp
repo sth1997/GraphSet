@@ -1,7 +1,7 @@
 #include <../include/graph.h>
 #include <../include/dataloader.h>
 #include "../include/pattern.h"
-#include "../include/schedule.h"
+#include "../include/schedule_IEP.h"
 #include "../include/common.h"
 #include "../include/motif_generator.h"
 #include "../include/vertex_set.h"
@@ -10,86 +10,58 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
-
-void test_pattern(Graph* g, const Pattern &pattern, int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize = false) {
-    printf("max intersection size %d\n", VertexSet::max_intersection_size);
-    int thread_num = 24;
-    double t1,t2;
-    
-    bool is_pattern_valid;
-    Schedule schedule(pattern, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
-    assert(is_pattern_valid);
-
-    t1 = get_wall_time();
-    long long ans = g->pattern_matching(schedule, thread_num);
-    t2 = get_wall_time();
-
-    printf("ans %lld\n", ans);
-    printf("time %.6lf\n", t2 - t1);
-//    printf("intersection %lld, %lld", g->intersection_times_low, g->intersection_times_high);
-//    printf("depth_cnt %lld %lld %lld\n", g->dep1_cnt, g->dep2_cnt, g->dep3_cnt);
-    schedule.print_schedule();
-    const auto& pairs = schedule.restrict_pair;
-    printf("%d ",pairs.size());
-    for(auto& p : pairs)
-        printf("(%d,%d)",p.first,p.second);
-    puts("");
-    fflush(stdout);
-
-}
+#include <chrono>
 
 int main(int argc,char *argv[]) {
+    
     Graph *g;
     DataLoader D;
-
-    const std::string type = argv[1];
-    const std::string path = argv[2];
     
-//    int size = atoi(argv[3]);
-//    char* adj_mat = argv[4];
+    using std::chrono::system_clock;
+    auto t1 = system_clock::now();
 
-//    int test_type = atoi(argv[5]);
-    
-    DataType my_type;
-    
-    GetDataType(my_type, type);
+    bool ok;
+    ok = D.fast_load(g, argv[1]);
 
-    if(my_type == DataType::Invalid) {
-        printf("Dataset not found!\n");
+    if (!ok) {
+        printf("data load failure :-(\n");
         return 0;
     }
 
-    assert(D.load_data(g,my_type,path.c_str())==true); 
-    //assert(D.load_data(g,200)==true); 
-
-    printf("Load data success!\n");
+    auto t2 = system_clock::now();
+    auto load_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    printf("Load data success! time: %g seconds\n", load_time.count() / 1.0e6);
     fflush(stdout);
 
-    //char tmpbuf[100] = "011110101101110000110000100001010010";
-    Pattern p(PatternType::House);
-    //Pattern p(6, tmpbuf);
-    test_pattern(g, p, 1, 1, true);
-    //test_pattern(g, p, 0, 1, true);
+    // const char *pattern_str = "0111010011100011100001100"; // 5 house p1
+    //const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
+    // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
+    // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
-/*
-    Pattern p1(PatternType::sigmod2020_guo_q1);
-    test_pattern(g, p1, 1, 1, true);
+    int pattern_size = atoi(argv[2]);
+    const char* pattern_str= argv[3];
+
+    Pattern p(pattern_size, pattern_str);
+    printf("pattern = \n");
+    p.print();
+    printf("max intersection size %d\n", VertexSet::max_intersection_size);
+    bool is_pattern_valid;
+    bool use_in_exclusion_optimize = true;
+    Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule_IEP schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // schedule is only used for getting redundancy
+    schedule_iep.set_in_exclusion_optimize_redundancy(schedule.get_in_exclusion_optimize_redundancy());
+
+    if (!is_pattern_valid) {
+        printf("pattern is invalid!\n");
+        return 0;
+    }
     
-    Pattern p2(PatternType::sigmod2020_guo_q2);
-    test_pattern(g, p2, 1, 1, true);
-    
-    Pattern p3(PatternType::sigmod2020_guo_q3);
-    test_pattern(g, p3, 1, 1, true);
-    
-    Pattern p4(PatternType::sigmod2020_guo_q4);
-    test_pattern(g, p4, 1, 1, true);
-    
-    Pattern p5(PatternType::sigmod2020_guo_q5);
-    test_pattern(g, p5, 1, 1, true);
-    
-    Pattern p6(PatternType::sigmod2020_guo_q6);
-    test_pattern(g, p6, 1, 1, true);
-*/
-    delete g;
+    double count_t1 = get_wall_time();
+    int thread_count = 24;
+    long long ans = g->pattern_matching(schedule_iep, thread_count);
+    double count_t2 = get_wall_time();
+    printf("couting time= %.6lf s\n", count_t2 - count_t1);
+    printf("ans=%lld\n", ans);
+
+    return 0;
 }
-

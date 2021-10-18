@@ -73,13 +73,14 @@ public:
     std::vector<int> in_exclusion_optimize_coef;
     std::vector<bool> in_exclusion_optimize_flag;
     std::vector<int> in_exclusion_optimize_ans_pos;
+    
+    int* break_size;
 
 private:
     int* adj_mat;
     int* father_prefix_id;
     int* last;
     int* next;
-    int* break_size;
     int* loop_set_prefix_id;
     Prefix* prefix;
     int* restrict_last;
@@ -120,5 +121,8 @@ private:
     int get_vec_optimize_num(const std::vector<int> &vec);
 
     void remove_invalid_permutation(std::vector< std::vector<int> > &candidate_permutations);
+    
+    inline void set_in_exclusion_optimize_num(int num) { in_exclusion_optimize_num = num; }
+    void set_in_exclusion_optimize_redundancy();
 };
 

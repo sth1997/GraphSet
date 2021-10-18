@@ -214,6 +214,8 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
     setup_optimization_info(use_in_exclusion_optimize);
 
     if( restricts_type != 0) add_restrict(best_pairs);
+
+    set_in_exclusion_optimize_redundancy();
 }
 
 Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
@@ -250,6 +252,8 @@ Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
         throw std::runtime_error("pattern is not connected");
 
     build_loop_invariant();
+
+    set_in_exclusion_optimize_redundancy();
 }
 
 Schedule_IEP::~Schedule_IEP()
@@ -450,6 +454,7 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
     }
 
     if( in_exclusion_optimize_num > 0) {
+        printf("begin to build IEP loop invariant, basic prefix num = %d\n", basic_prefix_num);
         //IEP loop invariant
         in_exclusion_optimize_vertex_id.clear();
         in_exclusion_optimize_coef.clear();
@@ -533,7 +538,8 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 if(prefix[prefix_id].get_has_child() == false)
                     prefix[prefix_id].set_only_need_size(true);
             }
-        }
+
+        printf("total prefix num = %d\n", total_prefix_num);
     }
 
     for(int i = 0; i < size; ++i) 
@@ -1648,7 +1654,7 @@ void Schedule_IEP::restrict_selection(int v_cnt, unsigned int e_cnt, long long t
 }
 
 void Schedule_IEP::restricts_generate(const int* cur_adj_mat, std::vector< std::vector< std::pair<int,int> > > &restricts) {
-    Schedule schedule(cur_adj_mat, get_size());
+    Schedule_IEP schedule(cur_adj_mat, get_size());
     schedule.aggressive_optimize_get_all_pairs(restricts);
     int size = schedule.get_size();
     Graph* complete;
@@ -1657,7 +1663,7 @@ void Schedule_IEP::restricts_generate(const int* cur_adj_mat, std::vector< std::
     long long ans = complete->pattern_matching( schedule, 1) / schedule.get_multiplicity();
     int thread_num = 1;
     for(int i = 0; i < restricts.size(); ) {
-        Schedule cur_schedule(schedule.get_adj_mat_ptr(), schedule.get_size());
+        Schedule_IEP cur_schedule(schedule.get_adj_mat_ptr(), schedule.get_size());
         cur_schedule.add_restrict(restricts[i]);
         long long cur_ans = complete->pattern_matching( cur_schedule, thread_num);
         if( cur_ans != ans) {
@@ -1958,4 +1964,24 @@ int Schedule_IEP::get_in_exclusion_optimize_num_when_not_optimize() {
     std::vector<int> I;
     for(int i = 0; i < size; ++i) I.push_back(i);
     return get_vec_optimize_num(I);
+}
+
+void Schedule_IEP::set_in_exclusion_optimize_redundancy() {
+    int tmp = get_in_exclusion_optimize_num();
+    if(tmp <= 1) {
+        in_exclusion_optimize_redundancy = 1;
+    }
+    else {
+        Graph* complete;
+        DataLoader* D = new DataLoader();
+        assert(D->load_complete(complete, get_size()));
+        delete D;
+        in_exclusion_optimize_redundancy = 1;
+        long long ans = complete->pattern_matching( *this, 1);
+        set_in_exclusion_optimize_num(0);
+        long long true_ans = complete->pattern_matching( *this, 1);
+        set_in_exclusion_optimize_num(tmp);
+        delete complete;
+        in_exclusion_optimize_redundancy = ans / true_ans;
+    }
 }
