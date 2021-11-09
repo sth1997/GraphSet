@@ -1,8 +1,5 @@
 #include <graph.h>
 #include <dataloader.h>
-#include <vertex_set.h>
-#include <common.h>
-#include <schedule_IEP.h>
 
 #include <cassert>
 #include <cstring>
@@ -13,37 +10,14 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
-#include <sys/time.h>
 #include <chrono>
+using std::chrono::system_clock;
+
+#include <gpu/config.cuh>
+#include <gpu/vertex_set.cuh>
 
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
-constexpr int THREADS_PER_BLOCK = 256;
-constexpr int THREADS_PER_WARP = 32;
-constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
-
-class TimeInterval{
-public:
-    TimeInterval(){
-        check();
-    }
-
-    void check(){
-        gettimeofday(&tp, NULL);
-    }
-
-    void print(const char* title){
-        struct timeval tp_end, tp_res;
-        gettimeofday(&tp_end, NULL);
-        timersub(&tp_end, &tp, &tp_res);
-        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
-    }
-private:
-    struct timeval tp;
-};
-
-TimeInterval allTime;
-TimeInterval tmpTime;
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -67,117 +41,6 @@ __device__ inline void swap(T& a, T& b)
     a = std::move(b);
     b = std::move(t);
 }
-
-class GPUSchedule {
-public:
-
-    inline __device__ int get_total_prefix_num() const { return total_prefix_num;}
-    inline __device__ int get_basic_prefix_num() const { return basic_prefix_num;}
-    inline __device__ int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
-    inline __device__ int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
-    inline __device__ int get_size() const { return size;}
-    inline __device__ int get_last(int i) const { return last[i];}
-    inline __device__ int get_next(int i) const { return next[i];}
-    inline __device__ int get_break_size(int i) const { return break_size[i];}
-    inline __device__ int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
-    inline __device__ int get_total_restrict_num() const { return total_restrict_num;}
-    inline __device__ int get_restrict_last(int i) const { return restrict_last[i];}
-    inline __device__ int get_restrict_next(int i) const { return restrict_next[i];}
-    inline __device__ int get_restrict_index(int i) const { return restrict_index[i];}
-    //inline __device__ int get_k_val() const { return k_val;} // see below (the k_val's definition line) before using this function
-
-    int* adj_mat;
-    int* father_prefix_id;
-    int* last;
-    int* next;
-    int* break_size;
-    int* loop_set_prefix_id;
-    int* restrict_last;
-    int* restrict_next;
-    int* restrict_index;
-    bool* only_need_size;
-    int size;
-    int total_prefix_num;
-    int basic_prefix_num;
-    int total_restrict_num;
-    int in_exclusion_optimize_num;
-    //int k_val;
-
-    int in_exclusion_optimize_vertex_id_size;
-    int* in_exclusion_optimize_vertex_id;
-    bool* in_exclusion_optimize_vertex_flag;
-    int* in_exclusion_optimize_vertex_coef;
-    
-    int in_exclusion_optimize_array_size;
-    int* in_exclusion_optimize_coef;
-    bool* in_exclusion_optimize_flag;
-    int* in_exclusion_optimize_ans_pos;
-
-    uint32_t ans_array_offset;
-};
-
-// __device__ void intersection1(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
-__device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
-static __device__ uint32_t do_intersection(uint32_t*, const uint32_t*, const uint32_t*, uint32_t, uint32_t);
-class GPUVertexSet;
-__device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, int size_after_restrict);
-
-class GPUVertexSet
-{
-public:
-    __device__ GPUVertexSet()
-    {
-        size = 0;
-        data = NULL;
-    }
-    __device__ int get_size() const { return size;}
-    __device__ uint32_t get_data(int i) const { return data[i];}
-    __device__ void set_size(int new_size) { size = new_size; }
-    __device__ void set_data(int i, uint32_t val) { data[i] = val; } 
-    __device__ void push_back(uint32_t val) { data[size++] = val;}
-    __device__ void pop_back() { --size;}
-    __device__ uint32_t get_last() const {return data[size - 1];}
-    __device__ void set_data_ptr(uint32_t* ptr) { data = ptr;}
-    __device__ uint32_t* get_data_ptr() const { return data;}
-    __device__ bool has_data (uint32_t val) const // 注意：这里不用二分，调用它的是较小的无序集合
-    {
-        for (int i = 0; i < size; ++i)
-            if (data[i] == val)
-                return true;
-        return false;
-    }
-    __device__ void init() { size = 0; }
-    __device__ void init(uint32_t input_size, uint32_t* input_data)
-    {
-        size = input_size;
-        data = input_data; //之后如果把所有prefix放到shared memory，由于input data在global memory上（因为是原图的边集），所以改成memcpy
-    }
-    __device__ void copy_from(const GPUVertexSet& other)//考虑改为并行
-    {
-        // 这个版本可能会有bank conflict
-        uint32_t input_size = other.get_size(), *input_data = other.get_data_ptr();
-        size = input_size;
-        int lid = threadIdx.x % THREADS_PER_WARP; // lane id
-        int size_per_thread = (input_size + THREADS_PER_WARP - 1) / THREADS_PER_WARP;
-        int start = size_per_thread * lid;
-        int end = min(start + size_per_thread, input_size);
-        for (int i = start; i < end; ++i)
-            data[i] = input_data[i];
-        __threadfence_block();
-    }
-
-    __device__ void intersection_with(const GPUVertexSet& other)
-    {
-        uint32_t ret = do_intersection(data, data, other.get_data_ptr(), size, other.get_size());
-        if (threadIdx.x % THREADS_PER_WARP == 0)
-            size = ret;
-        __threadfence_block();
-    }
-
-public:
-    uint32_t size;
-    uint32_t* data;
-};
 
 __device__ unsigned long long dev_sum = 0;
 __device__ unsigned int dev_cur_edge = 0;
@@ -316,3 +179,37 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     // __threadfence_block();
     return ret;
 }
+
+/**
+ * @brief get |A ∩ B|
+ * @note when |A| > |B|, |A ∩ B| = |A| - |A - B|
+ */
+__device__ int get_intersection_size(const GPUVertexSet& A, const GPUVertexSet& B)
+{
+    int sizeA = A.get_size();
+    int sizeB = B.get_size();
+    if (sizeB > sizeA)
+        return sizeB - unordered_subtraction_size(B, A);
+    return sizeA - unordered_subtraction_size(A, B); 
+}
+
+class TimeInterval{
+public:
+    TimeInterval(){
+        check();
+    }
+
+    void check(){
+        gettimeofday(&tp, NULL);
+    }
+
+    void print(const char* title){
+        struct timeval tp_end, tp_res;
+        gettimeofday(&tp_end, NULL);
+        timersub(&tp_end, &tp, &tp_res);
+        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
+    }
+private:
+    struct timeval tp;
+};
+

@@ -454,11 +454,15 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
     }
 
     if( in_exclusion_optimize_num > 0) {
-        printf("begin to build IEP loop invariant, basic prefix num = %d\n", basic_prefix_num);
+        // printf("begin to build IEP loop invariant, basic prefix num = %d\n", basic_prefix_num);
         //IEP loop invariant
         in_exclusion_optimize_vertex_id.clear();
+        in_exclusion_optimize_vertex_flag.clear();
+        in_exclusion_optimize_vertex_coef.clear();
+
         in_exclusion_optimize_coef.clear();
         in_exclusion_optimize_flag.clear();
+        in_exclusion_optimize_ans_pos.clear();
 
         for(int optimize_rank = 0; optimize_rank < in_exclusion_optimize_group.size(); ++optimize_rank) {
             const std::vector< std::vector<int> >& cur_graph = in_exclusion_optimize_group[optimize_rank];
@@ -538,8 +542,8 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 if(prefix[prefix_id].get_has_child() == false)
                     prefix[prefix_id].set_only_need_size(true);
             }
-
-        printf("total prefix num = %d\n", total_prefix_num);
+        }
+        // printf("total prefix num = %d\n", total_prefix_num);
     }
 
     for(int i = 0; i < size; ++i) 

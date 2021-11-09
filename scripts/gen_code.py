@@ -23,6 +23,11 @@ g.append("or")
 for g_idx, graph in enumerate(graphs):
     for p in range(len(patterns)):
         #log_name = graph + "_" + "p" + str(p + 1) + ".log"
-        log_name = "../auto/" + g[g_idx] + "_p" + str(p + 1) + "_inject.cu" 
-        # os.system("srun -N 1 ./bin/final_generator /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
-        os.system("./bin/final_generator /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        target_prefix = "../auto/" + g[g_idx] + "_p" + str(p + 1)
+        inject_target = target_prefix + "_inject.cu" 
+        final_target = target_prefix + ".cu"
+
+        os.system("./bin/code_generator /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + inject_target)
+        os.system("cat ../auto/before_inj.cu > %s" % final_target)
+        os.system("cat %s >> %s" % (inject_target, final_target))
+        os.system("cat ../auto/after_inj.cu >> %s" % final_target)
