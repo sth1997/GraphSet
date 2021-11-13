@@ -123,7 +123,7 @@ unsigned long long do_pattern_matching(Graph* g,
     int max_active_blocks_per_sm;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm,
         pattern_matching_kernel, THREADS_PER_BLOCK, 768);
-    int nr_blocks = 1024;
+    int nr_blocks = dev_props.multiProcessorCount * max_active_blocks_per_sm;
     int nr_total_warps = nr_blocks * WARPS_PER_BLOCK;
     printf("nr_blocks=%d\n", nr_blocks);
     

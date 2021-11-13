@@ -23,7 +23,7 @@ g.append("or")
 for g_idx, graph in enumerate(graphs):
     for p in range(len(patterns)):
         bin_name = g[g_idx] + "_p" + str(p + 1)
-        #log_name = "new-" + graph + "_" + "p" + str(p + 1) + ".log"
+        log_name = graph + "_" + "p" + str(p + 1) + ".log"
         #os.system("srun -N 1 ./bin/" + bin_name + " /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name + " &")
-        #os.system("./bin/" + bin_name + " /home/hzx/data/" + graph + " | tee " + log_name)
-        os.system('ncu -o %s bin/%s ~hzx/data/%s' % (bin_name, bin_name, graph))
+        os.system("srun -N 1 ./bin/" + bin_name + " /home/hzx/data/" + graph + " | tee " + log_name)
+        #os.system('ncu --nvtx -f --section SourceCounters --set full -o %s bin/%s ~hzx/data/%s' % (bin_name, bin_name, graph))
