@@ -1,4 +1,5 @@
 #include <../include/graph.h>
+#include <../include/labeled_graph.h>
 #include <../include/dataloader.h>
 #include "../include/pattern.h"
 #include "../include/schedule.h"
@@ -39,7 +40,7 @@ void test_pattern(Graph* g, const Pattern &pattern, int performance_modeling_typ
 }
 
 int main(int argc,char *argv[]) {
-    Graph *g;
+    LabeledGraph *g;
     DataLoader D;
 
     const std::string type = argv[1];
@@ -59,17 +60,20 @@ int main(int argc,char *argv[]) {
         return 0;
     }
 
-    assert(D.load_data(g,my_type,path.c_str())==true); 
+    g = new LabeledGraph();
+    assert(D.load_labeled_data(g,my_type,path.c_str())==true); 
+    g->fsm(3, 20000, 24);
+    
     //assert(D.load_data(g,200)==true); 
 
-    printf("Load data success!\n");
+    /*printf("Load data success!\n");
     fflush(stdout);
 
     //char tmpbuf[100] = "011110101101110000110000100001010010";
     Pattern p(PatternType::House);
     //Pattern p(6, tmpbuf);
     test_pattern(g, p, 1, 1, true);
-    //test_pattern(g, p, 0, 1, true);
+    //test_pattern(g, p, 0, 1, true);*/
 
 /*
     Pattern p1(PatternType::sigmod2020_guo_q1);

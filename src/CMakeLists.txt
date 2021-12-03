@@ -1,6 +1,7 @@
 SET(GraphMiningSrc
 TestClass.cpp
 graph.cpp
+labeled_graph.cpp
 dataloader.cpp
 pattern.cpp
 prefix.cpp

@@ -27,7 +27,7 @@ Schedule::Schedule(const Pattern& pattern, bool &is_pattern_valid, int performan
     //If we use performance_modeling, we may change the order of vertex,
     //the best order produced by performance_modeling(...) is saved in best_order[]
     //Finally, we use best_order[] to relocate adj_mat
-    if( performance_modeling_type != 0) { 
+    if( performance_modeling_type != 0 && size != 1) { 
         unsigned int pow = 1;
         for (int i = 2; i <= size; ++i) pow *= i;
         
@@ -191,7 +191,7 @@ Schedule::Schedule(const Pattern& pattern, bool &is_pattern_valid, int performan
 
     }
 
-    if( use_in_exclusion_optimize) {
+    if( use_in_exclusion_optimize && size != 1) {
         std::vector<int> I;
         I.clear();
         for(int i = 0; i < size; ++i) I.push_back(i);
@@ -216,6 +216,7 @@ Schedule::Schedule(const Pattern& pattern, bool &is_pattern_valid, int performan
     last = new int[size];
     next = new int[max_prefix_num];
     loop_set_prefix_id = new int[size];
+    prefix_target = NULL;
     prefix = new Prefix[max_prefix_num];
     restrict_last = new int[size];
     restrict_next = new int[max_prefix_num];
@@ -267,6 +268,7 @@ Schedule::Schedule(const int* _adj_mat, int _size)
     last = new int[size];
     next = new int[max_prefix_num];
     loop_set_prefix_id = new int[size];
+    prefix_target = NULL;
     prefix = new Prefix[max_prefix_num];
     restrict_last = new int[size];
     restrict_next = new int[max_prefix_num];
@@ -310,6 +312,8 @@ Schedule::~Schedule()
     delete[] last;
     delete[] next;
     delete[] loop_set_prefix_id;
+    if (prefix_target != NULL)
+        delete[] prefix_target;
     delete[] prefix;
     delete[] restrict_last;
     delete[] restrict_next;
@@ -360,6 +364,33 @@ int Schedule::find_father_prefix(int data_size, const int* data)
     prefix[total_prefix_num].init(data_size, data);
     ++total_prefix_num;
     return total_prefix_num - 1;
+}
+
+void Schedule::update_loop_invariant_for_fsm() {
+    int max_prefix_num = size * (size - 1) / 2;
+    memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
+    memset(last, -1, size * sizeof(int));
+    memset(next, -1, max_prefix_num * sizeof(int));
+    total_prefix_num = 0;
+    prefix_target = new int[max_prefix_num];
+    memset(prefix_target, -1, max_prefix_num * sizeof(int));
+
+    loop_set_prefix_id[0] = -1;
+    for (int i = 1; i < size; ++i) //为每个loop_set独立地建立prefix，因为每个点的label不同（暂不考虑相同的情况），所以不同点的loop_set的prefix没有关系
+    {
+        int last_prefix = -1;
+        for (int j = 0; j < i; ++j)
+            if (adj_mat[INDEX(i, j, size)]) {
+                int father = last_prefix;
+                father_prefix_id[total_prefix_num] = father;
+                next[total_prefix_num] = last[j];
+                last[j] = total_prefix_num;
+                prefix_target[total_prefix_num] = i;
+                last_prefix = total_prefix_num++;
+            }
+        loop_set_prefix_id[i] = last_prefix;
+    }
+    assert(total_prefix_num <= max_prefix_num);
 }
 
 void Schedule::add_restrict(const std::vector< std::pair<int, int> >& restricts)

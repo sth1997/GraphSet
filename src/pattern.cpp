@@ -42,6 +42,15 @@ Pattern::Pattern(const Pattern& p)
     memcpy(adj_mat, p.get_adj_mat_ptr(), size * size * sizeof(int));
 }
 
+Pattern& Pattern::operator =(const Pattern& p) {
+    if (this != &p) {
+        size = p.get_size();
+        adj_mat = new int[size * size];
+        memcpy(adj_mat, p.get_adj_mat_ptr(), size * size * sizeof(int));
+    }
+    return *this;
+}
+
 Pattern::Pattern(PatternType type) {
     if( type == PatternType::Rectangle) {
         size = 4;
@@ -278,7 +287,7 @@ void Pattern::count_all_isomorphism(std::set< std::set<int> >& s) const
 void Pattern::print() const
 {
     for (int i = 0; i < size; ++i)
-        for (int j = 0; j < size; ++j)
+        for (int j = i + 1; j < size; ++j)
             if (adj_mat[INDEX(i, j, size)] != 0)
                 printf("(%d,%d) ", i, j);
     printf("\n");

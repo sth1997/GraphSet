@@ -31,6 +31,7 @@ public:
     Pattern(int _size, const char* buffer);
     ~Pattern();
     Pattern(const Pattern& p);
+    Pattern& operator =(const Pattern&);
     Pattern(PatternType type);
     void add_edge(int x, int y);
     void del_edge(int x, int y);
@@ -42,7 +43,6 @@ public:
     void print() const;
     bool is_dag() const;
 private:
-    Pattern& operator =(const Pattern&);
     void get_full_permutation(std::vector< std::vector<int> >& vec, bool use[], std::vector<int> tmp_vec, int depth) const;
     int* adj_mat;
     int size;
