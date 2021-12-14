@@ -20,6 +20,8 @@ public:
     //                = 2 : use GraphZero's restricts
     Schedule_IEP(const int* _adj_mat, int _size);
     ~Schedule_IEP();
+
+    inline void set_gpu_backend(bool use_gpu_backend) { gpu_backend = use_gpu_backend; }
     inline int get_total_prefix_num() const { return total_prefix_num;}
     inline int get_basic_prefix_num() const { return basic_prefix_num;}
     inline int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
@@ -94,6 +96,7 @@ private:
     int k_val; // inner k loop, WARNING: this val not always meaningful @TODO here
                // only when performance_modeling_type == 1 , this val will be calculated.
     long long in_exclusion_optimize_redundancy;
+    bool gpu_backend; // whether use gpu (cuda) as backend
 
     std::vector< std::vector< std::vector<int> > >in_exclusion_optimize_group;
     std::vector< int > in_exclusion_optimize_val;

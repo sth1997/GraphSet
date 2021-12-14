@@ -18,6 +18,8 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
         throw std::logic_error("Fatal: Can not use performance modeling if not have triangle number of this dataset.\n");
     }
 
+    gpu_backend = true; // default to gpu backed
+
     is_pattern_valid = true;
     size = pattern.get_size();
     adj_mat = new int[size * size];
@@ -220,6 +222,8 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
 
 Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
 {
+    gpu_backend = true;
+
     size = _size;
     adj_mat = new int[size * size];
 
@@ -327,12 +331,21 @@ double Schedule_IEP::new_estimate_schedule_restrict(const std::vector<std::pair<
         for(int j = i - 1; j >= 0; --j)
             if(adj_mat[INDEX(j, i, size)])
                 invariant_size[j].push_back(c--);
+        
+        // different backends use different algorithms, therefore cost estimations differ
+        if (gpu_backend) {
+            // binary search is used for set intersection
+            for (int j = 0; j < invariant_size[i].size(); ++j)
+                if (invariant_size[i][j] > 1)
+                    val += p_size[1] * pp_size[invariant_size[i][j] - 2] * std::log2(p_size[1]);
+        } else {
+            // merge-based linear set intersection for CPU
+            for (int j = 0; j < invariant_size[i].size(); ++j)
+                if (invariant_size[i][j] > 1)
+                    val += p_size[1] * pp_size[invariant_size[i][j] - 2] + p_size[1];
+            val += 1;
+        }
 
-        for(int j = 0; j < invariant_size[i].size(); ++j)
-            if(invariant_size[i][j] > 1)
-                val += p_size[1] * pp_size[invariant_size[i][j] - 2] * std::log2(p_size[1]);
-                // val += p_size[1] * pp_size[invariant_size[i][j] - 2] + p_size[1];
-        // val += 1;
         for(int j = 0; j < restricts_size; ++j)
             if(restricts[j].second == i)
                 val *=  sum[j];
