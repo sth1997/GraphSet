@@ -153,14 +153,6 @@ void generate_mapping_plans(const Schedule& s, const Schedule* schedules, std::v
                 tmp_adj[i * s.get_size() + j] = tmp_adj[j * s.get_size() + i] = 1;
                 if (edge_num != s_edge_num - 1) // 只需要查找比s少一条边的子图即可（因为少更多条边的子图一定是某个少一条边的子图的子图）
                     continue;
-                if (s_id == 3) {
-                    printf("i = %d  j = %d edge_num = %d connected_v_num = %d\n", i, j, edge_num, connected_v_num);
-                    for (int tmp = 0; tmp < connected_v_num; ++tmp)
-                        printf("%d ", connected_v[tmp]);
-                    printf("\n");
-
-                    fflush(stdout);
-                }
                 Schedule sub_s(sub_adj, connected_v_num); // TODO：其实这里不需要用schedule，只用pattern就可以了，schedule初始化还要做一些额外操作如IEP，浪费时间
                 //edge_num = get_schedule_edge_num(sub_s); //应该edge_num不变，所以这句话删了
                 for (int s0_id = 0; s0_id < s_id; ++s0_id) {
@@ -299,13 +291,15 @@ bool LabeledGraph::get_support_pattern_matching_aggressive_func(const Schedule& 
 }
 
 long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, VertexSet& subtraction_set, const Schedule& schedule, const char* p_label, std::vector<std::set<int> >& fsm_set) {
+    /*
+    //一个点的pattern在omp之前被特殊处理了
     if (schedule.get_size() == 1) {
         long long support = 0;
         for (int vertex = 0; vertex < v_cnt; ++vertex) //TODO: 这里也可以换成一个提前按照v_label排序，会快一些
             if (v_label[vertex] == p_label[0])
                 ++support;
         return support;
-    }
+    }*/
     for (int i = 0; i < schedule.get_size(); ++i)
         fsm_set[i].clear();
     subtraction_set.init();
@@ -343,7 +337,7 @@ long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, Vert
     return support;
 }
 
-void LabeledGraph::traverse_all_labeled_patterns(const Schedule* schedules, char* all_p_label, char* p_label, const int* mapping_start_idx, const int* mappings, int s_id, int depth, int mapping_start_idx_pos, size_t& all_p_label_idx) { //TODO: 把一些参数转为成员变量试试，这样就能少传一些参数
+void LabeledGraph::traverse_all_labeled_patterns(const Schedule* schedules, char* all_p_label, char* p_label, const int* mapping_start_idx, const int* mappings, const unsigned int* pattern_is_frequent_index, const unsigned int* is_frequent, int s_id, int depth, int mapping_start_idx_pos, size_t& all_p_label_idx) const { //TODO: 把一些参数转为成员变量试试，这样就能少传一些参数
     const Schedule& s = schedules[s_id];
     if (depth == s.get_size())
     {
@@ -374,35 +368,42 @@ void LabeledGraph::traverse_all_labeled_patterns(const Schedule* schedules, char
                 index += tmp_p_label[i] * pow;
                 pow *= (unsigned int) l_cnt;
             }
-            if ((is_frequent[index >> 3] & ((unsigned char) (1 << (index % 8)))) == 0) {
+            if ((is_frequent[index >> 5] & ((unsigned int) (1 << (index % 32)))) == 0) {
                 not_frequent = true;
                 break;
             }
         }
         if (not_frequent)
             continue;
-        traverse_all_labeled_patterns(schedules, all_p_label, p_label, mapping_start_idx, mappings, s_id, depth + 1, mapping_start_idx_pos + 1, all_p_label_idx);
+        traverse_all_labeled_patterns(schedules, all_p_label, p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, s_id, depth + 1, mapping_start_idx_pos + 1, all_p_label_idx);
     }
 }
 
-int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
-    min_support = _min_support;
-
-    std::vector<Pattern> patterns = generate_fsm_patterns(max_edge);
-    Schedule* schedules = (Schedule*) malloc(sizeof(Schedule) * patterns.size());
+void LabeledGraph::get_fsm_necessary_info(std::vector<Pattern>& patterns, int max_edge, Schedule*& schedules, int& schedules_num, int*& mapping_start_idx, int*& mappings, unsigned int*& pattern_is_frequent_index, unsigned int*& is_frequent) const {
+    patterns = generate_fsm_patterns(max_edge);
+    schedules = (Schedule*) malloc(sizeof(Schedule) * patterns.size());
     for (int i = 0; i < patterns.size(); ++i) {
+        printf("begin generate schedule %d\n", i);
+        fflush(stdout);
         const Pattern& p = patterns[i];
         bool is_pattern_valid;
+        printf("before generate schedule %d\n", i);
+        printf("%d %d %d\n", this->v_cnt, this->e_cnt, this->tri_cnt);
+        p.print();
+        fflush(stdout);
         new (&schedules[i]) Schedule(p, is_pattern_valid, 1, 1, 1, this->v_cnt, this->e_cnt, this->tri_cnt);
         schedules[i].print_schedule();
         fflush(stdout);
     }
+    printf("after generate schedules\n");
+    fflush(stdout);
 
     printf("pattern num = %d\n", patterns.size());
+    schedules_num = patterns.size();
 
     std::vector<int> mappings_vec; //TODO: int其实都可以换成char
     mappings_vec.clear();
-    int* mapping_start_idx = new int[patterns.size() * schedules[patterns.size() - 1].get_size() + 1]; //每个schedule的每个点都有一个index，这只是估了一个上界，+1是因为第一位存放对应子图ID
+    mapping_start_idx = new int[patterns.size() * schedules[patterns.size() - 1].get_size() + 1]; //每个schedule的每个点都有一个index，这只是估了一个上界，+1是因为第一位存放对应子图ID
     mapping_start_idx[0] = 0;
     // Check whether the j-th pattern is a subgraph of the i-th pattern.
     int mapping_start_idx_pos = 1;
@@ -416,7 +417,7 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
     printf("mapping_start_idx_pos = %d   mappings_vec.size() = %d\n", mapping_start_idx_pos, mappings_vec.size());
     fflush(stdout);
 
-    int* mappings = new int[mappings_vec.size()];
+    mappings = new int[mappings_vec.size()];
     memcpy(mappings, &mappings_vec[0], mappings_vec.size() * sizeof(int));
     // check
     mapping_start_idx_pos = 0;
@@ -467,7 +468,7 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
         }
     }
 
-    pattern_is_frequent_index = new unsigned int[patterns.size()];
+    pattern_is_frequent_index = new unsigned int[patterns.size() + 1];
     int index = 0;
     for (int i = 0; i < patterns.size(); ++i) {
         pattern_is_frequent_index[i] = index;
@@ -475,11 +476,22 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
         for (int j = 0; j < patterns[i].get_size(); ++j)
             pow *= (unsigned int) l_cnt;
         index += pow;
+        index = (index + 31) / 32 * 32; //保证pattern_is_frequent_index按照32（4字节）对齐
     }
-    is_frequent = new unsigned char[(index + 7) / 8];
-    memset(is_frequent, 0, sizeof(unsigned char) * ((index + 7) / 8));
+    pattern_is_frequent_index[patterns.size()] = index;
+    is_frequent = new unsigned int[(index + 31) / 32];
+    memset(is_frequent, 0, sizeof(unsigned int) * ((index + 31) / 32));
+}
 
-    mapping_start_idx_pos = 0;
+int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
+    std::vector<Pattern> patterns;
+    Schedule* schedules;
+    int schedules_num;
+    int* mapping_start_idx;
+    int* mappings;
+    unsigned int* pattern_is_frequent_index; //每个unlabeled pattern对应的所有labeled pattern在is_frequent中的起始位置，按照32对齐（4B）
+    unsigned int* is_frequent; //bit vector
+    get_fsm_necessary_info(patterns, max_edge, schedules, schedules_num, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent);
 
     size_t max_labeled_patterns = 1;
     for (int i = 0; i < max_edge + 1; ++i) //边数最大max_edge，点数最大max_edge + 1
@@ -489,13 +501,23 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
     timeval start, end, total_time;
     gettimeofday(&start, NULL);
     long long global_fsm_cnt = 0;
-    for (int i = 0; i < patterns.size(); ++i) {
+    //特殊处理一个点的pattern
+    for (int i = 0; i < l_cnt; ++i)
+        if (label_frequency[i] >= min_support) {
+            ++global_fsm_cnt;
+            is_frequent[i >> 5] |= (unsigned int) (1 << (i % 32));
+        }
+    if (max_edge != 0)
+        global_fsm_cnt = 0;
+    int mapping_start_idx_pos = 1;
+
+    for (int i = 1; i < schedules_num; ++i) {
         std::vector<std::vector<int> > automorphisms;
         automorphisms.clear();
         schedules[i].GraphZero_get_automorphisms(automorphisms);
         schedules[i].update_loop_invariant_for_fsm();
         size_t all_p_label_idx = 0;
-        traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, i, 0, mapping_start_idx_pos, all_p_label_idx);
+        traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
 
         #pragma omp parallel num_threads(thread_count) reduction(+: global_fsm_cnt)
         {
@@ -513,7 +535,7 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
             #pragma omp for schedule(dynamic) nowait
             for (size_t job_id = 0; job_id < job_num; ++job_id) {
                 size_t job_start_idx = job_id * schedules[i].get_size();
-                for (int j = 0; j < schedules[j].get_size(); ++j)
+                for (int j = 0; j < schedules[i].get_size(); ++j)
                     p_label[j] = all_p_label[job_start_idx + j];
                 long long support;
                 support = get_support_pattern_matching(vertex_set, subtraction_set, schedules[i], p_label, fsm_set);
@@ -533,7 +555,7 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
                         printf("%d ", p_label[j]);
                     printf(")\n");*/
                         
-                    int tmp_p_label[8]; //TODO: 修改这个magic number
+                    char tmp_p_label[8]; //TODO: 修改这个magic number
                     for (const auto& aut : automorphisms) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
                         for (int j = 0; j < schedules[i].get_size(); ++j)
                             tmp_p_label[j] = p_label[aut[j]];
@@ -545,7 +567,7 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
                         }
                         #pragma omp critical
                         {
-                            is_frequent[index >> 3] |= (unsigned char) (1 << (index % 8));
+                            is_frequent[index >> 5] |= (unsigned int) (1 << (index % 32));
                         }
                     }
                 }
@@ -557,19 +579,20 @@ int LabeledGraph::fsm(int max_edge, long long _min_support, int thread_count) {
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
             global_fsm_cnt = 0;
+        gettimeofday(&end, NULL);
+        timersub(&end, &start, &total_time);
+        printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
     }
-    gettimeofday(&end, NULL);
-    timersub(&end, &start, &total_time);
 
     fsm_cnt = global_fsm_cnt;
     printf("fsm_cnt = %d\n", fsm_cnt);
-    printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
 
     free(schedules);
     delete[] mapping_start_idx;
     delete[] mappings;
     delete[] pattern_is_frequent_index;
     delete[] is_frequent;
+    delete[] all_p_label;
     delete[] tmp_p_label;
     
     return fsm_cnt;

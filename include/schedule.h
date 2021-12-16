@@ -33,6 +33,7 @@ public:
     inline int get_next(int i) const { return next[i];}
     inline int* get_next_ptr() const {return next;}
     inline int get_prefix_target(int i) const {return prefix_target[i];}
+    inline int* get_prefix_target_ptr() const {return prefix_target;}
     inline int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
     int get_in_exclusion_optimize_num_when_not_optimize();
     void add_restrict(const std::vector< std::pair<int, int> >& restricts);

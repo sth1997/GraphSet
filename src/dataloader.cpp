@@ -327,6 +327,8 @@ bool DataLoader::twitter_load_data(Graph *&g, DataType type, const char* path, i
 }
 
 //默认节点编号从0~cnt-1，不进行重排序；默认同一条边在输入数据中会出现正反各一次（所以按照单向边读入）
+//第一行为点数v_cnt
+//接下来v_cnt行，每行第一个数是点编号，第二个数是label（可以不从0开始，会重新映射），之后一直到行末是邻居节点编号
 bool DataLoader::general_load_labeled_data(LabeledGraph* &g, DataType type, const char* path) {
     std::ifstream fin(path);
     if (!fin) {
@@ -376,6 +378,8 @@ bool DataLoader::general_load_labeled_data(LabeledGraph* &g, DataType type, cons
 
     int *degree = new int[g->v_cnt];
     g->v_label = new int[g->v_cnt];
+    g->label_frequency = new int[g->v_cnt];
+    memset(g->label_frequency, 0, sizeof(int) * g->v_cnt);
     memset(degree, 0, g->v_cnt * sizeof(int));
     auto e = new std::vector< std::pair<uint32_t, uint32_t> >;
     label.clear();
@@ -391,6 +395,7 @@ bool DataLoader::general_load_labeled_data(LabeledGraph* &g, DataType type, cons
         ++tmp_v;
         if (!label.count(y)) label[y] = tmp_l ++;
         g->v_label[x] = label[y];
+        g->label_frequency[label[y]] += 1;
         std::getline(fin, line_str);
         ss.clear();
         ss << line_str;
