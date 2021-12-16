@@ -13,3 +13,7 @@ TARGET_LINK_LIBRARIES(gpu_graph_with_timer graph_mining)
 ADD_EXECUTABLE(gpu_house_with_timer gpu_house_with_timer.cu)
 SET_PROPERTY(TARGET gpu_house_with_timer PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_house_with_timer graph_mining)
+
+ADD_EXECUTABLE(gpu_fsm gpu_fsm.cu)
+SET_PROPERTY(TARGET gpu_fsm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_fsm graph_mining)
