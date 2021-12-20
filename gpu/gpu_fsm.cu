@@ -470,7 +470,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
 /**
  * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
  */
- __global__ void gpu_pattern_matching(uint32_t job_num, uint32_t v_cnt, uint32_t buffer_size, uint32_t *edge, uint32_t* labeled_vertex, int* v_label, uint32_t* tmp, const GPUSchedule* schedule, char* all_p_label, GPUBitVector* global_fsm_set, int* automorphisms, unsigned int* is_frequent, int automorphisms_cnt, long long min_support, unsigned int pattern_is_frequent_index, int l_cnt) {
+ __global__ void gpu_pattern_matching(uint32_t job_num, uint32_t v_cnt, uint32_t buffer_size, uint32_t *edge, uint32_t* labeled_vertex, int* v_label, uint32_t* tmp, const GPUSchedule* schedule, char* all_p_label, GPUBitVector* global_fsm_set, int* automorphisms, unsigned int* is_frequent, unsigned int* label_start_idx, int automorphisms_cnt, long long min_support, unsigned int pattern_is_frequent_index, int l_cnt) {
     __shared__ unsigned int block_pattern_idx[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
@@ -537,8 +537,10 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
             fsm_set[lid].clear();
         __threadfence_block();
         
-        for (int vertex = 0; vertex < v_cnt; ++vertex)
-            if (v_label[vertex] == p_label[0]) {//TODO: 这里也可以换成一个提前按照v_label排序，会快一些
+        //for (int vertex = 0; vertex < v_cnt; ++vertex)
+        //    if (v_label[vertex] == p_label[0]) {//TODO: 这里也可以换成一个提前按照v_label排序，会快一些
+        int end_v = label_start_idx[p_label[0] + 1];
+        for (int vertex = label_start_idx[p_label[0]]; vertex < end_v; ++vertex) {
                 bool is_zero = false;
                 for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
                     unsigned int l, r;
@@ -620,7 +622,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
     }
 }
 
-long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule, const std::vector<std::vector<int> >& automorphisms, unsigned int pattern_is_frequent_index, unsigned int* dev_is_frequent, uint32_t* dev_edge, uint32_t* dev_labeled_vertex, int* dev_v_label, uint32_t* dev_tmp, int max_edge, int job_num, char* dev_all_p_label, GPUBitVector* fsm_set, long long min_support) {
+long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule, const std::vector<std::vector<int> >& automorphisms, unsigned int pattern_is_frequent_index, unsigned int* dev_is_frequent, uint32_t* dev_edge, uint32_t* dev_labeled_vertex, int* dev_v_label, uint32_t* dev_tmp, int max_edge, int job_num, char* dev_all_p_label, GPUBitVector* fsm_set, uint32_t* dev_label_start_idx, long long min_support) {
     //printf("basic prefix %d, total prefix %d\n", schedule.get_basic_prefix_num(), schedule.get_total_prefix_num());
     printf("total prefix %d\n", schedule.get_total_prefix_num());
 
@@ -780,7 +782,7 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule,
     //gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
     //    (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
-        (job_num, g->v_cnt, buffer_size, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, dev_schedule, dev_all_p_label, fsm_set, dev_automorphisms, dev_is_frequent, automorphisms.size(), min_support, pattern_is_frequent_index, g->l_cnt);
+        (job_num, g->v_cnt, buffer_size, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, dev_schedule, dev_all_p_label, fsm_set, dev_automorphisms, dev_is_frequent, dev_label_start_idx, automorphisms.size(), min_support, pattern_is_frequent_index, g->l_cnt);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
@@ -862,6 +864,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     size_t size_pattern_is_frequent_index = (schedules_num + 1) * sizeof(uint32_t);
     size_t size_is_frequent = ((pattern_is_frequent_index[schedules_num] + 31) / 32) * sizeof(uint32_t);
     size_t size_all_p_label = max_labeled_patterns * (max_edge + 1) * sizeof(char);
+    size_t size_label_start_idx = (g->l_cnt + 1) * sizeof(uint32_t);
 
     uint32_t *dev_edge;
     //uint32_t *dev_edge_from;
@@ -871,6 +874,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     uint32_t *dev_pattern_is_frequent_index;
     uint32_t *dev_is_frequent;
     char *dev_all_p_label;
+    uint32_t *dev_label_start_idx;
     GPUBitVector* dev_fsm_set;
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
@@ -881,6 +885,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     gpuErrchk( cudaMalloc((void**)&dev_pattern_is_frequent_index, size_pattern_is_frequent_index));
     gpuErrchk( cudaMalloc((void**)&dev_is_frequent, size_is_frequent));
     gpuErrchk( cudaMalloc((void**)&dev_all_p_label, size_all_p_label));
+    gpuErrchk( cudaMalloc((void**)&dev_label_start_idx, size_label_start_idx));
 
     gpuErrchk( cudaMemcpy(dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
     //gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
@@ -888,6 +893,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     gpuErrchk( cudaMemcpy(dev_v_label, g->v_label, size_v_label, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_pattern_is_frequent_index, pattern_is_frequent_index, size_pattern_is_frequent_index, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_is_frequent, is_frequent, size_is_frequent, cudaMemcpyHostToDevice));
+    gpuErrchk( cudaMemcpy(dev_label_start_idx, g->label_start_idx, size_label_start_idx, cudaMemcpyHostToDevice));
 
     //TODO: 之后考虑把fsm_set的成员变量放在shared memory，只把data内的数据放在global memory，就像vertex set一样
     gpuErrchk( cudaMallocManaged((void**)&dev_fsm_set, sizeof(GPUBitVector) * num_total_warps * (max_edge + 1))); //每个点一个fsm_set，一个pattern最多max_edge+1个点，每个warp负责一个不同的labeled pattern
@@ -906,7 +912,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         g->traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
         gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
         int job_num = all_p_label_idx / schedules[i].get_size();
-        fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set, min_support);
+        fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set, dev_label_start_idx, min_support);
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
             fsm_cnt = 0;
@@ -928,6 +934,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     gpuErrchk(cudaFree(dev_pattern_is_frequent_index));
     gpuErrchk(cudaFree(dev_is_frequent));
     gpuErrchk(cudaFree(dev_all_p_label));
+    gpuErrchk(cudaFree(dev_label_start_idx));
     for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
         dev_fsm_set[i].destroy();
     gpuErrchk(cudaFree(dev_fsm_set));

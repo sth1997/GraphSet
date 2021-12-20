@@ -20,6 +20,7 @@ public:
     std::unordered_map<uint32_t, uint32_t> label_map;
 
     unsigned int *labeled_vertex; // v_i's neighbor whose label is c is in edge[ vertex[i * maxlabel + c], vertex[i * maxlabel + c + 1]-1]
+    unsigned int *label_start_idx; //所有节点默认按照label排序，[label_start_idx[i], label_start_idx[i + 1]) 是label为i的所有节点
 
     LabeledGraph() {
         v_cnt = 0;
@@ -27,12 +28,14 @@ public:
         edge = nullptr;
         v_label = nullptr;
         labeled_vertex = nullptr;
+        label_start_idx = nullptr;
     }
 
     ~LabeledGraph() {
         if(edge != nullptr) delete[] edge;
         if(v_label != nullptr) delete[] v_label;
         if(labeled_vertex != nullptr) delete[] labeled_vertex;
+        if(label_start_idx != nullptr) delete[] label_start_idx;
     }
     
     void get_edge_index(int v, int label, unsigned int& l, unsigned int& r) const;

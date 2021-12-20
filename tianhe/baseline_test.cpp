@@ -62,7 +62,7 @@ int main(int argc,char *argv[]) {
 
     g = new LabeledGraph();
     assert(D.load_labeled_data(g,my_type,path.c_str())==true); 
-    g->fsm(3, 20000, 24);
+    g->fsm(2, 10000, 24);
     
     //assert(D.load_data(g,200)==true); 
 

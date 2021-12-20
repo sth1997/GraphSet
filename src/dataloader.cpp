@@ -445,6 +445,33 @@ bool DataLoader::general_load_labeled_data(LabeledGraph* &g, DataType type, cons
         delete[] e;
         return false;
     }
+
+    //将点按照label重排序（这样子在pattern matching第一层for循环的时候就不需要判断label了）
+    std::pair<int,int> *rank = new std::pair<int,int>[g->v_cnt];
+    int *new_id = new int[g->v_cnt];
+    for(int i = 0; i < g->v_cnt; ++i) rank[i] = std::make_pair(i,g->v_label[i]);
+    std::sort(rank, rank + g->v_cnt, cmp_label);
+    for(int i = 0; i < g->v_cnt; ++i) {
+        new_id[rank[i].first] = i;
+        g->v_label[i] = rank[i].second;
+    }
+    for(auto& edge : *e) {
+        edge.first = new_id[edge.first];
+        edge.second = new_id[edge.second];
+    }
+    delete[] rank;
+    delete[] new_id;
+    g->label_start_idx = new unsigned int[g->l_cnt + 1];
+    memset(g->label_start_idx, -1, sizeof(unsigned int) * (g->l_cnt + 1));
+    g->label_start_idx[0] = 0;
+    g->label_start_idx[g->l_cnt] = g->v_cnt;
+    for (int i = 1; i < g->v_cnt; ++i)
+        if (g->v_label[i] != g->v_label[i - 1])
+            g->label_start_idx[g->v_label[i]] = i;
+    for (int i = g->l_cnt - 1; i > 0; --i)
+        if (g->label_start_idx[i] == -1)
+            g->label_start_idx[i] = g->label_start_idx[i + 1];
+
     /*if(tmp_e != g->e_cnt) {
         printf("edge number error!\n");
     }*/
@@ -654,6 +681,10 @@ bool DataLoader::cmp_pair(std::pair<int,int>a, std::pair<int,int>b) {
 
 bool DataLoader::cmp_tuple(std::tuple<int,int,int>a, std::tuple<int,int,int>b) {
     return std::get<0>(a) < std::get<0>(b) || (std::get<0>(a) == std::get<0>(b) && std::get<1>(a) < std::get<1>(b)) || (std::get<0>(a) == std::get<0>(b) && std::get<1>(a) == std::get<1>(b) && std::get<2>(a) < std::get<2>(b));
+}
+
+bool DataLoader::cmp_label(std::pair<int,int> a,std::pair<int,int> b) {
+    return a.second < b.second;
 }
 
 bool DataLoader::cmp_degree_gt(std::pair<int,int> a,std::pair<int,int> b) {

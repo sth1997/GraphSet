@@ -47,6 +47,7 @@ public:
 private:
     static bool cmp_pair(std::pair<int,int>a, std::pair<int,int>b);
     static bool cmp_tuple(std::tuple<int,int,int>a, std::tuple<int,int,int>b);
+    static bool cmp_label(std::pair<int,int> a,std::pair<int,int> b);
     static bool cmp_degree_gt(std::pair<int,int> a,std::pair<int,int> b);
     static bool cmp_degree_lt(std::pair<int,int> a,std::pair<int,int> b);
 

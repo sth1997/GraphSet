@@ -303,8 +303,10 @@ long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, Vert
     for (int i = 0; i < schedule.get_size(); ++i)
         fsm_set[i].clear();
     subtraction_set.init();
-    for (int vertex = 0; vertex < v_cnt; ++vertex)
-        if (v_label[vertex] == p_label[0]) //TODO: 这里也可以换成一个提前按照v_label排序，会快一些
+    //for (int vertex = 0; vertex < v_cnt; ++vertex)
+        //if (v_label[vertex] == p_label[0]) //TODO: 这里也可以换成一个提前按照v_label排序，会快一些
+    int end_v = label_start_idx[p_label[0] + 1];
+    for (int vertex = label_start_idx[p_label[0]]; vertex < end_v; ++vertex)
         {
             bool is_zero = false;
             for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
