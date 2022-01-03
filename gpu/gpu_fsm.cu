@@ -472,6 +472,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
  */
  __global__ void gpu_pattern_matching(uint32_t job_num, uint32_t v_cnt, uint32_t buffer_size, uint32_t *edge, uint32_t* labeled_vertex, int* v_label, uint32_t* tmp, const GPUSchedule* schedule, char* all_p_label, GPUBitVector* global_fsm_set, int* automorphisms, unsigned int* is_frequent, unsigned int* label_start_idx, int automorphisms_cnt, long long min_support, unsigned int pattern_is_frequent_index, int l_cnt) {
     __shared__ unsigned int block_pattern_idx[WARPS_PER_BLOCK];
+    __shared__ bool block_break_flag[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
     
@@ -540,6 +541,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
         //for (int vertex = 0; vertex < v_cnt; ++vertex)
         //    if (v_label[vertex] == p_label[0]) {//TODO: 这里也可以换成一个提前按照v_label排序，会快一些
         int end_v = label_start_idx[p_label[0] + 1];
+        block_break_flag[wid] = false;
         for (int vertex = label_start_idx[p_label[0]]; vertex < end_v; ++vertex) {
                 bool is_zero = false;
                 for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
@@ -559,13 +561,37 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
                 __threadfence_block();
                 if (GPU_pattern_matching_func<1>(schedule, vertex_set, subtraction_set, edge, labeled_vertex, p_label, fsm_set, l_cnt))
                     if (lid == 0) //TODO: 目前insert只让0号线程执行，之后考虑32个线程同时执行，看会不会出错（好像是不会）
+                    {
                         fsm_set[0].insert(vertex);
+                        long long support = v_cnt;
+                        for (int i = 0; i < schedule->get_size(); ++i) {
+                            long long count = fsm_set[i].get_non_zero_cnt();
+                            if (count < support)
+                                support = count;
+                        }
+                        if (support >= min_support) {
+                            block_break_flag[wid] =true;
+                            atomicAdd(&dev_sum, 1);
+                            for (int aut_id = 0; aut_id < automorphisms_cnt; ++aut_id) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
+                                int* aut = automorphisms + aut_id * schedule->get_size();
+                                unsigned int index = pattern_is_frequent_index;
+                                unsigned int pow = 1;
+                                for (int j = 0; j < schedule->get_size(); ++j) {
+                                    index += p_label[aut[j]] * pow;
+                                    pow *= (unsigned int) l_cnt;
+                                }
+                                atomicOr(&is_frequent[index >> 5], (unsigned int) (1 << (index % 32)));
+                            }
+                        }
+                    }
                 if (lid == 0)
                     subtraction_set.pop_back();
                 __threadfence_block();
+                if (block_break_flag[wid] == true)
+                    break;
             }
         
-        if (lid == 0) {
+        /*if (lid == 0) {
             long long support = v_cnt;
             for (int i = 0; i < schedule->get_size(); ++i) {
                 long long count = fsm_set[i].get_non_zero_cnt();
@@ -585,7 +611,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
                     atomicOr(&is_frequent[index >> 5], (unsigned int) (1 << (index % 32)));
                 }
             }
-        }
+        }*/
         __threadfence_block();
         /*
        // for edge in E

@@ -290,7 +290,8 @@ bool LabeledGraph::get_support_pattern_matching_aggressive_func(const Schedule& 
     return match;
 }
 
-long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, VertexSet& subtraction_set, const Schedule& schedule, const char* p_label, std::vector<std::set<int> >& fsm_set) {
+//这里返回的不一定是准确的support，只要当前已找到的support>=min_support就直接返回（剪枝）。实际的support>=返回的support。
+long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, VertexSet& subtraction_set, const Schedule& schedule, const char* p_label, std::vector<std::set<int> >& fsm_set, long long min_support) {
     /*
     //一个点的pattern在omp之前被特殊处理了
     if (schedule.get_size() == 1) {
@@ -324,7 +325,17 @@ long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, Vert
                 continue;
             subtraction_set.push_back(vertex);
             if (get_support_pattern_matching_aggressive_func(schedule, p_label, vertex_set, subtraction_set, fsm_set, 1))
+            {
                 fsm_set[0].insert(vertex);
+                long long support = v_cnt;
+                for (int i = 0; i < schedule.get_size(); ++i) {
+                    long long count = fsm_set[i].size();
+                    if (count < support)
+                        support = count;
+                }
+                if (support >= min_support)
+                    return support;
+            }
             subtraction_set.pop_back();
             //printf("for %d %d\n", omp_get_thread_num(), vertex);
         }
@@ -540,7 +551,7 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
                 for (int j = 0; j < schedules[i].get_size(); ++j)
                     p_label[j] = all_p_label[job_start_idx + j];
                 long long support;
-                support = get_support_pattern_matching(vertex_set, subtraction_set, schedules[i], p_label, fsm_set);
+                support = get_support_pattern_matching(vertex_set, subtraction_set, schedules[i], p_label, fsm_set, min_support);
                 
                 if (support >= min_support) {
                     local_fsm_cnt++;
