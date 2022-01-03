@@ -18,12 +18,18 @@ constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
-//constexpr int num_blocks = 1024;
-constexpr int num_blocks = 2048;
+constexpr int num_blocks = 32;
+//constexpr int num_blocks = 2048;
+//constexpr int num_blocks = 1;
 constexpr int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
 __device__ unsigned long long dev_sum = 0;
-__device__ unsigned int dev_cur_labeled_pattern = 0;
+__device__ volatile unsigned int dev_cur_vertex = 0;
+__device__ volatile unsigned int dev_loop_end_vertex = 0;
+__device__ volatile unsigned int dev_cur_labeled_pattern = 0;
+__device__ volatile int dev_fsm_set_stack_top;
+class GPUBitVector;
+__device__ volatile GPUBitVector* dev_cur_fsm_set;
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -40,6 +46,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
     l = labeled_vertex[index]; \
     r = labeled_vertex[index+ 1]; \
 } while(0)
+
+#define mutex_lock { while (atomicCAS(dev_mutex, 0, 1) != 0); }
+#define mutex_unlock { atomicExch(dev_mutex, 0); }
 
 template <typename T>
 __device__ inline void swap(T& a, T& b)
@@ -218,7 +227,9 @@ class GPUBitVector {
 public:
     void construct(size_t element_cnt) {
         size = (element_cnt + 31) / 32;
+        non_zero_cnt = 0;
         gpuErrchk( cudaMalloc((void**)&data, size * sizeof(uint32_t)));
+        gpuErrchk( cudaMemset((void*) data, 0, size * sizeof(uint32_t)));
     }
     void destroy() {
         gpuErrchk(cudaFree(data));
@@ -227,21 +238,27 @@ public:
         non_zero_cnt = 0;
         memset((void*) data, 0, size * sizeof(uint32_t));
     }
+    __host__ void host_clear() {
+        non_zero_cnt = 0;
+        gpuErrchk(cudaMemset((void*) data, 0, size * sizeof(uint32_t)));
+    }
     GPUBitVector& operator = (const GPUBitVector&) = delete;
     GPUBitVector(const GPUBitVector&&) = delete;
     GPUBitVector(const GPUBitVector&) = delete;
-    inline __device__ long long get_non_zero_cnt() const { return non_zero_cnt;}
-    __device__ void insert(uint32_t id) { //目前每个warp一个bitvector，且只有一个线程会操作，所以不加锁
+    inline __device__ unsigned long long get_non_zero_cnt() const { return non_zero_cnt;}
+    __device__ void insert(uint32_t id) {
         uint32_t index = id >> 5;
-        uint32_t tmp_data = data[index];
+        //uint32_t tmp_data = data[index];
         uint32_t offset = 1 << (id % 32);
-        if ((tmp_data & offset) == 0) {
-            ++non_zero_cnt;
-            data[index] = tmp_data | offset;
+        uint32_t old_val = atomicOr(&data[index], offset);
+        if ((old_val & offset) == 0) {
+            //++non_zero_cnt;
+            atomicAdd((unsigned long long*) &non_zero_cnt, 1);
+            //data[index] = tmp_data | offset;
         }
     }
 private:
-    long long non_zero_cnt;
+    volatile unsigned long long non_zero_cnt;
     size_t size;
     uint32_t* data;
 };
@@ -470,8 +487,12 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
 /**
  * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
  */
- __global__ void gpu_pattern_matching(uint32_t job_num, uint32_t v_cnt, uint32_t buffer_size, uint32_t *edge, uint32_t* labeled_vertex, int* v_label, uint32_t* tmp, const GPUSchedule* schedule, char* all_p_label, GPUBitVector* global_fsm_set, int* automorphisms, unsigned int* is_frequent, unsigned int* label_start_idx, int automorphisms_cnt, long long min_support, unsigned int pattern_is_frequent_index, int l_cnt) {
+ //一些debug提示：这段代码如果只用一个block、多个warp来执行是对的，多个block就错了，很可能是由于memory consistency导致的。使用threadfence_system或atomic来解决，尽量使用atomic，threadfence_system性能太差
+ __global__ void gpu_pattern_matching(uint32_t job_num, uint32_t v_cnt, uint32_t buffer_size, uint32_t *edge, uint32_t* labeled_vertex, int* v_label, uint32_t* tmp, const GPUSchedule* schedule, const char* all_p_label, GPUBitVector** fsm_set_stack, int* automorphisms, unsigned int* is_frequent, unsigned int* label_start_idx, int automorphisms_cnt, long long min_support, unsigned int pattern_is_frequent_index, int l_cnt, int* dev_mutex, uint32_t* left_vertex_cnt) {
+    __shared__ unsigned int block_vertex_id[WARPS_PER_BLOCK];
+    __shared__ GPUBitVector* block_fsm_set[WARPS_PER_BLOCK];
     __shared__ unsigned int block_pattern_idx[WARPS_PER_BLOCK];
+    __shared__ bool block_need_threadfence_system[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
     
@@ -481,17 +502,11 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id within the block
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
     int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id
-    unsigned int &pattern_idx = block_pattern_idx[wid];
+    unsigned int &vertex_id = block_vertex_id[wid];
     GPUVertexSet *vertex_set = block_vertex_set + wid * num_vertex_sets_per_warp;
     char* p_label = ((char*) (block_vertex_set)) + schedule->p_label_offset + (schedule->max_edge + 1) * wid;
 
-    //__shared__ GPUBitVector* block_fsm_set[WARPS_PER_BLOCK];
-    //GPUBitVector*& fsm_set = block_fsm_set[wid];
-    GPUBitVector* fsm_set = global_fsm_set + global_wid * schedule->get_size();
-
-
     if (lid == 0) {
-        pattern_idx = 0;
         uint32_t offset = buffer_size * global_wid * num_vertex_sets_per_warp;
         for (int i = 0; i < num_vertex_sets_per_warp; ++i)
         {
@@ -513,34 +528,69 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
     while (true) {
         if (lid == 0) {
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
-                pattern_idx = atomicAdd(&dev_cur_labeled_pattern, 1); //每个warp负责一个pattern，而不是负责一个点或一条边
-                //edgeEnd = min(edge_num, edgeI + 1); //这里不需要原子读吗
-                unsigned int job_id = pattern_idx;
-                if (job_id < job_num)
-                {
+                mutex_lock
+                //pattern_idx = atomicAdd(&dev_cur_labeled_pattern, 1); //每个warp负责一个pattern，而不是负责一个点或一条边
+                vertex_id = dev_cur_vertex;
+                //__threadfence_system();
+                block_need_threadfence_system[wid] = true;
+                if (vertex_id != v_cnt) { //接下来对dev_cur_vertex和dev_cur_labeled_pattern的修改，都是为下一个warp准备的，此warp使用的是vertex_id和pattern_idx
+                    unsigned int pattern_idx = dev_cur_labeled_pattern;
+                    block_pattern_idx[wid] = pattern_idx;
+                    block_fsm_set[wid] = (GPUBitVector*) dev_cur_fsm_set;
+                    size_t job_start_idx = pattern_idx * schedule->get_size();
                     subtraction_set.init();
-                    //subtraction_set.push_back(edge_from[i]);
-                    //subtraction_set.push_back(edge[i]);
-                    size_t job_start_idx = job_id * schedule->get_size();
-                    for (int j = 0; j < schedule->get_size(); ++j)
+                    subtraction_set.push_back(vertex_id);
+                    for (int j = 0; j < schedule->get_size(); ++j) //TODO: 其实不用每次都做这个循环，只有这个warp做的上一个labeled pattern和当前要做的不同时才用赋值p_label
                         p_label[j] = all_p_label[job_start_idx + j];
+                    if (vertex_id + 1 < dev_loop_end_vertex) {
+                        //dev_cur_vertex = vertex_id + 1;
+                        atomicAdd((unsigned int*) &dev_cur_vertex, 1);
+                    }
+                    else {
+                        unsigned int next_labeled_pattern = pattern_idx + 1;
+                        if (next_labeled_pattern < job_num){
+                            char next_p_label_0 = all_p_label[job_start_idx + schedule->get_size()];
+                            //dev_cur_vertex = label_start_idx[next_p_label_0];
+                            atomicExch((unsigned int*) &dev_cur_vertex, label_start_idx[next_p_label_0]);
+                            //dev_loop_end_vertex = label_start_idx[next_p_label_0 + 1];
+                            atomicExch((unsigned int*) &dev_loop_end_vertex, label_start_idx[next_p_label_0 + 1]);
+                            //printf("next_labeled_pattern = %u %u %u %u %d %d %llu\n", next_labeled_pattern, v_cnt, dev_cur_vertex, dev_loop_end_vertex, next_p_label_0, all_p_label[1088 * schedule->get_size()], job_start_idx);
+                            //dev_cur_labeled_pattern = next_labeled_pattern;
+                            atomicExch((unsigned int*) &dev_cur_labeled_pattern, next_labeled_pattern);
+                            assert(dev_fsm_set_stack_top != 0); //在最极端的情况下，每个warp都在做不同的labeled pattern，可能为0，导致出错，不过可能性非常低，暂时不考虑这种情况
+                            atomicSub((int*) &dev_fsm_set_stack_top, 1);
+                            GPUBitVector* tmp_fsm_set = fsm_set_stack[dev_fsm_set_stack_top];
+                            //dev_cur_fsm_set = tmp_fsm_set;
+                            atomicExch((unsigned long long int*) &dev_cur_fsm_set, (unsigned long long int) tmp_fsm_set);
+                            for (int i = 0; i < schedule->get_size(); ++i)
+                                tmp_fsm_set[i].clear();
+                            block_need_threadfence_system[wid] = true;
+                        }
+                        else
+                            //dev_cur_vertex = v_cnt;
+                            atomicExch((unsigned int*) &dev_cur_vertex, v_cnt);
+                    }
+                    //printf("vertex = %d  pattern_idx = %d v_cnt = %d\n", vertex_id, block_pattern_idx[wid], v_cnt);
                 }
+                mutex_unlock
+                //edgeEnd = min(edge_num, edgeI + 1); //这里不需要原子读吗
             //}
         }
 
-        __threadfence_block();
+        if (block_need_threadfence_system[wid])
+            __threadfence_system();
+        else
+            __threadfence_block();
 
-        unsigned int job_id = pattern_idx;
-        if(job_id >= job_num) break;
+        unsigned int vertex = vertex_id;
+        if(vertex == v_cnt) break;
 
-        if (lid < schedule->get_size())
-            fsm_set[lid].clear();
-        __threadfence_block();
+        GPUBitVector* fsm_set = block_fsm_set[wid];
         
         //for (int vertex = 0; vertex < v_cnt; ++vertex)
         //    if (v_label[vertex] == p_label[0]) {//TODO: 这里也可以换成一个提前按照v_label排序，会快一些
-        int end_v = label_start_idx[p_label[0] + 1];
-        for (int vertex = label_start_idx[p_label[0]]; vertex < end_v; ++vertex) {
+        //int end_v = label_start_idx[p_label[0] + 1];
+        //for (int vertex = label_start_idx[p_label[0]]; vertex < end_v; ++vertex) {
                 bool is_zero = false;
                 for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
                     unsigned int l, r;
@@ -552,39 +602,47 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
                         break;
                     }
                 }
-                if (is_zero)
-                    continue;
-                if (lid == 0)
-                    subtraction_set.push_back(vertex);
-                __threadfence_block();
-                if (GPU_pattern_matching_func<1>(schedule, vertex_set, subtraction_set, edge, labeled_vertex, p_label, fsm_set, l_cnt))
-                    if (lid == 0) //TODO: 目前insert只让0号线程执行，之后考虑32个线程同时执行，看会不会出错（好像是不会）
-                        fsm_set[0].insert(vertex);
-                if (lid == 0)
-                    subtraction_set.pop_back();
-                __threadfence_block();
-            }
-        
-        if (lid == 0) {
-            long long support = v_cnt;
-            for (int i = 0; i < schedule->get_size(); ++i) {
-                long long count = fsm_set[i].get_non_zero_cnt();
-                if (count < support)
-                    support = count;
-            }
-            if (support >= min_support) {
-                atomicAdd(&dev_sum, 1);
-                for (int aut_id = 0; aut_id < automorphisms_cnt; ++aut_id) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
-                    int* aut = automorphisms + aut_id * schedule->get_size();
-                    unsigned int index = pattern_is_frequent_index;
-                    unsigned int pow = 1;
-                    for (int j = 0; j < schedule->get_size(); ++j) {
-                        index += p_label[aut[j]] * pow;
-                        pow *= (unsigned int) l_cnt;
-                    }
-                    atomicOr(&is_frequent[index >> 5], (unsigned int) (1 << (index % 32)));
+                if (!is_zero) {
+                    //if (lid == 0)
+                    //    subtraction_set.push_back(vertex);
+                    //__threadfence_block();
+                    if (GPU_pattern_matching_func<1>(schedule, vertex_set, subtraction_set, edge, labeled_vertex, p_label, fsm_set, l_cnt))
+                        if (lid == 0) //TODO: 目前insert只让0号线程执行，之后考虑32个线程同时执行，看会不会出错（好像是不会）
+                            fsm_set[0].insert(vertex);
+                    //if (lid == 0) //因为每次都init了，所以应该不用pop了
+                    //    subtraction_set.pop_back();
+                    __threadfence_block();
                 }
+        //    }
+
+        if (lid == 0) {
+            if (atomicSub(&left_vertex_cnt[block_pattern_idx[wid]], 1) == 1) {
+                unsigned long long support = v_cnt;
+                for (int i = 0; i < schedule->get_size(); ++i) {
+                    unsigned long long count = fsm_set[i].get_non_zero_cnt();
+                    if (count < support)
+                        support = count;
+                }
+                if (support >= min_support) {
+                    atomicAdd(&dev_sum, 1);
+                    for (int aut_id = 0; aut_id < automorphisms_cnt; ++aut_id) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
+                        int* aut = automorphisms + aut_id * schedule->get_size();
+                        unsigned int index = pattern_is_frequent_index;
+                        unsigned int pow = 1;
+                        for (int j = 0; j < schedule->get_size(); ++j) {
+                            index += p_label[aut[j]] * pow;
+                            pow *= (unsigned int) l_cnt;
+                        }
+                        atomicOr(&is_frequent[index >> 5], (unsigned int) (1 << (index % 32)));
+                    }
+                }
+                mutex_lock
+                int old_top = atomicAdd((int*) &dev_fsm_set_stack_top, 1);
+                atomicExch((unsigned long long int*) &fsm_set_stack[old_top], (unsigned long long int) fsm_set);
+                //fsm_set_stack[old_top] = fsm_set;
+                mutex_unlock
             }
+            //__threadfence_system();
         }
         __threadfence_block();
         /*
@@ -622,7 +680,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
     }
 }
 
-long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule, const std::vector<std::vector<int> >& automorphisms, unsigned int pattern_is_frequent_index, unsigned int* dev_is_frequent, uint32_t* dev_edge, uint32_t* dev_labeled_vertex, int* dev_v_label, uint32_t* dev_tmp, int max_edge, int job_num, char* dev_all_p_label, GPUBitVector* fsm_set, uint32_t* dev_label_start_idx, long long min_support) {
+long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule, const std::vector<std::vector<int> >& automorphisms, unsigned int pattern_is_frequent_index, unsigned int* dev_is_frequent, uint32_t* dev_edge, uint32_t* dev_labeled_vertex, int* dev_v_label, uint32_t* dev_tmp, int max_edge, int job_num, char* dev_all_p_label, GPUBitVector** fsm_set_stack, uint32_t* dev_label_start_idx, long long min_support, uint32_t* dev_left_vertex_cnt) {
     //printf("basic prefix %d, total prefix %d\n", schedule.get_basic_prefix_num(), schedule.get_total_prefix_num());
     printf("total prefix %d\n", schedule.get_total_prefix_num());
 
@@ -781,12 +839,31 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule,
     
     //gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
     //    (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
+    int mutex_state = 0;
+    int* dev_mutex;
+    gpuErrchk( cudaMalloc((void**)&dev_mutex, sizeof(int)));
+    gpuErrchk( cudaMemcpy(dev_mutex, &mutex_state, sizeof(int), cudaMemcpyHostToDevice));
+    
+    //把stack 中的第一个fsm_set拿出来，存放在 fsm_set_stack_top
+    GPUBitVector* first_fsm_set;
+    gpuErrchk( cudaMemcpy(&first_fsm_set, &fsm_set_stack[num_total_warps - 1], sizeof(GPUBitVector*), cudaMemcpyDeviceToHost));
+    gpuErrchk( cudaMemcpyToSymbol(dev_cur_fsm_set, &first_fsm_set, sizeof(GPUBitVector*)));
+    for (int i = 0; i < schedule.get_size(); ++i)
+        first_fsm_set[i].host_clear();
+    unsigned int fsm_set_stack_top = num_total_warps - 1;
+    gpuErrchk( cudaMemcpyToSymbol(dev_fsm_set_stack_top, &fsm_set_stack_top, sizeof(fsm_set_stack_top)));
+    printf("job_num = %d\n", job_num);
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
-        (job_num, g->v_cnt, buffer_size, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, dev_schedule, dev_all_p_label, fsm_set, dev_automorphisms, dev_is_frequent, dev_label_start_idx, automorphisms.size(), min_support, pattern_is_frequent_index, g->l_cnt);
+        (job_num, g->v_cnt, buffer_size, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, dev_schedule, dev_all_p_label, fsm_set_stack, dev_automorphisms, dev_is_frequent, dev_label_start_idx, automorphisms.size(), min_support, pattern_is_frequent_index, g->l_cnt, dev_mutex, dev_left_vertex_cnt);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
+    gpuErrchk( cudaMemcpyFromSymbol(&fsm_set_stack_top, dev_fsm_set_stack_top, sizeof(fsm_set_stack_top)) );
+    printf("fsm_set_stack_top = %d  num_total_warps = %d\n", fsm_set_stack_top, num_total_warps);
+    printf("sum = %llu\n", sum);
+    fflush(stdout);
+    assert(fsm_set_stack_top == num_total_warps);
 
     //sum /= schedule.get_in_exclusion_optimize_redundancy();
     
@@ -807,6 +884,7 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule,
     gpuErrchk(cudaFree(dev_schedule->next));
     gpuErrchk(cudaFree(dev_schedule->loop_set_prefix_id));
     gpuErrchk(cudaFree(dev_schedule->prefix_target));
+    gpuErrchk(cudaFree(dev_mutex));
     // gpuErrchk(cudaFree(dev_schedule->restrict_last));
     // gpuErrchk(cudaFree(dev_schedule->restrict_next));
     // gpuErrchk(cudaFree(dev_schedule->restrict_index));
@@ -851,20 +929,26 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         max_labeled_patterns *= (size_t) g->l_cnt;
     char* all_p_label = new char[max_labeled_patterns * (max_edge + 1)];
     char* tmp_p_label = new char[max_edge + 1];
+    uint32_t* left_vertex_cnt = new uint32_t[max_labeled_patterns];
 
     // 无关schedule的一些gpu初始化
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
     size_t size_labeled_vertex = (g->v_cnt * g->l_cnt + 1) * sizeof(uint32_t);
     size_t size_v_label = g->v_cnt * sizeof(int);
     int max_total_prefix_num = 0;
-    for (int i = 0; i < schedules_num; ++i)
+    for (int i = 0; i < schedules_num; ++i) {
+        schedules[i].update_loop_invariant_for_fsm();
         if (schedules[i].get_total_prefix_num() > max_total_prefix_num)
             max_total_prefix_num = schedules[i].get_total_prefix_num();
+    }
+    for (int i = 0; i < schedules_num; ++i)
+        printf("max_total_prefix_num = %d\n", schedules[i].get_total_prefix_num());
     size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (max_total_prefix_num + 2); //prefix + subtraction + tmp
     size_t size_pattern_is_frequent_index = (schedules_num + 1) * sizeof(uint32_t);
     size_t size_is_frequent = ((pattern_is_frequent_index[schedules_num] + 31) / 32) * sizeof(uint32_t);
     size_t size_all_p_label = max_labeled_patterns * (max_edge + 1) * sizeof(char);
     size_t size_label_start_idx = (g->l_cnt + 1) * sizeof(uint32_t);
+    size_t size_left_vertex_cnt = max_labeled_patterns * sizeof(uint32_t);
 
     uint32_t *dev_edge;
     //uint32_t *dev_edge_from;
@@ -875,7 +959,9 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     uint32_t *dev_is_frequent;
     char *dev_all_p_label;
     uint32_t *dev_label_start_idx;
+    uint32_t *dev_left_vertex_cnt;
     GPUBitVector* dev_fsm_set;
+    GPUBitVector** dev_fsm_set_stack; //存储着还没有用的fsm_set的地址，一个unlabeled pattern用一个fsm_set，但最多同时有num_total_warps个不同的unlabeled pattern在被搜索
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
     //gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
@@ -886,6 +972,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     gpuErrchk( cudaMalloc((void**)&dev_is_frequent, size_is_frequent));
     gpuErrchk( cudaMalloc((void**)&dev_all_p_label, size_all_p_label));
     gpuErrchk( cudaMalloc((void**)&dev_label_start_idx, size_label_start_idx));
+    gpuErrchk( cudaMalloc((void**)&dev_left_vertex_cnt, size_left_vertex_cnt));
 
     gpuErrchk( cudaMemcpy(dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
     //gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
@@ -900,6 +987,15 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
         dev_fsm_set[i].construct(g->v_cnt);
 
+    GPUBitVector* fsm_set_stack[num_total_warps];
+    for (int i = 0; i < num_total_warps; ++i)
+        fsm_set_stack[i] = &dev_fsm_set[(num_total_warps - i - 1) * (max_edge + 1)];
+    gpuErrchk( cudaMalloc((void**)&dev_fsm_set_stack, num_total_warps * sizeof(GPUBitVector*)));
+    gpuErrchk( cudaMemcpy(dev_fsm_set_stack, fsm_set_stack, num_total_warps * sizeof(GPUBitVector*), cudaMemcpyHostToDevice));
+
+    unsigned int fsm_set_stack_top = num_total_warps;
+    gpuErrchk( cudaMemcpyToSymbol(dev_fsm_set_stack_top, &fsm_set_stack_top, sizeof(fsm_set_stack_top)));
+
     timeval start, end, total_time;
     gettimeofday(&start, NULL);
 
@@ -907,12 +1003,20 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         std::vector<std::vector<int> > automorphisms;
         automorphisms.clear();
         schedules[i].GraphZero_get_automorphisms(automorphisms);
-        schedules[i].update_loop_invariant_for_fsm();
         size_t all_p_label_idx = 0;
         g->traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
         gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
         int job_num = all_p_label_idx / schedules[i].get_size();
-        fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set, dev_label_start_idx, min_support);
+        for (int j = 0; j < job_num; ++j) {
+            char p_label_0 = all_p_label[j * schedules[i].get_size()];
+            left_vertex_cnt[j] = g->label_start_idx[p_label_0 + 1] - g->label_start_idx[p_label_0];
+        }
+        gpuErrchk( cudaMemcpy(dev_left_vertex_cnt, left_vertex_cnt, job_num * sizeof(uint32_t), cudaMemcpyHostToDevice));
+        unsigned int cur_vertex = g->label_start_idx[all_p_label[0]];
+        gpuErrchk( cudaMemcpyToSymbol(dev_cur_vertex, &cur_vertex, sizeof(cur_vertex)));
+        unsigned int loop_end_vertex = g->label_start_idx[all_p_label[0] + 1];
+        gpuErrchk( cudaMemcpyToSymbol(dev_loop_end_vertex, &loop_end_vertex, sizeof(loop_end_vertex)));
+        fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set_stack, dev_label_start_idx, min_support, dev_left_vertex_cnt);
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
             fsm_cnt = 0;
@@ -935,6 +1039,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     gpuErrchk(cudaFree(dev_is_frequent));
     gpuErrchk(cudaFree(dev_all_p_label));
     gpuErrchk(cudaFree(dev_label_start_idx));
+    gpuErrchk(cudaFree(dev_left_vertex_cnt));
     for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
         dev_fsm_set[i].destroy();
     gpuErrchk(cudaFree(dev_fsm_set));
@@ -949,6 +1054,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     delete[] is_frequent;
     delete[] all_p_label;
     delete[] tmp_p_label;
+    delete[] left_vertex_cnt;
 }
 
 int main(int argc,char *argv[]) {
