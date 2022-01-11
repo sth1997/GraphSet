@@ -15,13 +15,6 @@ graphs.append("mico")
 graphs.append("livejournal")
 graphs.append("orkut")
 
-names = []
-names.append("Wiki-Vote")
-names.append("Patents")
-names.append("MiCo")
-names.append("LiveJournal")
-names.append("Orkut")
-
 print("#!/bin/bash\nset -x\n")
 
 i = -1

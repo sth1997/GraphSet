@@ -15,12 +15,11 @@ graphs.append("wiki-vote.g")
 graphs.append("patents.g")
 graphs.append("mico.g")
 graphs.append("livejournal.g")
+graphs.append("orkut.g")
 
 print("#!/bin/bash\nset -x\n")
 
-i = -1
 for graph in graphs:
-    i += 1
     for p in range(len(patterns)):
         log_name = "./" + graph + "_" + "motif_p" + str(p + 1) + ".log_$(date -Iseconds)"
-        print("../build/bin/baseline_test " + "~/dataset/" + graph + " " + patterns[i] + " > " + log_name)
+        print("../build/bin/baseline_test " + "~/dataset/" + graph + " " + patterns[p] + " > " + log_name)
