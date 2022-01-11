@@ -10,8 +10,8 @@ TARGET_LINK_LIBRARIES(baseline_test graph_mining)
 #ADD_EXECUTABLE(in_exclusion_optimize_test in_exclusion_optimize_test.cpp)
 #TARGET_LINK_LIBRARIES(in_exclusion_optimize_test graph_mining)
 
-#ADD_EXECUTABLE(all_schedule_test all_schedule_test.cpp)
-#TARGET_LINK_LIBRARIES(all_schedule_test graph_mining)
+ADD_EXECUTABLE(all_schedule_test all_schedule_test.cpp)
+TARGET_LINK_LIBRARIES(all_schedule_test graph_mining)
 
 #ADD_EXECUTABLE(performance_test performance_test.cpp)
 #TARGET_LINK_LIBRARIES(performance_test graph_mining)

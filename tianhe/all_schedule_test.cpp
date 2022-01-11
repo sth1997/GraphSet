@@ -11,6 +11,10 @@
 #include <algorithm>
 
 void test_pattern(Graph* g, Pattern &pattern) {
+	bool is_valid;
+       Schedule_IEP schedule_best(pattern, is_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
+
+	int best_k = schedule_best.get_in_exclusion_optimize_num();
 
     int thread_num = 16;
     double t1,t2,t3,t4;
@@ -47,6 +51,10 @@ void test_pattern(Graph* g, Pattern &pattern) {
         if(!valid) continue;
 
         Schedule_IEP schedule_our(cur_pattern, is_pattern_valid, 0, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
+
+	int my_k = schedule_our.get_in_exclusion_optimize_num();
+
+	if(my_k < best_k) continue;
         
         if(is_pattern_valid == false) continue;
         
