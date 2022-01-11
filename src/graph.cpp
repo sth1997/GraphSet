@@ -14,6 +14,9 @@
 #include <queue>
 #include <iostream>
 
+#include <unordered_set>
+#include <limits>
+
 int Graph::intersection_size(int v1,int v2) {
     unsigned int l1, r1;
     get_edge_index(v1, l1, r1);
@@ -272,6 +275,113 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
         
     }
     return global_ans / schedule.get_in_exclusion_optimize_redundancy();
+}
+
+void Graph::calculate_support_bruteforce(const Schedule& schedule, VertexSet* vertex_sets, VertexSet& partial_embedding, std::unordered_set<int>* fsm_sets, int depth) {
+    int n = schedule.get_size();
+    if (depth == n) {
+        for (int i = 0; i < n; ++i)
+            fsm_sets[i].insert(partial_embedding.get_data(i));
+        return;
+    }
+
+    // if (depth == n - 2) {
+    //     auto &rev_first_vertex_set = vertex_sets[schedule.get_loop_set_prefix_id(n - 1)];
+    //     auto &rev_second_vertex_set = vertex_sets[schedule.get_loop_set_prefix_id(n - 2)];
+    //     int rev_first_loop_size = rev_first_vertex_set.get_size();
+    //     int rev_second_loop_size = rev_second_vertex_set.get_size();
+    //     if (rev_first_loop_size > 1 && rev_second_loop_size > 1) {
+    //         for (int i = 0; i < n - 2; ++i)
+    //             fsm_sets[i].insert(partial_embedding.get_data(i));
+    //         for (int i = 0; i < rev_second_loop_size; ++i)
+    //             fsm_sets[n - 2].insert(rev_second_vertex_set.get_data(i));
+    //         for (int i = 0; i < rev_first_loop_size; ++i)
+    //             fsm_sets[n - 1].insert(rev_first_vertex_set.get_data(i));
+    //         return;
+    //     }
+    // }
+
+    int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
+    int loop_size = vertex_sets[loop_set_prefix_id].get_size();
+    if (loop_size <= 0)
+        return;
+
+    int* loop_data_ptr = vertex_sets[loop_set_prefix_id].get_data_ptr();
+    int min_vertex = v_cnt;
+    for (int i = schedule.get_restrict_last(depth); i != -1; i = schedule.get_restrict_next(i))
+        if (min_vertex > partial_embedding.get_data(schedule.get_restrict_index(i)))
+            min_vertex = partial_embedding.get_data(schedule.get_restrict_index(i));
+    for (int i = 0; i < loop_size; ++i) {
+        if (min_vertex <= loop_data_ptr[i])
+            break;
+        int vertex = loop_data_ptr[i];
+        if (partial_embedding.has_data(vertex))
+            continue;
+        unsigned int l, r;
+        get_edge_index(vertex, l, r);
+        bool is_zero = false;
+        for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id)) {
+            vertex_sets[prefix_id].build_vertex_set(schedule, vertex_sets, &edge[l], (int)r - l, prefix_id, vertex);
+            if (vertex_sets[prefix_id].get_size() == 0) {
+                is_zero = true;
+                break;
+            }
+        }
+        if ( is_zero ) continue;
+        
+        partial_embedding.push_back(vertex);
+        calculate_support_bruteforce(schedule, vertex_sets, partial_embedding, fsm_sets, depth + 1);
+        partial_embedding.pop_back();
+    }
+}
+
+int Graph::calculate_support(const Schedule& schedule) {
+    int n = schedule.get_size();
+
+    int nr_threads = omp_get_max_threads();
+    auto fsm_set_ptrs = new std::unordered_set<int>*[nr_threads];
+
+    for (int i = 0; i < nr_threads; ++i)
+        fsm_set_ptrs[i] = new std::unordered_set<int>[n];
+
+    #pragma omp parallel
+    {
+        auto vertex_sets = new VertexSet[schedule.get_total_prefix_num()];
+        VertexSet partial_embedding;
+        partial_embedding.init();
+        int thread_id = omp_get_thread_num();
+
+        #pragma omp for schedule(dynamic) nowait
+        for (int v = 0; v < v_cnt; ++v) {
+            unsigned l, r;
+            get_edge_index(v, l, r);
+            for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
+                vertex_sets[prefix_id].build_vertex_set(schedule, vertex_sets, &edge[l], (int)r - l, prefix_id);
+            
+            partial_embedding.push_back(v);
+            calculate_support_bruteforce(schedule, vertex_sets, partial_embedding, fsm_set_ptrs[thread_id], 1);
+            partial_embedding.pop_back();
+        }
+        delete[] vertex_sets;
+    }
+
+    // merge fsm_sets of different threads
+    int support = std::numeric_limits<int>::max();
+    std::unordered_set<int> vertexes;
+    for (int i = 0; i < n; ++i) {
+        vertexes.clear();
+        for (int j = 0; j < nr_threads; ++j)
+            for (int v : fsm_set_ptrs[j][i])
+                vertexes.insert(v);
+        printf("pattern vertex %d: set size = %ld\n", i, vertexes.size());
+        if (support > vertexes.size())
+            support = vertexes.size();
+    }
+
+    for (int i = 0; i < nr_threads; ++i)
+        delete[] fsm_set_ptrs[i];
+    delete[] fsm_set_ptrs;
+    return support;
 }
 
 void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth)

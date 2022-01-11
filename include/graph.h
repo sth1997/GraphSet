@@ -3,6 +3,8 @@
 #include "vertex_set.h"
 #include <assert.h>
 
+#include <unordered_set>
+
 class Graphmpi;
 class Graph {
 public:
@@ -48,6 +50,9 @@ public:
     //general pattern matching algorithm with multi thread
     long long pattern_matching(const Schedule& schedule, int thread_count, bool clique = false);
 
+    // get support
+    int calculate_support(const Schedule& schedule);
+
     //general pattern matching algorithm with multi thread ans multi process
     long long pattern_matching_mpi(const Schedule& schedule, int thread_count, bool clique = false);
 private:
@@ -55,6 +60,8 @@ private:
     void tc_mt(long long * global_ans);
 
     void get_edge_index(int v, unsigned int& l, unsigned int& r) const;
+
+    void calculate_support_bruteforce(const Schedule& schedule, VertexSet* vertex_sets, VertexSet& partial_embedding, std::unordered_set<int>* fsm_sets, int depth);
 
     void pattern_matching_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, long long& local_ans, int depth, bool clique = false);
 
