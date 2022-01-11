@@ -28,5 +28,5 @@ i = -1
 for graph in graphs:
     i += 1
     for p in range(len(patterns)):
-        log_name = "./logs/" + graph + "_" + "p" + str(p + 1) + ".log_$(date -Iseconds)"
-        print("./build/bin/baseline_test "+ names[i] + " ~/dataset/" + graph + "_input " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        log_name = "./" + graph + "_" + "p" + str(p + 1) + ".log_$(date -Iseconds)"
+        print("../build/bin/baseline_test "+ names[i] + " ~/dataset/" + graph + "_input " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
