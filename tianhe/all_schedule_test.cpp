@@ -54,7 +54,7 @@ void test_pattern(Graph* g, Pattern &pattern) {
 
 	int my_k = schedule_our.get_in_exclusion_optimize_num();
 
-	if(my_k < best_k) continue;
+	if(my_k < best_k - 1) continue;
         
         if(is_pattern_valid == false) continue;
         

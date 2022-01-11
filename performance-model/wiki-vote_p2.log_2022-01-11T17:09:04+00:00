@@ -1,0 +1,964 @@
+load_graph: 7115 vertexes, 201524 edges
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.192569
+Schedule_IEP:
+011011
+101110
+110101
+011000
+110000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191814
+Schedule_IEP:
+011011
+101101
+110110
+011000
+101000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191917
+Schedule_IEP:
+011101
+101110
+110011
+110000
+011000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.195766
+Schedule_IEP:
+011101
+101011
+110110
+101000
+011000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191762
+Schedule_IEP:
+011110
+101101
+110011
+110000
+101000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191604
+Schedule_IEP:
+011110
+101011
+110101
+101000
+110000
+011000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191794
+Schedule_IEP:
+011011
+101101
+110110
+011000
+101000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191854
+Schedule_IEP:
+011011
+101110
+110101
+011000
+110000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.192925
+Schedule_IEP:
+011101
+101011
+110110
+101000
+011000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191736
+Schedule_IEP:
+011101
+101110
+110011
+110000
+011000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191581
+Schedule_IEP:
+011110
+101011
+110101
+101000
+110000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191584
+Schedule_IEP:
+011110
+101101
+110011
+110000
+101000
+011000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191834
+Schedule_IEP:
+011110
+101011
+110101
+101000
+110000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191753
+Schedule_IEP:
+011101
+101011
+110110
+101000
+011000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191769
+Schedule_IEP:
+011110
+101101
+110011
+110000
+101000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.193538
+Schedule_IEP:
+011011
+101101
+110110
+011000
+101000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191860
+Schedule_IEP:
+011101
+101110
+110011
+110000
+011000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.193222
+Schedule_IEP:
+011011
+101110
+110101
+011000
+110000
+101000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191640
+Schedule_IEP:
+011101
+101011
+110110
+101000
+011000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191704
+Schedule_IEP:
+011110
+101011
+110101
+101000
+110000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191911
+Schedule_IEP:
+011011
+101101
+110110
+011000
+101000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191560
+Schedule_IEP:
+011110
+101101
+110011
+110000
+101000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191850
+Schedule_IEP:
+011011
+101110
+110101
+011000
+110000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191910
+Schedule_IEP:
+011101
+101110
+110011
+110000
+011000
+101000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.193600
+Schedule_IEP:
+011110
+101101
+110011
+110000
+101000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191729
+Schedule_IEP:
+011101
+101110
+110011
+110000
+011000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191768
+Schedule_IEP:
+011110
+101011
+110101
+101000
+110000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191797
+Schedule_IEP:
+011011
+101110
+110101
+011000
+110000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.193121
+Schedule_IEP:
+011101
+101011
+110110
+101000
+011000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.192136
+Schedule_IEP:
+011011
+101101
+110110
+011000
+101000
+110000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191961
+Schedule_IEP:
+011101
+101110
+110011
+110000
+011000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191586
+Schedule_IEP:
+011110
+101101
+110011
+110000
+101000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191889
+Schedule_IEP:
+011011
+101110
+110101
+011000
+110000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191494
+Schedule_IEP:
+011110
+101011
+110101
+101000
+110000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191801
+Schedule_IEP:
+011011
+101101
+110110
+011000
+101000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+ans 87365439071 time: 0.191704
+Schedule_IEP:
+011101
+101011
+110110
+101000
+011000
+110000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 6
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 7
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 8
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 5
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 6
+total prefix num = 6
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 7
+total prefix num = 7
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule

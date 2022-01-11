@@ -1,0 +1,164 @@
+load_graph: 7115 vertexes, 201524 edges
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+Can not use in_exclusion_optimize with this schedule
+Can not use in_exclusion_optimize with this schedule
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.484011
+Schedule_IEP:
+011110
+100111
+100001
+110000
+110000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.253171
+Schedule_IEP:
+010111
+101110
+010001
+110000
+110000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.480683
+Schedule_IEP:
+011101
+100111
+100010
+110000
+011000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.236579
+Schedule_IEP:
+010111
+101101
+010010
+110000
+101000
+110000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.488083
+Schedule_IEP:
+011110
+100111
+100001
+110000
+110000
+011000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.242359
+Schedule_IEP:
+010111
+101110
+010001
+110000
+110000
+101000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.480020
+Schedule_IEP:
+011011
+100111
+100100
+011000
+110000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.236229
+Schedule_IEP:
+010111
+101011
+010100
+101000
+110000
+110000
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+use in_exclusion_optimize with size 2
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.488416
+Schedule_IEP:
+011101
+100111
+100010
+110000
+011000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.253955
+Schedule_IEP:
+010111
+101101
+010010
+110000
+101000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.493887
+Schedule_IEP:
+011011
+100111
+100100
+011000
+110000
+110000
+use in_exclusion_optimize with size 3
+begin to build IEP loop invariant, basic prefix num = 4
+total prefix num = 5
+ans 375309215769 time: 1.249918
+Schedule_IEP:
+010111
+101011
+010100
+101000
+110000
+110000
