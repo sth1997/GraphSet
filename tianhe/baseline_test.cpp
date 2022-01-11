@@ -57,7 +57,7 @@ int main(int argc,char *argv[]) {
     }
     
     double count_t1 = get_wall_time();
-    int thread_count = 24;
+    int thread_count = 16;
     long long ans = g->pattern_matching(schedule_iep, thread_count);
     double count_t2 = get_wall_time();
     printf("couting time= %.6lf s\n", count_t2 - count_t1);
