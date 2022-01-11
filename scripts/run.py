@@ -9,12 +9,24 @@ patterns.append("0111111101111111011101110100111100011100001100000")
 patterns.append("0111111101111111011001110100111100011000001100000")
 pattern_sizes = [5, 6, 6, 6, 7, 7]
 graphs = []
-graphs.append("wiki-vote.g")
-graphs.append("patents.g")
-graphs.append("mico.g")
-graphs.append("livejournal.g")
-graphs.append("orkut.g")
+graphs.append("wiki-vote")
+graphs.append("patents")
+graphs.append("mico")
+graphs.append("livejournal")
+graphs.append("orkut")
+
+names = []
+names.append("Wiki-Vote")
+names.append("Patents")
+names.append("MiCo")
+names.append("LiveJournal")
+names.append("Orkut")
+
+print("#!/bin/bash\nset -x\n")
+
+i = -1
 for graph in graphs:
+    i += 1
     for p in range(len(patterns)):
-        log_name = graph + "_" + "p" + str(p + 1) + ".log"
-        os.system("srun -N 1 ./bin/gpu_graph /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        log_name = "./logs/" + graph + "_" + "p" + str(p + 1) + ".log_$(date -Iseconds)"
+        print("./build/bin/baseline_test "+ names[i] + " ~/dataset/" + graph + "_input " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
