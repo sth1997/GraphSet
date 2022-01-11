@@ -29,4 +29,4 @@ for graph in graphs:
     i += 1
     for p in range(len(patterns)):
         log_name = "./" + graph + "_" + "p" + str(p + 1) + ".log_$(date -Iseconds)"
-        print("../build/bin/baseline_test "+ names[i] + " ~/dataset/" + graph + "_input " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        print("../build/bin/baseline_test " + "~/dataset/" + graph + ".g " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
