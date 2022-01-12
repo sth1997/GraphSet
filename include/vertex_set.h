@@ -20,6 +20,7 @@ public:
     void insert_ans_sort(int val);
     inline int get_size() const { return size;}
     inline int get_data(int i) const { return data[i];}
+    inline int operator[](int i) const { return data[i]; }
     inline const int* get_data_ptr() const { return data;}
     inline int* get_data_ptr() { return data;}
     inline void push_back(int val) { data[size++] = val;}

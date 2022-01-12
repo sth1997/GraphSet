@@ -285,22 +285,6 @@ void Graph::calculate_support_bruteforce(const Schedule& schedule, VertexSet* ve
         return;
     }
 
-    // if (depth == n - 2) {
-    //     auto &rev_first_vertex_set = vertex_sets[schedule.get_loop_set_prefix_id(n - 1)];
-    //     auto &rev_second_vertex_set = vertex_sets[schedule.get_loop_set_prefix_id(n - 2)];
-    //     int rev_first_loop_size = rev_first_vertex_set.get_size();
-    //     int rev_second_loop_size = rev_second_vertex_set.get_size();
-    //     if (rev_first_loop_size > 1 && rev_second_loop_size > 1) {
-    //         for (int i = 0; i < n - 2; ++i)
-    //             fsm_sets[i].insert(partial_embedding.get_data(i));
-    //         for (int i = 0; i < rev_second_loop_size; ++i)
-    //             fsm_sets[n - 2].insert(rev_second_vertex_set.get_data(i));
-    //         for (int i = 0; i < rev_first_loop_size; ++i)
-    //             fsm_sets[n - 1].insert(rev_first_vertex_set.get_data(i));
-    //         return;
-    //     }
-    // }
-
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
     int loop_size = vertex_sets[loop_set_prefix_id].get_size();
     if (loop_size <= 0)
@@ -335,6 +319,77 @@ void Graph::calculate_support_bruteforce(const Schedule& schedule, VertexSet* ve
     }
 }
 
+bool Graph::calculate_support_optimized(const Schedule& schedule, VertexSet* vertex_sets, VertexSet& partial_embedding, std::unordered_set<int>* fsm_sets, int depth) {
+    int n = schedule.get_size();
+    if (depth == n)
+        return true;
+
+    int m = schedule.get_in_exclusion_optimize_num();
+    if (depth == n - m) {
+        int loop_set_prefix_ids[m];
+        for (int i = 0; i < m; ++i)
+            loop_set_prefix_ids[i] = schedule.get_loop_set_prefix_id(depth + i);
+        
+        bool opt_ok = true; // ok when all(set.size >= m for set in remaining_sets)
+        for (int i = 0; i < m; ++i) {
+            int set_size = VertexSet::unorderd_subtraction_size(vertex_sets[loop_set_prefix_ids[i]], partial_embedding);
+            if (set_size < m) {
+                opt_ok = false;
+                break;
+            }
+        }
+        if (opt_ok) {
+            for (int i = 0; i < m; ++i) {
+                auto &vertexes = vertex_sets[loop_set_prefix_ids[i]];
+                for (int j = 0; j < vertexes.get_size(); ++j)
+                    if (!partial_embedding.has_data(vertexes[j]))
+                        fsm_sets[depth + i].insert(vertexes[j]);
+            }
+            return true;
+        }
+    }
+
+    int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
+    int loop_size = vertex_sets[loop_set_prefix_id].get_size();
+    if (loop_size <= 0)
+        return false;
+
+    int* loop_data_ptr = vertex_sets[loop_set_prefix_id].get_data_ptr();
+    int min_vertex = v_cnt;
+    for (int i = schedule.get_restrict_last(depth); i != -1; i = schedule.get_restrict_next(i))
+        if (min_vertex > partial_embedding[schedule.get_restrict_index(i)])
+            min_vertex = partial_embedding[schedule.get_restrict_index(i)];
+    
+    bool some_valid = false;
+    for (int i = 0; i < loop_size; ++i) {
+        if (min_vertex <= loop_data_ptr[i])
+            break;
+        int vertex = loop_data_ptr[i];
+        if (partial_embedding.has_data(vertex))
+            continue;
+        unsigned int l, r;
+        get_edge_index(vertex, l, r);
+        bool is_zero = false;
+        for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id)) {
+            vertex_sets[prefix_id].build_vertex_set(schedule, vertex_sets, &edge[l], (int)r - l, prefix_id, vertex);
+            if (vertex_sets[prefix_id].get_size() == 0) {
+                is_zero = true;
+                break;
+            }
+        }
+        if ( is_zero ) continue;
+        
+        partial_embedding.push_back(vertex);
+        bool embedding_valid = calculate_support_optimized(schedule, vertex_sets, partial_embedding, fsm_sets, depth + 1);
+        if (embedding_valid) {
+            fsm_sets[depth].insert(vertex);
+            some_valid = true;
+        }
+        partial_embedding.pop_back();
+    }
+    return some_valid;
+}
+
 int Graph::calculate_support(const Schedule& schedule) {
     int n = schedule.get_size();
 
@@ -359,7 +414,8 @@ int Graph::calculate_support(const Schedule& schedule) {
                 vertex_sets[prefix_id].build_vertex_set(schedule, vertex_sets, &edge[l], (int)r - l, prefix_id);
             
             partial_embedding.push_back(v);
-            calculate_support_bruteforce(schedule, vertex_sets, partial_embedding, fsm_set_ptrs[thread_id], 1);
+            if (calculate_support_optimized(schedule, vertex_sets, partial_embedding, fsm_set_ptrs[thread_id], 1))
+                fsm_set_ptrs[thread_id][0].insert(v);
             partial_embedding.pop_back();
         }
         delete[] vertex_sets;

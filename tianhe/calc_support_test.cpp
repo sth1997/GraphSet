@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     const char *adj_mat = argv[3];
     bool pattern_valid;
     Pattern p(n, adj_mat);
-    Schedule schedule(p, pattern_valid, 1, 1, false, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule schedule(p, pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
 
     using namespace std::chrono;
     auto t1 = system_clock::now();
