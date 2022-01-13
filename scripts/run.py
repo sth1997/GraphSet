@@ -11,10 +11,10 @@ pattern_sizes = [5, 6, 6, 6, 7, 7]
 graphs = []
 graphs.append("wiki-vote.g")
 graphs.append("patents.g")
-graphs.append("mico.g")
-graphs.append("livejournal.g")
-graphs.append("orkut.g")
+# graphs.append("mico.g")
+# graphs.append("livejournal.g")
+# graphs.append("orkut.g")
 for graph in graphs:
     for p in range(len(patterns)):
         log_name = graph + "_" + "p" + str(p + 1) + ".log"
-        os.system("srun -N 1 ./bin/gpu_graph /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        os.system('srun -N 1 -p V132 bin/gpu_support ~hzx/data/%s %d %s | tee %s' % (graph, pattern_sizes[p], patterns[p], log_name))

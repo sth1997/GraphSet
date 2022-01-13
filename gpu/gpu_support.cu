@@ -219,7 +219,7 @@ struct BitVector {
             atomicAdd(&non_zero_cnt, 1);
     }
 
-    unsigned long long non_zero_cnt;
+    unsigned int non_zero_cnt;
     uint32_t* data;
 };
 
@@ -479,7 +479,7 @@ __device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min
     return l;
 }
 
-constexpr int MAX_DEPTH = 7; // 非递归pattern matching支持的最大深度
+constexpr int MAX_DEPTH = 8; // 非递归pattern matching支持的最大深度
 
 template <int depth>
 __device__ void GPU_pattern_matching_bruteforce(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
@@ -574,11 +574,9 @@ __device__ void GPU_pattern_matching_bruteforce<MAX_DEPTH>(const GPUSchedule* sc
 {
     int n = schedule->get_size();
     if (MAX_DEPTH == n) {
-        if (threadIdx.x % THREADS_PER_WARP == 0) {
-            for (int i = 0; i < n; ++i)
-                fsm_sets[i].insert_safe(subtraction_set[i]);
-        }
-        return;
+        int wid = threadIdx.x % THREADS_PER_WARP;
+        if (wid < n)
+            fsm_sets[wid].insert_safe(subtraction_set[wid]);
     }
 }
 
@@ -599,6 +597,8 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
     int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id
     unsigned int &edge_idx = block_edge_idx[wid];
     GPUVertexSet *vertex_set = block_vertex_set + wid * num_vertex_sets_per_warp;
+
+    auto block_fsm_sets = &fsm_sets[blockIdx.x * schedule->get_size()];
 
     if (lid == 0) {
         edge_idx = 0;
@@ -663,7 +663,34 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         if (is_zero)
             continue;
         
-        GPU_pattern_matching_bruteforce<2>(schedule, vertex_set, subtraction_set, fsm_sets, edge, vertex);
+        GPU_pattern_matching_bruteforce<2>(schedule, vertex_set, subtraction_set, block_fsm_sets, edge, vertex);
+    }
+}
+
+__global__ void merge_bitmaps(uint32_t block_bitmaps[], uint32_t final_bitmap[], int schedule_size, int nr_bitmap_elements)
+{
+    int bid = blockIdx.x;
+    int bitmap_group_elem_count = nr_bitmap_elements * schedule_size;
+    auto bitmap_base = block_bitmaps + bid * bitmap_group_elem_count;
+    for (int b = 0; b < bitmap_group_elem_count; b += THREADS_PER_BLOCK) {
+        int k = b + threadIdx.x;
+        if (k < bitmap_group_elem_count) {
+            auto v = bitmap_base[k];
+            atomicOr(&final_bitmap[k], v);
+        }
+    }
+}
+
+__global__ void get_bitmap_sizes(BitVector controls[], uint32_t final_bitmap[], int schedule_size, int nr_bitmap_elements)
+{
+    size_t single_bitmap_bits = 1ul * nr_bitmap_elements * sizeof(uint32_t) * 8;
+    size_t total_bits = single_bitmap_bits * schedule_size;
+    size_t id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (id < total_bits) {
+        int i = id / single_bitmap_bits;
+        auto v = final_bitmap[id / 32];
+        if (v & (1 << (id % 32)))
+            atomicAdd(&(controls[i].non_zero_cnt), 1);
     }
 }
 
@@ -676,8 +703,10 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
     size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule.get_total_prefix_num() + 1); //prefix + subtraction
     
-    size_t single_bitmap_size = (g->v_cnt + 31) / 32 * sizeof(uint32_t);
-    size_t size_bitmap = schedule_size * single_bitmap_size;
+    int nr_bitmap_elements = (g->v_cnt + 31) / 32;
+    size_t single_bitmap_size = nr_bitmap_elements * sizeof(uint32_t);
+    size_t size_all_bitmap = schedule_size * num_blocks * single_bitmap_size; // every block has a n bitmaps
+    size_t size_final_bitmap = schedule_size * single_bitmap_size;
 
     uint32_t *edge_from = new uint32_t[g->e_cnt];
     for (uint32_t i = 0; i < g->v_cnt; ++i)
@@ -688,16 +717,28 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     uint32_t *dev_edge_from;
     uint32_t *dev_vertex;
     uint32_t *dev_tmp;
-    uint32_t *dev_bitmap;
-    BitVector *fsm_sets;
+    uint32_t *dev_bitmap, *dev_final_bitmap;
+    BitVector *fsm_sets, *final_fsm_sets;
 
-    gpuErrchk( cudaMalloc(&dev_bitmap, size_bitmap));
-    gpuErrchk( cudaMemset(dev_bitmap, 0, size_bitmap));
+    gpuErrchk( cudaMalloc(&dev_bitmap, size_all_bitmap));
+    gpuErrchk( cudaMemset(dev_bitmap, 0, size_all_bitmap));
+    gpuErrchk( cudaMalloc(&dev_final_bitmap, size_final_bitmap));
+    gpuErrchk( cudaMemset(dev_final_bitmap, 0, size_final_bitmap));
 
-    gpuErrchk( cudaMallocManaged(&fsm_sets, sizeof(BitVector) * schedule_size));
+    gpuErrchk( cudaMallocManaged(&fsm_sets, sizeof(BitVector) * schedule_size * num_blocks));
+    gpuErrchk( cudaMallocManaged(&final_fsm_sets, sizeof(BitVector) * schedule_size));
+
     for (int i = 0; i < schedule_size; ++i) {
-        fsm_sets[i].non_zero_cnt = 0;
-        fsm_sets[i].data = dev_bitmap + i * single_bitmap_size / sizeof(uint32_t);
+        final_fsm_sets[i].non_zero_cnt = 0;
+        final_fsm_sets[i].data = dev_final_bitmap + i * nr_bitmap_elements;
+    }
+
+    for (int i = 0; i < num_blocks; ++i) {
+        for (int j = 0; j < schedule_size; ++j) {
+            int k = i * schedule_size + j;
+            fsm_sets[k].non_zero_cnt = 0;
+            fsm_sets[k].data = dev_bitmap + k * nr_bitmap_elements;
+        }
     }
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
@@ -762,13 +803,19 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
 
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
         (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, fsm_sets, dev_schedule);
+    
+    merge_bitmaps<<<num_blocks, THREADS_PER_BLOCK>>>(dev_bitmap, dev_final_bitmap, schedule_size, nr_bitmap_elements);
+
+    size_t total_bits = 1ul * schedule_size * nr_bitmap_elements * sizeof(uint32_t) * 8; 
+    get_bitmap_sizes<<<(total_bits + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, THREADS_PER_BLOCK>>>
+        (final_fsm_sets, dev_final_bitmap, schedule_size, nr_bitmap_elements);
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
 
     int support = g->v_cnt;
     for (int i = 0; i < schedule_size; ++i) {
-        int set_size = fsm_sets[i].non_zero_cnt;
+        int set_size = final_fsm_sets[i].non_zero_cnt;
         printf("pattern vertex %d: set size = %d\n", i, set_size);
         if (support > set_size)
             support = set_size;
@@ -784,7 +831,9 @@ void pattern_matching_init(Graph *g, const Schedule& schedule) {
     gpuErrchk(cudaFree(dev_vertex));
     gpuErrchk(cudaFree(dev_tmp));
     gpuErrchk(cudaFree(dev_bitmap));
+    gpuErrchk(cudaFree(dev_final_bitmap))
     gpuErrchk(cudaFree(fsm_sets));
+    gpuErrchk(cudaFree(final_fsm_sets));
 
     gpuErrchk(cudaFree(dev_schedule->father_prefix_id));
     gpuErrchk(cudaFree(dev_schedule->last));
