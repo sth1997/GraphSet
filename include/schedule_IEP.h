@@ -10,7 +10,10 @@ class Schedule_IEP
 {
 public:
     //TODO : more kinds of constructors to construct different Schedules from one Pattern
-    Schedule_IEP(const Pattern& pattern, bool& is_pattern_valid, int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize, int v_cnt, unsigned int e_cnt, long long tri_cnt = 0);
+    Schedule_IEP(const Pattern& pattern, bool& is_pattern_valid, 
+        int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize,
+        int v_cnt, unsigned int e_cnt, long long tri_cnt = 0,
+        bool vertex_induced = false);
     // performance_modeling type = 0 : not use modeling
     //                      type = 1 : use our modeling
     //                      type = 2 : use GraphZero's modeling
@@ -73,6 +76,8 @@ public:
     std::vector<int> in_exclusion_optimize_coef;
     std::vector<bool> in_exclusion_optimize_flag;
     std::vector<int> in_exclusion_optimize_ans_pos;
+
+    bool is_vertex_induced;
 
 private:
     int* adj_mat;

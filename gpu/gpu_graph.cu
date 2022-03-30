@@ -167,6 +167,8 @@ public:
     int* in_exclusion_optimize_ans_pos;
 
     uint32_t ans_array_offset;
+
+    bool is_vertex_induced;
 };
 
 // __device__ void intersection1(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
@@ -717,6 +719,86 @@ __device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min
     return l;
 }
 
+template <typename T>
+__device__ bool binary_search(const T data[], int n, const T& target) {
+    int mid, l = 0, r = n - 1;
+    while (l <= r) {
+        mid = (l + r) >> 1;
+        if (data[mid] < target) {
+            l = mid + 1;
+        } else if (data[mid] > target) {
+            r = mid - 1;
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
+
+__device__ void remove_anti_edge_vertices(GPUVertexSet& out_buf, const GPUVertexSet& in_buf,
+    const GPUSchedule& sched, const GPUVertexSet& partial_embedding, int vp,
+    const uint32_t* edge, const uint32_t* vertex) {
+
+    __shared__ uint32_t block_out_offset[THREADS_PER_BLOCK];
+    __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
+
+    auto d_out = out_buf.get_data_ptr();
+    auto d_in = in_buf.get_data_ptr();
+    int n_in = in_buf.get_size();
+
+    int warp = threadIdx.x / THREADS_PER_WARP;
+    int lane = threadIdx.x % THREADS_PER_WARP;
+    auto out_offset = block_out_offset + warp * THREADS_PER_WARP;
+    auto &out_size = block_out_size[warp];
+
+    if (lane == 0)
+        out_size = 0;
+    
+    for (int nr_done = 0; nr_done < n_in; nr_done += THREADS_PER_WARP) {
+        int i = nr_done + lane;
+        bool produce_output = false;
+
+        if (i < n_in) {
+            produce_output = true;
+            for (int u = 0; u < vp; ++u) {
+                if (sched.adj_mat[u * sched.get_size() + vp] != 0)
+                    continue;
+                
+                auto v = partial_embedding.get_data(u);
+                int v_neighbor_begin, v_neighbor_end;
+                get_edge_index(v, v_neighbor_begin, v_neighbor_end);
+                int m = v_neighbor_end - v_neighbor_begin; // m = |N(v)|
+
+                if (binary_search(&edge[v_neighbor_begin], m, d_in[i])) {
+                    produce_output = false;
+                    break;
+                }
+            }
+        }
+        out_offset[lane] = produce_output;
+        __threadfence_block();
+
+        #pragma unroll
+        for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
+            uint32_t v = lane >= s ? out_offset[lane - s] : 0;
+            out_offset[lane] += v;
+            __threadfence_block();
+        }
+
+        if (produce_output) {
+            uint32_t offset = out_offset[lane] - 1;
+            d_out[out_size + offset] = d_in[i];
+        }
+
+        if (lane == THREADS_PER_WARP - 1)
+            out_size += out_offset[THREADS_PER_WARP - 1];
+    }
+
+    if (lane == 0)
+        out_buf.init(out_size, d_out);
+    __threadfence_block();
+}
+
 constexpr int MAX_DEPTH = 5; // 非递归pattern matching支持的最大深度
 
 template <int depth>
@@ -730,20 +812,31 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
     }
 
     int loop_set_prefix_id = schedule->get_loop_set_prefix_id(depth);
-    int loop_size = vertex_set[loop_set_prefix_id].get_size();
+    auto vset = &vertex_set[loop_set_prefix_id];
+    int loop_size = vset->get_size();
     if (loop_size <= 0) //这个判断可能可以删了
         return;
 
-    uint32_t* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
+    auto loop_data_ptr = vset->get_data_ptr();
     uint32_t min_vertex = 0xffffffff;
     for (int i = schedule->get_restrict_last(depth); i != -1; i = schedule->get_restrict_next(i))
         if (min_vertex > subtraction_set.get_data(schedule->get_restrict_index(i)))
             min_vertex = subtraction_set.get_data(schedule->get_restrict_index(i));
+    
+    // can be optimized via code generation
+    if (schedule->is_vertex_induced) {
+        GPUVertexSet &diff_buf = vertex_set[schedule->get_total_prefix_num() + depth];
+        remove_anti_edge_vertices(diff_buf, vertex_set[loop_set_prefix_id], *schedule, subtraction_set, depth, edge, vertex);
+        loop_data_ptr = diff_buf.get_data_ptr();
+        loop_size = diff_buf.get_size();
+        vset = &diff_buf;
+    }
+    
     if (depth == schedule->get_size() - 1 && schedule->get_in_exclusion_optimize_num() == 0) {
         /*
         for (int i = 0; i < loop_size; ++i)
         {
-            uint32_t x = vertex_set[loop_set_prefix_id].get_data(i);
+            uint32_t x = vset->get_data(i);
             bool flag = true;
             for (int j = 0; j < subtraction_set.get_size(); ++j)
                 if (subtraction_set.get_data(j) == x)
@@ -754,7 +847,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
         return;*/
         int size_after_restrict = lower_bound(loop_data_ptr, loop_size, min_vertex);
         //int size_after_restrict = -1;
-        local_ans += unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
+        local_ans += unordered_subtraction_size(*vset, subtraction_set, size_after_restrict);
         return;
     }
     for (int i = 0; i < loop_size; ++i)
@@ -807,7 +900,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
     extern __shared__ GPUVertexSet block_vertex_set[];
     
     int num_prefixes = schedule->get_total_prefix_num();
-    int num_vertex_sets_per_warp = num_prefixes + 2;
+    int num_vertex_sets_per_warp = num_prefixes + schedule->get_size();
 
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id within the block
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
@@ -898,9 +991,12 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     int num_blocks = 1024;
     int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
+    //prefix + subtraction + tmp + extra (n-2)
+    int num_vertex_sets_per_warp = schedule_iep.get_total_prefix_num() + schedule_iep.get_size();
+
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
     size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
-    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
+    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * num_vertex_sets_per_warp;
 
     schedule_iep.print_schedule();
     uint32_t *edge_from = new uint32_t[g->e_cnt];
@@ -1030,16 +1126,17 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     dev_schedule->total_restrict_num = schedule_iep.get_total_restrict_num();
     dev_schedule->in_exclusion_optimize_num = schedule_iep.get_in_exclusion_optimize_num();
     //dev_schedule->k_val = schedule.get_k_val();
+    dev_schedule->is_vertex_induced = schedule_iep.is_vertex_induced;
 
     printf("schedule_iep.prefix_num: %d\n", schedule_iep.get_total_prefix_num());
     printf("shared memory for vertex set per block: %ld bytes\n", 
-        (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int));
+        num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int));
 
     tmpTime.print("Prepare time cost");
     tmpTime.check();
 
     uint32_t buffer_size = VertexSet::max_intersection_size;
-    uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
+    size_t block_shmem_size = num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
     dev_schedule->ans_array_offset = block_shmem_size - in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
     // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
     //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
@@ -1156,35 +1253,34 @@ int main(int argc,char *argv[]) {
     // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
     int pattern_size = atoi(argv[2]);
-    const char* pattern_str= argv[3];
-
-    Pattern p(pattern_size, pattern_str);
-    /*
-    MotifGenerator mg(3);
+    // const char* pattern_str= argv[3];
+    // Pattern p(pattern_size, pattern_str);
+    
+    MotifGenerator mg(pattern_size);
     std::vector<Pattern> motifs = mg.generate();
     printf("motifs number = %d\n", motifs.size());
     for (int i = 0; i < motifs.size(); ++i) {
-    //for (int i = motifs.size() - 1; i >= 0; --i) {
-    Pattern p = motifs[i];
-    */
-    printf("pattern = \n");
-    p.print();
-    printf("max intersection size %d\n", VertexSet::max_intersection_size);
-    bool is_pattern_valid;
-    bool use_in_exclusion_optimize = true;
-    Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
-    Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // schedule is only used for getting redundancy
-    schedule_iep.set_in_exclusion_optimize_redundancy(schedule.get_in_exclusion_optimize_redundancy());
+        Pattern p = motifs[i];
 
-    if (!is_pattern_valid) {
-        printf("pattern is invalid!\n");
-        return 0;
+        printf("pattern = \n");
+        p.print();
+    
+        printf("max intersection size %d\n", VertexSet::max_intersection_size);
+        bool is_pattern_valid;
+        bool use_in_exclusion_optimize = true;
+        Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt, true);
+        // Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // schedule is only used for getting redundancy
+        // schedule_iep.set_in_exclusion_optimize_redundancy(schedule.get_in_exclusion_optimize_redundancy());
+
+        if (!is_pattern_valid) {
+            printf("pattern is invalid!\n");
+            continue;
+        }
+
+        pattern_matching_init(g, schedule_iep);
+
+        allTime.print("Total time cost");
     }
-
-    pattern_matching_init(g, schedule_iep);
-
-    allTime.print("Total time cost");
-    //}
 
     return 0;
 }
