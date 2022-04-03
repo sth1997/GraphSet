@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <string>
 #include <algorithm>
+#include <vector>
+#include <functional>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -227,9 +229,11 @@ private:
     uint32_t* data;
 };
 
+
 __device__ unsigned long long dev_sum = 0;
 __device__ unsigned int dev_cur_edge = 0;
-__device__ unsigned int dev_target_edge = 0;
+const int devices_to_use = 4;
+const int task_divide_number = 20;
 
 /**
  * search-based intersection
@@ -251,7 +255,7 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
     if (lid == 0)
         out_size = 0;
-
+ 
     for(int num_done = 0; num_done < na; num_done += THREADS_PER_WARP) {
         bool found = 0;
         uint32_t u = 0;
@@ -580,7 +584,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
     while (true) { 
         if (lid == 0) {
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
-                edge_idx = atomicAdd(&dev_cur_edge, dev_target_edge);
+                edge_idx = atomicAdd(&dev_cur_edge, task_divide_number);
                 //edgeEnd = min(edge_num, edgeI + 1); //这里不需要原子读吗
                 unsigned int i = edge_idx;
                 if (i < edge_num)
@@ -638,12 +642,11 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 unsigned long long *sum;
 
 
-// alloc memory for gpu[device_id]
-void pattern_matching_memory(bool is_alloc, int device_id, Graph *g, const Schedule_IEP& schedule_iep) {
+template<int device_id>
+void pattern_matching(int step, int task_id, Graph *g, const Schedule_IEP& schedule_iep) {
 
     gpuErrchk( cudaSetDevice(device_id));
     printf("Device ID set: %d\n",device_id);
-    
 
     static uint32_t *dev_edge;
     static uint32_t *dev_edge_from;
@@ -665,19 +668,17 @@ void pattern_matching_memory(bool is_alloc, int device_id, Graph *g, const Sched
 
     static bool *only_need_size;
 
+    int num_blocks = 1024;
+    int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
-    if(is_alloc){
 
-        printf("basic prefix %d, total prefix %d\n", schedule_iep.get_basic_prefix_num(), schedule_iep.get_total_prefix_num());
+    if(step == 1){
 
-        int num_blocks = 1024;
-        int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
         size_t size_edge = g->e_cnt * sizeof(uint32_t);
         size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
         size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
 
-        schedule_iep.print_schedule();
         edge_from = new uint32_t[g->e_cnt];
         for(uint32_t i = 0; i < g->v_cnt; ++i)
             for(uint32_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
@@ -801,7 +802,43 @@ void pattern_matching_memory(bool is_alloc, int device_id, Graph *g, const Sched
         tmpTime.print("Prepare time cost");
         tmpTime.check();
     }
-    else {
+    else if(step == 2){
+        // step2 calculate through gpu
+        uint32_t buffer_size = VertexSet::max_intersection_size;
+        uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + schedule_iep.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
+        dev_schedule->ans_array_offset = block_shmem_size - schedule_iep.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
+        // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
+        //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
+
+        int max_active_blocks_per_sm;
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, block_shmem_size);
+        printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
+        
+        
+        unsigned int startedge = task_id;
+        unsigned long long t = 0;
+
+        gpuErrchk( cudaMemcpyToSymbol(dev_cur_edge, &startedge, sizeof(unsigned int)) );
+        gpuErrchk( cudaMemcpyToSymbol(dev_sum, &t, sizeof(unsigned long long)) );
+
+        // goto kernel here!
+        gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
+            (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
+
+        gpuErrchk( cudaPeekAtLastError() );
+        gpuErrchk( cudaDeviceSynchronize() );
+        gpuErrchk( cudaMemcpyFromSymbol(&sum[task_id], dev_sum, sizeof(unsigned long long)) );
+
+        #ifdef PRINT_ANS_TO_FILE
+            freopen("1.out", "w", stdout);
+            printf("count %llu\n", sum);
+            fclose(stdout);
+        #endif
+        printf("count %llu, ", sum[task_id]);
+        tmpTime.print("Counting time cost");
+    }
+    else if(step == 3) {
+        // step 3: free memoies 
         gpuErrchk(cudaFree(dev_edge));
         gpuErrchk(cudaFree(dev_edge_from));
         gpuErrchk(cudaFree(dev_vertex));
@@ -834,63 +871,54 @@ void pattern_matching_memory(bool is_alloc, int device_id, Graph *g, const Sched
 
 }
 
-void do_pattern_matching(const Schedule_IEP &schedule_iep){
 
-    uint32_t buffer_size = VertexSet::max_intersection_size;
-    uint32_t block_shmem_size = (schedule_iep.get_total_prefix_num() + 2) * WARPS_PER_BLOCK * sizeof(GPUVertexSet) + schedule_iep.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
-    dev_schedule->ans_array_offset = block_shmem_size - schedule_iep.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
-    // 注意：此处没有错误，buffer_size代指每个顶点集所需的int数目，无需再乘sizeof(uint32_t)，但是否考虑对齐？
-    //因为目前用了managed开内存，所以第一次运行kernel会有一定额外开销，考虑运行两次，第一次作为warmup
+std::vector<std::function<void(int, int, Graph*, const Schedule_IEP&)> > func;
 
-    int max_active_blocks_per_sm;
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, block_shmem_size);
-    printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
-    
-    unsigned int startedge = device_id, endedge = total_device;
+template <int x, int to>
+struct static_for {
+    void operator()() {
+        func.push_back(pattern_matching<x>);
+        static_for<x + 1, to>()();
+    }
+};
 
-    // unsigned int startedge = g->e_cnt * device_id / total_device, endedge = g->e_cnt * (device_id+1) / total_device;
-
-    gpuErrchk( cudaMemcpyToSymbol(dev_cur_edge, &startedge, sizeof(unsigned int)) );
-    gpuErrchk( cudaMemcpyToSymbol(dev_target_edge, &endedge, sizeof(unsigned int)) );
-
-    printf("Tasks: %d to %d\n",startedge, endedge);
-    fflush(stdout);
-
-    // goto kernel here!
-    gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
-        (g->e_cnt, buffer_size, dev_edge_from, dev_edge, dev_vertex, dev_tmp, dev_schedule);
-
-    gpuErrchk( cudaPeekAtLastError() );
-    gpuErrchk( cudaDeviceSynchronize() );
-    gpuErrchk( cudaMemcpyFromSymbol(&sum[device_id], dev_sum, sizeof(unsigned long long)) );
-
-    #ifdef PRINT_ANS_TO_FILE
-        freopen("1.out", "w", stdout);
-        printf("count %llu\n", sum);
-        fclose(stdout);
-    #endif
-    printf("count %llu\n", sum[device_id]);
-    tmpTime.print("Counting time cost");
-}
-
+template <int to>
+struct static_for<to, to> {
+    void operator()() {
+    }
+};
 
 void warm_up_gpu(int device_id){
+    // the first gpu api would cost much time.
     gpuErrchk( cudaSetDevice(device_id) );
     gpuErrchk( cudaFree(0) );
 }
 
 
+
+
+
 int main(int argc,char *argv[]) {
+    
+    // get the number of devices(gpu)
     int total_device_count = 0;
-    // get the number of devices
     cudaGetDeviceCount(&total_device_count);
     printf("device count = %d\n", total_device_count);
+    assert(devices_to_use <= total_device_count);
+    omp_set_num_threads(devices_to_use);
 
+
+    using std::chrono::system_clock;
+
+    auto p_0 = system_clock::now();
     #pragma omp parallel for
-    for(int i = 0; i < total_device_count; i++){
+    for(int i = 0; i < devices_to_use; i++){
         warm_up_gpu(i);
     }
+    auto p_1 = system_clock::now();
 
+    auto gpu_prepare_time = std::chrono::duration_cast<std::chrono::microseconds>(p_1 - p_0);
+    printf("Prepare GPU finished! time: %g seconds\n", gpu_prepare_time.count() / 1.0e6);
         
     Graph *g;
     DataLoader D;
@@ -920,7 +948,6 @@ int main(int argc,char *argv[]) {
         }
     }*/
 
-    using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
     bool ok;
@@ -969,30 +996,39 @@ int main(int argc,char *argv[]) {
         printf("pattern is invalid!\n");
         return 0;
     }
+    
+    printf("basic prefix %d, total prefix %d\n", schedule_iep.get_basic_prefix_num(), schedule_iep.get_total_prefix_num());
+    schedule_iep.print_schedule();
 
-
-    int task_divide_number = 4;
     // allocate sum for space 
-    sum = new unsigned long long[task_di];
-
-    omp_set_num_threads(total_device_count);
+    sum = new unsigned long long[task_divide_number];
     // use multiple gpu (try)
 
+
+    static_for<0, devices_to_use>()();
+
     #pragma omp parallel for
-    for(int i = 0; i < total_device_count; i++){
+    for(int i = 0; i < devices_to_use; i++){
         int tid = omp_get_thread_num();
-        pattern_matching_memory(1, i, g, schedule_iep, tid);
+        func[tid](1, 0, g, schedule_iep);
+    }
+
+    #pragma omp parallel for schedule(dynamic, 1)
+    for(int i = 0; i < task_divide_number; i++){
+        int tid = omp_get_thread_num();
+        func[tid](2, i, g, schedule_iep);
+
     }
 
     #pragma omp parallel for
-    for(int i = 0; i < task_divide_number; i++){
+    for(int i = 0; i < devices_to_use; i++){
         int tid = omp_get_thread_num();
-
+        func[tid](3, 0 , g, schedule_iep);
     }
     
     unsigned long long total_sum = 0;
     
-    for(int i = 0;i < total_device_count; i++){
+    for(int i = 0;i < task_divide_number; i++){
         total_sum += sum[i];
     }
 

@@ -17,4 +17,7 @@ graphs.append("orkut.g")
 for graph in graphs:
     for p in range(len(patterns)):
         log_name = graph + "_" + "p" + str(p + 1) + ".log"
-        os.system("./bin/gpu_graph ~/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        os.system("../build/bin/gpu_graph ~/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > /dev/null")
+        os.system("../build/bin/gpu_graph ~/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        os.system("../build/bin/gpu_graph_naive_omp ~/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > /dev/null")
+        os.system("../build/bin/gpu_graph_naive_omp ~/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > omp_" + log_name)

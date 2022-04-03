@@ -865,10 +865,18 @@ int main(int argc,char *argv[]) {
     cudaGetDeviceCount(&total_device_count);
     printf("device count = %d\n", total_device_count);
 
+    using std::chrono::system_clock;
+    auto p_0 = system_clock::now();
+
     #pragma omp parallel for
     for(int i = 0; i < total_device_count; i++){
         warm_up_gpu(i);
     }
+
+    auto p_1 = system_clock::now();
+
+    auto gpu_prepare_time = std::chrono::duration_cast<std::chrono::microseconds>(p_1 - p_0);
+    printf("Load data success! time: %g seconds\n", gpu_prepare_time.count() / 1.0e6);
 
         
     Graph *g;
@@ -899,7 +907,6 @@ int main(int argc,char *argv[]) {
         }
     }*/
 
-    using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
     bool ok;
@@ -949,8 +956,7 @@ int main(int argc,char *argv[]) {
         return 0;
     }
 
-        // allocate sum space 
-
+    // allocate sum space 
     sum = new unsigned long long[total_device_count];
 
     omp_set_num_threads(total_device_count);
