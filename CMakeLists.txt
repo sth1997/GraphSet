@@ -37,6 +37,7 @@ if(MPI_FOUND)
     SET(CMAKE_CXX_COMPILER mpicxx)   
 endif()
 
+
 ADD_SUBDIRECTORY(src)
 #ADD_SUBDIRECTORY(test)
 ADD_SUBDIRECTORY(tianhe)

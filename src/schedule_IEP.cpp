@@ -342,8 +342,10 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
                 tmp_data[data_size++] = j;
         loop_set_prefix_id[i] = find_father_prefix(data_size, tmp_data);
     }
+    // 这是只有一个点的？找到所有的邻接的点，然后去找... prefix???
     basic_prefix_num = total_prefix_num;
-
+    
+    // 找到所有不相连的节点
     for(int prefix_id = 0; prefix_id < basic_prefix_num; ++prefix_id) {
         const int* data = prefix[prefix_id].get_data_ptr();
         int data_size = prefix[prefix_id].get_size();
@@ -502,6 +504,7 @@ int Schedule_IEP::find_father_prefix(int data_size, const int *data)
 void Schedule_IEP::add_restrict(const std::vector< std::pair<int, int> >& restricts)
 {
     restrict_pair = restricts;
+    // try to reduce redundant restriction
     for(unsigned int i = 0; i < restrict_pair.size(); ) {
         bool tag = true;
         for(unsigned int j = 0; j < restrict_pair.size(); ++j) {
@@ -527,7 +530,7 @@ void Schedule_IEP::add_restrict(const std::vector< std::pair<int, int> >& restri
     total_restrict_num = 0;
     for (const auto& p : restrict_pair)
     {
-        // p.first must be greater than p.second
+        // the content of restruction: p.first must be greater than p.second
         restrict_index[total_restrict_num] = p.first;
         restrict_next[total_restrict_num] = restrict_last[p.second];
         restrict_last[p.second] = total_restrict_num;
