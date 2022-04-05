@@ -824,6 +824,8 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 }
 
 int main(int argc,char *argv[]) {
+    gpuErrchk( cudaFree(0) );
+
     Graph *g;
     DataLoader D;
 

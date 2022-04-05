@@ -233,7 +233,7 @@ private:
 __device__ unsigned long long dev_sum = 0;
 __device__ unsigned int dev_cur_edge = 0;
 const int devices_to_use = 4;
-const int task_divide_number = 20;
+const int task_divide_number = 24;
 
 /**
  * search-based intersection
