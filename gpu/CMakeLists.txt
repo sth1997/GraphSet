@@ -17,3 +17,13 @@ TARGET_LINK_LIBRARIES(gpu_house_with_timer graph_mining)
 ADD_EXECUTABLE(gpu_fsm gpu_fsm.cu)
 SET_PROPERTY(TARGET gpu_fsm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_fsm graph_mining)
+
+
+ADD_EXECUTABLE(gpu_fsm_omp gpu_fsm_omp.cu)
+SET_PROPERTY(TARGET gpu_fsm_omp PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_fsm_omp graph_mining)
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(gpu_fsm_omp OpenMP::OpenMP_CXX)
+endif()

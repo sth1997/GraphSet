@@ -5,6 +5,8 @@
 #include <set>
 #include <vector>
 #include <unordered_map>
+#include <cstdint>
+
 
 class LabeledGraph {
 public:
