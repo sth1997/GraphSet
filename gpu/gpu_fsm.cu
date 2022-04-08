@@ -981,7 +981,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
 }
 
 int main(int argc,char *argv[]) {
-    cudaSetDevice(1);
+    cudaSetDevice(2);
 
     LabeledGraph *g;
     DataLoader D;
