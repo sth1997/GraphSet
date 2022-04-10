@@ -589,7 +589,7 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
                                 support = count;
                         }
                         if (support >= min_support) {
-                            block_break_flag[wid] =true;
+                            block_break_flag[wid] = true;
                             atomicAdd(&dev_sum, 1);
                             for (int aut_id = 0; aut_id < automorphisms_cnt; ++aut_id) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
                                 int* aut = automorphisms + aut_id * schedule->get_size();
