@@ -21,13 +21,15 @@
 constexpr int devices_use = 3;
 constexpr int chunk_size = 64;
 
-constexpr int THREADS_PER_BLOCK = 256;
+constexpr int THREADS_PER_BLOCK = 512;
 //constexpr int THREADS_PER_BLOCK = 32;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
+constexpr int info_size = 1 << 20;
+
 //constexpr int num_blocks = 1024;
-constexpr int num_blocks = 2048;
+constexpr int num_blocks = 512;
 constexpr int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
 __device__ unsigned long long dev_sum = 0;
@@ -472,14 +474,14 @@ __device__ bool GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
 __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
     uint32_t *edge, uint32_t* labeled_vertex, const char* p_label, GPUBitVector* fsm_set, int l_cnt)
 {
-    // assert(false);
-    return false;
+    assert(false);
+    // return false;
 }
 
 /**
  * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
  */
-__global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v_cnt, uint32_t buffer_size, uint32_t *edge, uint32_t* labeled_vertex, int* v_label, uint32_t* tmp, const GPUSchedule* schedule, char* all_p_label, GPUBitVector* global_fsm_set, int* automorphisms, unsigned int* is_frequent, unsigned int* label_start_idx, int automorphisms_cnt, long long min_support, unsigned int pattern_is_frequent_index, int l_cnt) {
+__global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v_cnt, uint32_t buffer_size, uint32_t *edge, uint32_t* labeled_vertex, int* v_label, uint32_t* tmp, const GPUSchedule* schedule, char* all_p_label, GPUBitVector* global_fsm_set, int* automorphisms, unsigned int* is_frequent, unsigned int* label_start_idx, int automorphisms_cnt, long long min_support, unsigned int pattern_is_frequent_index, int l_cnt, int* info) {
     __shared__ unsigned int block_pattern_idx[WARPS_PER_BLOCK];
     __shared__ bool block_break_flag[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
@@ -501,6 +503,7 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
 
 
     if (lid == 0) {
+        // atomicAnd(&info[global_wid], 0);
         pattern_idx = 0;
         uint32_t offset = buffer_size * global_wid * num_vertex_sets_per_warp;
         for (int i = 0; i < num_vertex_sets_per_warp; ++i)
@@ -508,6 +511,7 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
             vertex_set[i].set_data_ptr(tmp + offset); // 注意这是个指针+整数运算，自带*4
             offset += buffer_size;
         }
+        // printf("%d final offset: %d \n", global_wid, offset);
     }
     GPUVertexSet& subtraction_set = vertex_set[num_prefixes];
     //GPUVertexSet& tmp_set = vertex_set[num_prefixes + 1];
@@ -522,15 +526,13 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
 
     while (true) {
         if (lid == 0) {
-
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
-                // 这里使用 chunked + round robin
+                // pattern_idx = atomicAdd(&dev_cur_labeled_pattern, 1); //每个warp负责一个pattern，而不是负责一个点或一条边  
+                pattern_idx = atomicAdd(&dev_cur_labeled_pattern, 1);    
 
-                pattern_idx = atomicAdd(&dev_cur_labeled_pattern, devices_use);    
-                //每个warp负责一个pattern，而不是负责一个点或一条边
                 //edgeEnd = min(edge_num, edgeI + 1); //这里不需要原子读吗
-                unsigned int job_id = pattern_idx;
-                // unsigned int job_id = (pattern_idx / chunk_size) * (chunk_size * devices_use) + device_id * chunk_size + pattern_idx % chunk_size;
+                // unsigned int job_id = pattern_idx;
+                unsigned int job_id = (pattern_idx / chunk_size) * (chunk_size * devices_use) + device_id * chunk_size + pattern_idx % chunk_size;
                 if (job_id < job_num)
                 {
                     subtraction_set.init();
@@ -545,10 +547,9 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
 
         __threadfence_block();
 
-        
-        unsigned int job_id = pattern_idx;
+        // unsigned int job_id = pattern_idx;
 
-        // unsigned int job_id = (pattern_idx / chunk_size) * (chunk_size * devices_use) + device_id * chunk_size + pattern_idx % chunk_size;//考虑到 chunk size 了
+        unsigned int job_id = (pattern_idx / chunk_size) * (chunk_size * devices_use) + device_id * chunk_size + pattern_idx % chunk_size;//考虑到 chunk size 了
 
         if(job_id >= job_num) break;
 
@@ -709,6 +710,8 @@ struct FSM_Device {
     int* dev_automorphisms;
     GPUSchedule* dev_schedule;
 
+    int *info;
+
 
     // 对 device 的初始化
     FSM_Device(int _dev_id, const LabeledGraph* _g, int _max_edge, int _min_support) {
@@ -723,10 +726,16 @@ struct FSM_Device {
         size_t size_labeled_vertex = (g->v_cnt * g->l_cnt + 1) * sizeof(uint32_t);
         size_t size_v_label = g->v_cnt * sizeof(int);
         int max_total_prefix_num = 0;
-        for (int i = 0; i < schedules_num; ++i)
-            if (schedules[i].get_total_prefix_num() > max_total_prefix_num)
+        for (int i = 0; i < schedules_num; ++i){
+            printf("schedules[%d].get_total_prefix_num():%d\n",i,schedules[i].get_total_prefix_num());
+            if (schedules[i].get_total_prefix_num() > max_total_prefix_num){
                 max_total_prefix_num = schedules[i].get_total_prefix_num();
-        size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (max_total_prefix_num + 2); //prefix + subtraction + tmp
+            }
+        }
+        // size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (max_total_prefix_num + 2); //prefix + subtraction + tmp
+        size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (15); //prefix + subtraction + tmp
+
+        printf("dev_id: %d size_tmp: %d max_prefix:%d\n", dev_id, size_tmp, max_total_prefix_num);
         size_t size_pattern_is_frequent_index = (schedules_num + 1) * sizeof(uint32_t);
         size_t size_is_frequent = ((pattern_is_frequent_index[schedules_num] + 31) / 32) * sizeof(uint32_t);
         size_t size_all_p_label = max_labeled_patterns * (max_edge + 1) * sizeof(char);
@@ -734,6 +743,7 @@ struct FSM_Device {
 
         gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
         //gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
+
         gpuErrchk( cudaMalloc((void**)&dev_labeled_vertex, size_labeled_vertex));
         gpuErrchk( cudaMalloc((void**)&dev_v_label, size_v_label));
         gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
@@ -749,6 +759,8 @@ struct FSM_Device {
         gpuErrchk( cudaMemcpy(dev_pattern_is_frequent_index, pattern_is_frequent_index, size_pattern_is_frequent_index, cudaMemcpyHostToDevice));
         gpuErrchk( cudaMemcpy(dev_is_frequent, is_frequent, size_is_frequent, cudaMemcpyHostToDevice));
         gpuErrchk( cudaMemcpy(dev_label_start_idx, g->label_start_idx, size_label_start_idx, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMalloc((void**)&info, info_size * sizeof(int)) );
 
         //TODO: 之后考虑把fsm_set的成员变量放在shared memory，只把data内的数据放在global memory，就像vertex set一样
         gpuErrchk( cudaMallocManaged((void**)&dev_fsm_set, sizeof(GPUBitVector) * num_total_warps * (max_edge + 1))); //每个点一个fsm_set，一个pattern最多max_edge+1个点，每个warp负责一个不同的labeled pattern
@@ -771,6 +783,7 @@ struct FSM_Device {
         for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
             dev_fsm_set[i].destroy();
         gpuErrchk(cudaFree(dev_fsm_set));
+        gpuErrchk(cudaFree(info));
     }
 };
 
@@ -799,9 +812,9 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule,
         gpuErrchk( cudaMemcpyToSymbol(dev_sum, &sum, sizeof(sum)));
     )
     
-    #pragma omp parallel for
+    #pragma omp parllel for
     ForallDevice(i, 
-        unsigned int cur_labeled_pattern = i; // start from cur_label_pattern, but different position
+        unsigned int cur_labeled_pattern = 0; // start from cur_label_pattern, but different position
         gpuErrchk( cudaMemcpyToSymbol(dev_cur_labeled_pattern, &cur_labeled_pattern, sizeof(cur_labeled_pattern)));
     )
 
@@ -814,18 +827,20 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule,
         }
     }
 
-    #pragma omp parallel for
-    ForallDevice(i,
-        gpuErrchk( cudaMalloc((void**)&(dev[i]->dev_automorphisms), sizeof(int) * schedule.get_size() * automorphisms.size()));
-        gpuErrchk( cudaMemcpy(dev[i]->dev_automorphisms, host_automorphisms, sizeof(int) * schedule.get_size() * automorphisms.size(), cudaMemcpyHostToDevice));
-    )
+
 
     int schedule_size = schedule.get_size();
     int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
 
     #pragma omp parallel for
     ForallDevice(i,
-        printf("gpu memalloc: %d\n", i);
+        gpuErrchk( cudaMalloc((void**)&(dev[i]->dev_automorphisms), sizeof(int) * schedule.get_size() * automorphisms.size()));
+        gpuErrchk( cudaMemcpy(dev[i]->dev_automorphisms, host_automorphisms, sizeof(int) * schedule.get_size() * automorphisms.size(), cudaMemcpyHostToDevice));
+    )
+
+    #pragma omp parallel for
+    ForallDevice(i,
+        // printf("gpu memalloc: %d\n", i);
 
         //memcpy schedule
         gpuErrchk( cudaMallocManaged((void**)&(dev[i]->dev_schedule), sizeof(GPUSchedule)));
@@ -967,10 +982,22 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule,
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, block_shmem_size);
         printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
         gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, block_shmem_size>>>
-            (i, job_num, g->v_cnt, buffer_size, dev[i]->dev_edge, dev[i]->dev_labeled_vertex, dev[i]->dev_v_label, dev[i]->dev_tmp, dev[i]->dev_schedule, dev[i]->dev_all_p_label, dev[i]->dev_fsm_set, dev[i]->dev_automorphisms, dev[i]->dev_is_frequent, dev[i]->dev_label_start_idx, automorphisms.size(), min_support, pattern_is_frequent_index, g->l_cnt);
+            (i, job_num, g->v_cnt, buffer_size, dev[i]->dev_edge, dev[i]->dev_labeled_vertex, dev[i]->dev_v_label, dev[i]->dev_tmp, dev[i]->dev_schedule, dev[i]->dev_all_p_label, dev[i]->dev_fsm_set, dev[i]->dev_automorphisms, dev[i]->dev_is_frequent, dev[i]->dev_label_start_idx, automorphisms.size(), min_support, pattern_is_frequent_index, g->l_cnt, dev[i]->info);
         gpuErrchk( cudaPeekAtLastError() );
         gpuErrchk( cudaDeviceSynchronize() );
-        gpuErrchk( cudaMemcpyFromSymbol(&tmpsum, dev_sum, sizeof(sum)) );
+        gpuErrchk( cudaMemcpyFromSymbol(&tmpsum, dev_sum, sizeof(tmpsum)) );
+        // #pragma omp critical
+        // {
+        //     printf("%d: ",i);
+        //     int *t = new int [info_size];
+        //     gpuErrchk( cudaMemcpy(t, dev[i]->info, sizeof(int) * info_size, cudaMemcpyDeviceToHost) );
+        //     for(int j = 0; j < num_blocks * WARPS_PER_BLOCK; j++ ){
+        //         printf("%d:%d ", j, t[j]);
+        //     }
+        //     printf("\n");
+        //     fflush(stdout);
+        //     delete[] t;
+        // }
         #pragma omp critical
         {
             sum = sum + tmpsum;
@@ -1079,8 +1106,8 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support){
         
         unsigned int *tmp_is_frequent[devices_use];
 
-        for(int i = 0; i < devices_use; i++){
-            tmp_is_frequent[i] = new unsigned int[is_frequent_size / sizeof(uint32_t)];
+        for(int j = 0; j < devices_use; j++){
+            tmp_is_frequent[j] = new unsigned int[is_frequent_size / sizeof(uint32_t)];
         }
 
         // 处理所有的 is_frequent 信息
@@ -1089,12 +1116,23 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support){
             gpuErrchk( cudaMemcpy(tmp_is_frequent[j], &dev[j]->dev_is_frequent[is_frequent_index], is_frequent_size, cudaMemcpyDeviceToHost));
         );
 
-        for(int i = 0; i < is_frequent_size / sizeof(uint32_t); i++) { 
-            is_frequent[is_frequent_index + i] = 0;
-            for(int j = 0; j < devices_use; j++){
-                is_frequent[is_frequent_index + i] |= tmp_is_frequent[j][i];
+        for(int k = 0; k < is_frequent_size / sizeof(uint32_t); k++) 
+            is_frequent[is_frequent_index + k] = 0;
+
+        for(int j = 0; j < devices_use; j++){
+            for(int k = 0; k < is_frequent_size / sizeof(uint32_t); k++) { 
+                is_frequent[is_frequent_index + k] |= tmp_is_frequent[j][k];
             }
         }
+
+        for(int j = 0; j < devices_use; j++){
+            delete [] tmp_is_frequent[j];
+        }
+
+        #pragma omp parallel for
+        ForallDevice(j,
+            gpuErrchk( cudaMemcpy(&dev[j]->dev_is_frequent[is_frequent_index],&is_frequent[is_frequent_index], is_frequent_size, cudaMemcpyHostToDevice));
+        );
 
         printf("fsm_cnt: %ld\n",fsm_cnt);
 
@@ -1103,8 +1141,10 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support){
         timersub(&end, &start, &total_time);
         printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
     }
-    printf("fsm cnt = %lld\n", fsm_cnt);
 
+
+
+    printf("fsm cnt = %lld\n", fsm_cnt);
 
     // 释放 device 存储
     #pragma omp parallel for
@@ -1152,7 +1192,6 @@ int main(int argc,char *argv[]) {
 
     g = new LabeledGraph();
     assert(D.load_labeled_data(g,my_type,path.c_str())==true);
-
     fsm_init(g, max_edge, min_support);
 
     return 0;

@@ -13,13 +13,13 @@
 
 #include <sys/time.h>
 
-constexpr int THREADS_PER_BLOCK = 256;
+constexpr int THREADS_PER_BLOCK = 128;
 //constexpr int THREADS_PER_BLOCK = 32;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
 //constexpr int num_blocks = 1024;
-constexpr int num_blocks = 2048;
+constexpr int num_blocks = 1024;
 constexpr int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
 __device__ unsigned long long dev_sum = 0;
@@ -166,6 +166,9 @@ public:
         uint32_t input_size = other.get_size(), *input_data = other.get_data_ptr();
         size = input_size;
         int lid = threadIdx.x % THREADS_PER_WARP; // lane id
+        // for (int i = lid; i < input_size; i += THREADS_PER_WARP){
+        //     data[i] = input_data[i];
+        // }
         int size_per_thread = (input_size + THREADS_PER_WARP - 1) / THREADS_PER_WARP;
         int start = size_per_thread * lid;
         int end = min(start + size_per_thread, input_size);
@@ -886,7 +889,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     for (int i = 0; i < schedules_num; ++i)
         if (schedules[i].get_total_prefix_num() > max_total_prefix_num)
             max_total_prefix_num = schedules[i].get_total_prefix_num();
-    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (max_total_prefix_num + 2); //prefix + subtraction + tmp
+    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (15); //prefix + subtraction + tmp
     size_t size_pattern_is_frequent_index = (schedules_num + 1) * sizeof(uint32_t);
     size_t size_is_frequent = ((pattern_is_frequent_index[schedules_num] + 31) / 32) * sizeof(uint32_t);
     size_t size_all_p_label = max_labeled_patterns * (max_edge + 1) * sizeof(char);
@@ -950,6 +953,9 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         int is_frequent_index = pattern_is_frequent_index[i] / 32;
         size_t is_frequent_size = (pattern_is_frequent_index[i + 1] - pattern_is_frequent_index[i]) / 32 * sizeof(uint32_t);
         gpuErrchk( cudaMemcpy(&is_frequent[is_frequent_index], &dev_is_frequent[is_frequent_index], is_frequent_size, cudaMemcpyDeviceToHost));
+        printf("fsm_cnt: %ld\n",fsm_cnt);
+
+        // 时间相关
         gettimeofday(&end, NULL);
         timersub(&end, &start, &total_time);
         printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
