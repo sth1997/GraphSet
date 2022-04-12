@@ -14,6 +14,13 @@
 #include <queue>
 #include <iostream>
 
+void Graph::build_reverse_edges() {
+    edge_from = new int[e_cnt];
+    for (int u = 0; u < v_cnt; ++u)
+        for (int v = vertex[u]; v < vertex[u + 1]; ++v)
+            edge_from[v] = u;
+}
+
 int Graph::intersection_size(int v1,int v2) {
     unsigned int l1, r1;
     get_edge_index(v1, l1, r1);
@@ -273,6 +280,33 @@ long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count
         
     }
     return global_ans / schedule.get_in_exclusion_optimize_redundancy();
+}
+
+long long Graph::pattern_matching_edge_task(const Schedule_IEP &schedule, int edge_id, VertexSet *vertex_sets, VertexSet &partial_embedding, VertexSet &tmp_set, int *ans_buffer){
+    int v0, v1, l, r;
+    v0 = edge_from[edge_id];
+    v1 = edge[edge_id];
+    if (schedule.get_restrict_last(1) != -1 && v0 <= v1)
+        return 0;
+    
+    l = vertex[v0], r = vertex[v0 + 1];
+    for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
+        vertex_sets[prefix_id].build_vertex_set(schedule, vertex_sets, &edge[l], r - l, prefix_id);
+
+    l = vertex[v1], r = vertex[v1 + 1];
+    for (int prefix_id = schedule.get_last(1); prefix_id != -1; prefix_id = schedule.get_next(prefix_id)) {
+        vertex_sets[prefix_id].build_vertex_set(schedule, vertex_sets, &edge[l], r - l, prefix_id);
+        if (vertex_sets[prefix_id].get_size() == 0 && prefix_id < schedule.get_basic_prefix_num())
+            return 0;
+    }
+
+    partial_embedding.push_back(v0);
+    partial_embedding.push_back(v1);
+    long long ans = 0;
+    pattern_matching_aggressive_func(schedule, vertex_sets, partial_embedding, tmp_set, ans, 2, ans_buffer);
+    partial_embedding.pop_back();
+    partial_embedding.pop_back();
+    return ans;
 }
 
 void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth, int* ans_buffer)

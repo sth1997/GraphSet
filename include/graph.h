@@ -11,7 +11,7 @@ public:
     long long tri_cnt; // number of triangle
     double max_running_time = 60 * 60 * 24; // second
 
-    int *edge; // edges
+    int *edge, *edge_from; // edges
     unsigned int *vertex; // v_i's neighbor is in edge[ vertex[i], vertex[i+1]-1]
     
     Graph() {
@@ -19,12 +19,16 @@ public:
         e_cnt = 0;
         edge = nullptr;
         vertex = nullptr;
+        edge_from = nullptr;
     }
 
     ~Graph() {
         if(edge != nullptr) delete[] edge;
         if(vertex != nullptr) delete[] vertex;
+        if (edge_from != nullptr) delete[] edge_from;
     }
+
+    void build_reverse_edges();
 
     int intersection_size(int v1,int v2);
     int intersection_size_mpi(int v1,int v2);
@@ -50,6 +54,10 @@ public:
 
     //general pattern matching algorithm with multi thread ans multi process
     long long pattern_matching_mpi(const Schedule_IEP& schedule, int thread_count, bool clique = false);
+
+    // internal use only
+    long long pattern_matching_edge_task(const Schedule_IEP& schedule, int edge_id,
+        VertexSet vertex_sets[], VertexSet& partial_embedding, VertexSet& tmp_set, int ans_buffer[]);
 private:
     friend Graphmpi;
     void tc_mt(long long * global_ans);
