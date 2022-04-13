@@ -269,19 +269,17 @@ __device__ unsigned int dev_cur_edge = 0;
  */
 __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
 {
-    __shared__ uint32_t block_out_offset[THREADS_PER_BLOCK];
     __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
 
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
-    uint32_t *out_offset = block_out_offset + wid * THREADS_PER_WARP;
     uint32_t &out_size = block_out_size[wid];
 
     if (lid == 0)
         out_size = 0;
 
     for(int num_done = 0; num_done < na; num_done += THREADS_PER_WARP) {
-        bool found = 0;
+        uint32_t found = 0;
         uint32_t u = 0;
         if (num_done + lid < na) {
             u = a[num_done + lid]; // u: an element in set a
@@ -301,26 +299,25 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
             int mid, l = 0, r = int(nb) - 1;
             while (l <= r) {
                 mid = (l + r) >> 1;
-                if (b[mid] < u) {
-                    l = mid + 1;
-                } else if (b[mid] > u) {
-                    r = mid - 1;
-                } else {
+                if(unlikely(b[mid] == u)){
                     found = 1;
                     break;
                 }
+                else if (b[mid] < u) {
+                    l = mid + 1;
+                } else {
+                    r = mid - 1;
+                }
             }
         }
-        out_offset[lid] = found;
-        __threadfence_block();
 
-        #pragma unroll
-        for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
-            uint32_t v = lid >= s ? out_offset[lid - s] : 0;
-            __threadfence_block();
-            out_offset[lid] += v;
-            __threadfence_block();
-        }
+        // #pragma unroll
+        // for (int s = 1; s < THREADS_PER_WARP; s *= 2) {
+        //     uint32_t v = lid >= s ? out_offset[lid - s] : 0;
+        //     __threadfence_block();
+        //     out_offset[lid] += v;
+        //     __threadfence_block();
+        // }
         
         /*
         // work-efficient parallel scan，但常数大，实测速度不行
@@ -340,31 +337,19 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
             __threadfence_block();
         }
         */
-        
+
+
+        // 使用 ballot_sync 获取有 1 的位置
+        // 使用 __popc 计算前缀和
+        // 但是速度会略慢一点        
+        uint32_t warp_found = __ballot_sync(0xffffffff, found);
+        uint32_t offset = __popc(warp_found & (0xffffffff >> (THREADS_PER_WARP - lid - 1)));
         if (found) {
-            uint32_t offset = out_offset[lid] - 1;
-            out[out_size + offset] = u;
-        }
-
-        if (lid == 0)
-            out_size += out_offset[THREADS_PER_WARP - 1];
-
-        /*
-        // 使用warp shuffle的scan，但实测速度更不行
-        uint32_t offset = found;
-        #pragma unroll
-        for (int i = 1; i < THREADS_PER_WARP; i *= 2) {
-            uint32_t t = __shfl_up_sync(0xffffffff, offset, i);
-            if (lid >= i)
-                offset += t;
-        }
-
-        if (found)
             out[out_size + offset - 1] = u;
-        if (lid == THREADS_PER_WARP - 1) // 总和被warp中最后一个线程持有
+        }
+        if (lid == THREADS_PER_WARP - 1)
             out_size += offset;
-        */
-
+        
         //num_done += THREADS_PER_WARP;
     }
 
