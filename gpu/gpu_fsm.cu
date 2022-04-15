@@ -884,8 +884,11 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     size_t size_v_label = g->v_cnt * sizeof(int);
     int max_total_prefix_num = 0;
     for (int i = 0; i < schedules_num; ++i)
+    {
+        schedules[i].update_loop_invariant_for_fsm();
         if (schedules[i].get_total_prefix_num() > max_total_prefix_num)
             max_total_prefix_num = schedules[i].get_total_prefix_num();
+    }
     size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (max_total_prefix_num + 2); //prefix + subtraction + tmp
     size_t size_pattern_is_frequent_index = (schedules_num + 1) * sizeof(uint32_t);
     size_t size_is_frequent = ((pattern_is_frequent_index[schedules_num] + 31) / 32) * sizeof(uint32_t);
@@ -933,7 +936,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         std::vector<std::vector<int> > automorphisms;
         automorphisms.clear();
         schedules[i].GraphZero_get_automorphisms(automorphisms);
-        schedules[i].update_loop_invariant_for_fsm();
+        //schedules[i].update_loop_invariant_for_fsm();
         size_t all_p_label_idx = 0;
         g->traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
         gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
