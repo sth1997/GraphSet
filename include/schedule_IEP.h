@@ -5,6 +5,7 @@
 #include "disjoint_set_union.h"
 
 #include <vector>
+#include <cstdint>
 
 class Schedule_IEP
 {

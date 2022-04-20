@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <string>
 #include <algorithm>
+#include <unordered_set>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -697,7 +698,7 @@ __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* sched
         if(schedule->in_exclusion_optimize_flag[pos]) {
             last_pos = pos;
             local_ans += val * schedule->in_exclusion_optimize_coef[pos];
-            printf("add to ans from in_exclusion: %lld\n",val * schedule->in_exclusion_optimize_coef[pos]);
+            // printf("add to ans from in_exclusion: %lld\n",val * schedule->in_exclusion_optimize_coef[pos]);
         }
     }
 
@@ -755,6 +756,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
         int size_after_restrict = lower_bound(loop_data_ptr, loop_size, min_vertex);
         //int size_after_restrict = -1;
         local_ans += unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
+        // local_ans += unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
         return;
     }
     for (int i = 0; i < loop_size; ++i)
@@ -783,9 +785,9 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
                 subtraction_set.push_back(v);
             __threadfence_block();
         }
-        if(threadIdx.x % THREADS_PER_WARP == 0){
-            printf("%d depth:%d prefix_id:%d size:%d\n", v, depth, schedule->get_last(depth), vertex_set[schedule->get_last(depth)].get_size());
-        }
+        // if(threadIdx.x % THREADS_PER_WARP == 0){
+        //     printf("%d depth:%d prefix_id:%d size:%d\n", v, depth, schedule->get_last(depth), vertex_set[schedule->get_last(depth)].get_size());
+        // }
         GPU_pattern_matching_func<depth + 1>(schedule, vertex_set, subtraction_set, tmp_set, local_ans, edge, vertex);
         if (depth + 1 != MAX_DEPTH) {
             if (threadIdx.x % THREADS_PER_WARP == 0)
@@ -867,9 +869,9 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
         get_edge_index(v0, l, r);
         for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-            if(lid == 0){
-                printf("edge:%d id:%d , size: %d\n",i, prefix_id, vertex_set[prefix_id].get_size());
-            }
+            // if(lid == 0){
+            //     printf("edge:%d id:%d , size: %d\n",i, prefix_id, vertex_set[prefix_id].get_size());
+            // }
             // vertex_set[prefix_id].get_size();
         }
 
@@ -888,9 +890,9 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
                 is_zero = true;
                 break;
             }
-            if(lid == 0){
-                printf("edge:%d id:%d , size: %d\n",i, prefix_id, vertex_set[prefix_id].get_size());
-            }
+            // if(lid == 0){
+            //     printf("edge:%d id:%d , size: %d\n",i, prefix_id, vertex_set[prefix_id].get_size());
+            // }
         }
         if (is_zero)
             continue;
@@ -1069,11 +1071,13 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
+
+
     gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
 
     sum /= schedule_iep.get_in_exclusion_optimize_redundancy();
 
-
+    printf("%d\n",schedule_iep.get_in_exclusion_optimize_redundancy());
     
     #ifdef PRINT_ANS_TO_FILE
     freopen("1.out", "w", stdout);
@@ -1112,11 +1116,98 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     delete[] only_need_size;
 }
 
+bool exists_edge(Graph &g, int i, int j){
+    // edge[ vertex[i], vertex[i+1]-1 ]
+
+    return true;
+    for(int e = g.vertex[i]; e < g.vertex[i+1]; e++) {
+        if(g.edge[e] == j) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void recalculate_max_intersection(Graph &g) {
+    printf("old max intersection: %d\n", VertexSet::max_intersection_size);
+    int now_max_intersection = 0;
+    for(int v = 0; v < g.v_cnt; v++) {
+        now_max_intersection = max(now_max_intersection, g.vertex[v+1] - g.vertex[v]);
+    }
+    VertexSet::max_intersection_size = now_max_intersection;
+    printf("new max_intersection: %d\n", now_max_intersection);
+}
+
+void insert_edge( std::vector<std::unordered_set<int>> &to_be_erased, std::vector<int> &degree, int i, int j){
+    if(i < j){
+        to_be_erased[i].insert(j);
+    }
+    else {
+        to_be_erased[j].insert(i);
+    }
+}
+
+
+void erase_edge(Graph &g, std::vector<std::unordered_set<int>> &to_be_erased) {
+    int newe = 0;
+    printf("start erasing edge\n");
+    fflush(stdout);
+    for(int v = 0; v < g.v_cnt; v++) {
+        int l = newe;
+        for(int e = g.vertex[v]; e < g.vertex[v+1]; e++){
+            if(to_be_erased[v].count(g.edge[e])) continue;
+            g.edge[newe] = g.edge[e];
+            newe++; 
+        }
+        g.vertex[v] = l;
+    }
+    g.vertex[g.v_cnt] = newe;
+    g.e_cnt = newe;
+    printf("newe: %d\n", g.e_cnt);
+}
+
+void reduce_edges_for_clique(Graph &g) {
+    std::vector<int> degree;
+    std::vector<std::unordered_set<int>> to_be_erased;
+    
+    to_be_erased.resize(g.v_cnt);
+
+    printf("trying to reduce edge. the pattern is a clique.\n");
+
+    for(int v = 0; v < g.v_cnt; v++){
+        degree.push_back(g.vertex[v+1] - g.vertex[v]);
+    }
+
+    for(int v = 0; v < g.v_cnt; v++) {
+        for(int e = g.vertex[v]; e < g.vertex[v + 1]; e++) {
+            int to_v = g.edge[e];
+            if(to_v == v) continue;
+            if(!exists_edge(g, to_v, v)){
+                printf("not a double edge\n");
+                return;
+            }
+            else {
+                if(to_v >= v) {
+                    assert(to_v < g.v_cnt && v < g.v_cnt);
+                    insert_edge(to_be_erased, degree, v, to_v);
+                }
+            }
+        }
+    }
+
+    erase_edge(g, to_be_erased);
+
+
+    // recalculate_max_intersection(g);
+
+    printf("Finish reduce.\n");
+}
 int main(int argc,char *argv[]) {
+    cudaSetDevice(1);
     Graph *g;
     DataLoader D;
 
-    
+    /*
     if (argc < 2) {
         printf("Usage: %s dataset_name graph_file [binary/text]\n", argv[0]);
         printf("Example: %s Patents ~hzx/data/patents_bin binary\n", argv[0]);
@@ -1140,26 +1231,68 @@ int main(int argc,char *argv[]) {
             return 0;
         }
     }
+    */
 
     using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
     bool ok;
-
+    
+    /*
     if (argc >= 3) {
         // 注：load_data的第四个参数用于指定是否读取二进制文件输入，默认为false
         ok = D.load_data(g, my_type, argv[2], binary_input);
     } else {
         ok = D.fast_load(g, argv[1]);
     }
+    */
     
 
-    // ok = D.fast_load(g, argv[1]);
+    // 读入 pattern 并且判断是否是 clique
+    int pattern_size = atoi(argv[2]);
+    const char* pattern_str = argv[3];
+    // int pattern_size = 4;
+    // const char *pattern_str = "0111101111011110";
+    Pattern p(pattern_size, pattern_str);
+
+    int pattern_edges = 0;
+    int is_clique;
+
+    for(int i = 0; i < pattern_size; i++){
+        for(int j = 0; j < pattern_size; j++){
+            if(p.get_adj_mat_ptr()[INDEX(i, j, pattern_size)] == 1) {
+                pattern_edges++;
+            }
+        }
+    }
+    if(pattern_edges == (pattern_size - 1) * pattern_size){
+        printf("This pattern is a Clique. Will use orientation optimization.\n");
+        is_clique = true;   
+    }
+    else {
+        is_clique = false;
+    }
+
+    ok = D.fast_load(g, argv[1]);
 
     if (!ok) {
         printf("data load failure :-(\n");
         return 0;
     }
+
+    if(is_clique){
+        reduce_edges_for_clique(*g);
+    }
+
+    cudaFree(0);
+
+    // for(int v = 0; v < g->v_cnt; v++) {
+    //     printf("v: %d\n  ",v);
+    //     for(int e = g->vertex[v]; e < g->vertex[v+1]; e++){
+    //         printf("%d ", g->edge[e]);
+    //     }
+    //     printf("\n");
+    // }
 
     auto t2 = system_clock::now();
     auto load_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
@@ -1168,17 +1301,13 @@ int main(int argc,char *argv[]) {
 
     allTime.check();
 
-    int pattern_size = 4;
-    const char *pattern_str = "0111101111011110";
     // const char *pattern_str = "0111010011100011100001100"; // 5 house p1
-    // const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
+    //const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
     // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
     // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
-    // int pattern_size = atoi(argv[2]);
-    // const char* pattern_str= argv[3];
 
-    Pattern p(pattern_size, pattern_str);
+
     printf("pattern = \n");
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);
@@ -1186,17 +1315,6 @@ int main(int argc,char *argv[]) {
     bool use_in_exclusion_optimize = true;
     Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
     Schedule schedule(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt); // schedule is only used for getting redundancy
-
-
-    printf("size:%d, in_ex_num:%d" ,schedule_iep.get_size(), schedule_iep.get_in_exclusion_optimize_num());
-    for(int i = 0; i < 4; i++) {
-        printf("depth:%d\n  ",i);
-        printf("loop_prefix_id: %d\n    ", schedule_iep.get_loop_set_prefix_id(i));
-        for(int id = schedule_iep.get_last(i); id != -1; id = schedule_iep.get_next(id)){
-            printf("id:%d father:%d\n    ", id, schedule_iep.get_father_prefix_id(id));
-        }
-        printf("\n");
-    }
 
     schedule_iep.set_in_exclusion_optimize_redundancy(schedule.get_in_exclusion_optimize_redundancy());
 

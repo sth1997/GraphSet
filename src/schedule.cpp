@@ -1746,6 +1746,7 @@ int Schedule::get_in_exclusion_optimize_num_when_not_optimize() {
 
 void Schedule::set_in_exclusion_optimize_redundancy() {
     int tmp = get_in_exclusion_optimize_num();
+    // printf("tmp:%d\n",tmp);
     if(tmp <= 1) {
         in_exclusion_optimize_redundancy = 1;
     }
