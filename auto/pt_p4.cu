@@ -774,7 +774,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 }
 
 int main(int argc,char *argv[]) {
-    cudaSetDevice(2);
+    // cudaSetDevice(2);
     Graph *g;
     DataLoader D;
 

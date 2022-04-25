@@ -28,6 +28,6 @@ for g_idx, graph in enumerate(graphs):
     for p in range(len(patterns)):
         #log_name = graph + "_" + "p" + str(p + 1) + ".log"
         log_name = "../auto/" + g[g_idx] + "_p" + str(p + 1) + "_inject.cu" 
-        os.system("./bin/final_generator ~/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
+        os.system("srun -p V100 ./bin/final_generator /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name)
 
 os.system("cd ../auto; bash concat.sh")
