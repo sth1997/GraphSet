@@ -1,5 +1,6 @@
 #include "../include/vertex_set.h"
 #include <algorithm>
+#include <cassert>
 
 int VertexSet::max_intersection_size = -1;
 
@@ -15,12 +16,13 @@ void VertexSet::init()
     {
         size = 0;
         allocate = true;
-        data = new int[max_intersection_size];
+        data = new int[max_intersection_size * 2];
     }
 }
 
 void VertexSet::init(int input_size, int* input_data)
 {
+    // assert(false);
     if (allocate == true && data != nullptr)
         delete[] data;
     size = input_size;

@@ -72,9 +72,10 @@ static bool load_graph(Graph& g, const char* filename)
     GraphHeader h;
 
     FILE *fp = fopen(filename, "rb");
-    if (!fp)
+    if (!fp) {
+        printf("load_graph: cannot open file %s.\n", filename);
         return false;
-
+    }
     FileGuard guard(fp);
     if (fread(&h, sizeof(h), 1, fp) != 1) {
         printf("load_graph: bad header.\n");

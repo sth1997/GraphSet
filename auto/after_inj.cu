@@ -201,6 +201,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 }
 
 int main(int argc,char *argv[]) {
+    cudaSetDevice(2);
     Graph *g;
     DataLoader D;
 
@@ -264,7 +265,33 @@ int main(int argc,char *argv[]) {
     int pattern_size = atoi(argv[2]);
     const char* pattern_str= argv[3];
 
+
     Pattern p(pattern_size, pattern_str);
+
+    int pattern_edges = 0;
+    int is_clique;
+
+    for(int i = 0; i < pattern_size; i++){
+        for(int j = 0; j < pattern_size; j++){
+            if(p.get_adj_mat_ptr()[INDEX(i, j, pattern_size)] == 1) {
+                pattern_edges++;
+            }
+        }
+    }
+    if(pattern_edges == (pattern_size - 1) * pattern_size){
+        printf("This pattern is a Clique. Will use orientation optimization.\n");
+        is_clique = true;   
+    }
+    else {
+        is_clique = false;
+    }
+
+    if(is_clique){
+        reduce_edges_for_clique(*g);
+    }
+
+    cudaFree(0);
+
     printf("pattern = \n");
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);

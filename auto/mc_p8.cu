@@ -510,12 +510,15 @@ GPUVertexSet* tmp_vset;
 intersection2(vertex_set[1].get_data_ptr(), vertex_set[0].get_data_ptr(), &edge[l], vertex_set[0].get_size(), r - l, &vertex_set[1].size);
 if (vertex_set[1].get_size() == 0) continue;
 extern __shared__ char ans_array[];
-int* ans = ((int*) (ans_array + 768)) + 3 * (threadIdx.x / THREADS_PER_WARP);
+int* ans = ((int*) (ans_array + 768)) + 0 * (threadIdx.x / THREADS_PER_WARP);
 int loop_size_depth2 = vertex_set[1].get_size();
 if( loop_size_depth2 <= 0) continue;
 uint32_t* loop_data_ptr_depth2 = vertex_set[1].get_data_ptr();
+uint32_t min_vertex_depth2 = 0xffffffff;
+if(min_vertex_depth2 > subtraction_set.get_data(1)) min_vertex_depth2 = subtraction_set.get_data(1);
 for(int i_depth2 = 0; i_depth2 < loop_size_depth2; ++i_depth2) {
 uint32_t v_depth2 = loop_data_ptr_depth2[i_depth2];
+if (min_vertex_depth2 <= v_depth2) break;
 if(subtraction_set.has_data(v_depth2)) continue;
 unsigned int l_depth2, r_depth2;
 get_edge_index(v_depth2, l_depth2, r_depth2);
@@ -526,43 +529,27 @@ __threadfence_block();
 int loop_size_depth3 = vertex_set[2].get_size();
 if( loop_size_depth3 <= 0) continue;
 uint32_t* loop_data_ptr_depth3 = vertex_set[2].get_data_ptr();
+uint32_t min_vertex_depth3 = 0xffffffff;
+if(min_vertex_depth3 > subtraction_set.get_data(0)) min_vertex_depth3 = subtraction_set.get_data(0);
+if(min_vertex_depth3 > subtraction_set.get_data(2)) min_vertex_depth3 = subtraction_set.get_data(2);
 for(int i_depth3 = 0; i_depth3 < loop_size_depth3; ++i_depth3) {
 uint32_t v_depth3 = loop_data_ptr_depth3[i_depth3];
+if (min_vertex_depth3 <= v_depth3) break;
 if(subtraction_set.has_data(v_depth3)) continue;
 unsigned int l_depth3, r_depth3;
 get_edge_index(v_depth3, l_depth3, r_depth3);
-{
-tmp_vset = &vertex_set[3];
-if (threadIdx.x % THREADS_PER_WARP == 0)
-    tmp_vset->init(r_depth3 - l_depth3, &edge[l_depth3]);
-__threadfence_block();
-if (r_depth3 - l_depth3 > vertex_set[2].get_size())
-    tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[2], -1);
-else
-    tmp_vset->size = vertex_set[2].get_size() - unordered_subtraction_size(vertex_set[2], *tmp_vset, -1);
-}
+intersection2(vertex_set[3].get_data_ptr(), vertex_set[2].get_data_ptr(), &edge[l_depth3], vertex_set[2].get_size(), r_depth3 - l_depth3, &vertex_set[3].size);
 if (vertex_set[3].get_size() == 0) continue;
 if (threadIdx.x % THREADS_PER_WARP == 0) subtraction_set.push_back(v_depth3);
 __threadfence_block();
-ans[0] = vertex_set[3].get_size() - 0;
-ans[1] = vertex_set[2].get_size() - 1;
-ans[2] = vertex_set[1].get_size() - 2;
-long long val;
-val = ans[0];
-val = val * ans[1];
-val = val * ans[2];
-sum += val * 1;
-val = ans[0];
-val = val * ans[1];
-sum += val * -1;
-val = ans[0];
-val = val * ans[1];
-sum += val * -1;
-val = ans[0];
-val = val * ans[2];
-sum += val * -1;
-val = ans[0];
-sum += val * 2;
+int loop_size_depth4 = vertex_set[3].get_size();
+if( loop_size_depth4 <= 0) continue;
+uint32_t* loop_data_ptr_depth4 = vertex_set[3].get_data_ptr();
+uint32_t min_vertex_depth4 = 0xffffffff;
+if(min_vertex_depth4 > subtraction_set.get_data(1)) min_vertex_depth4 = subtraction_set.get_data(1);
+if(min_vertex_depth4 > subtraction_set.get_data(3)) min_vertex_depth4 = subtraction_set.get_data(3);
+int size_after_restrict = lower_bound(loop_data_ptr_depth4, loop_size_depth4, min_vertex_depth4);
+sum += unordered_subtraction_size(vertex_set[3], subtraction_set, size_after_restrict);
 if (threadIdx.x % THREADS_PER_WARP == 0) subtraction_set.pop_back();
 __threadfence_block();
 }

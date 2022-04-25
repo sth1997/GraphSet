@@ -5,16 +5,16 @@ int wid = threadIdx.x / THREADS_PER_WARP;
 int lid = threadIdx.x % THREADS_PER_WARP;
 int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid;
 unsigned int &edge_idx = block_edge_idx[wid];
-GPUVertexSet *vertex_set = block_vertex_set + wid * 7;
+GPUVertexSet *vertex_set = block_vertex_set + wid * 6;
 if (lid == 0) {
 edge_idx = 0;
-uint32_t offset = buffer_size * global_wid * 7;
-for (int i = 0; i < 7; ++i) {
+uint32_t offset = buffer_size * global_wid * 6;
+for (int i = 0; i < 6; ++i) {
 vertex_set[i].set_data_ptr(tmp + offset);
 offset += buffer_size;
 }
 }
-GPUVertexSet& subtraction_set = vertex_set[5];
+GPUVertexSet& subtraction_set = vertex_set[4];
 __threadfence_block();
 uint32_t v0, v1;
 uint32_t l, r;
@@ -44,7 +44,7 @@ GPUVertexSet* tmp_vset;
 intersection2(vertex_set[1].get_data_ptr(), vertex_set[0].get_data_ptr(), &edge[l], vertex_set[0].get_size(), r - l, &vertex_set[1].size);
 if (vertex_set[1].get_size() == 0) continue;
 extern __shared__ char ans_array[];
-int* ans = ((int*) (ans_array + 896)) + 3 * (threadIdx.x / THREADS_PER_WARP);
+int* ans = ((int*) (ans_array + 768)) + 3 * (threadIdx.x / THREADS_PER_WARP);
 int loop_size_depth2 = vertex_set[1].get_size();
 if( loop_size_depth2 <= 0) continue;
 uint32_t* loop_data_ptr_depth2 = vertex_set[1].get_data_ptr();
@@ -76,21 +76,10 @@ else
     tmp_vset->size = vertex_set[2].get_size() - unordered_subtraction_size(vertex_set[2], *tmp_vset, -1);
 }
 if (vertex_set[3].get_size() == 0) continue;
-{
-tmp_vset = &vertex_set[4];
-if (threadIdx.x % THREADS_PER_WARP == 0)
-    tmp_vset->init(r_depth3 - l_depth3, &edge[l_depth3]);
-__threadfence_block();
-if (r_depth3 - l_depth3 > vertex_set[1].get_size())
-    tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[1], -1);
-else
-    tmp_vset->size = vertex_set[1].get_size() - unordered_subtraction_size(vertex_set[1], *tmp_vset, -1);
-}
-if (vertex_set[4].get_size() == 1) continue;
 if (threadIdx.x % THREADS_PER_WARP == 0) subtraction_set.push_back(v_depth3);
 __threadfence_block();
 ans[0] = vertex_set[3].get_size() - 0;
-ans[1] = vertex_set[4].get_size() - 1;
+ans[1] = vertex_set[2].get_size() - 1;
 ans[2] = vertex_set[1].get_size() - 2;
 long long val;
 val = ans[0];

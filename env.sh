@@ -1,4 +1,4 @@
-#!/bin/bash
-module load cmake-3.12.3
-module load openmpi-3.0.0
-module load cuda-10.0/cuda
+source /opt/spack/share/spack/setup-env.sh
+spack load --first cuda
+spack load --first cmake 
+spack load --first openmpi
