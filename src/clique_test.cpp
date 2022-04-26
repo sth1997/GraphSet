@@ -11,7 +11,7 @@
 #include <algorithm>
 
 void test_pattern(Graph* g, Pattern &pattern) {
-    int thread_num = 48;
+    int thread_num = 16;
     int tri_cnt = 627584181;
 
     double t1,t2,t3,t4;
@@ -74,17 +74,17 @@ int main(int argc,char *argv[]) {
 
     printf("Load data success!\n");
     fflush(stdout);
-    Pattern pattern(5);
+    Pattern pattern(4);
     pattern.add_edge(0, 1);
     pattern.add_edge(0, 2);
     pattern.add_edge(0, 3);
-    pattern.add_edge(0, 4);
+    // pattern.add_edge(0, 4);
     pattern.add_edge(1, 2);
     pattern.add_edge(1, 3);
-    pattern.add_edge(1, 4);
+    // pattern.add_edge(1, 4);
     pattern.add_edge(2, 3);
-    pattern.add_edge(2, 4);
-    pattern.add_edge(3, 4);
+    // pattern.add_edge(2, 4);
+    // pattern.add_edge(3, 4);
 
 
     reduce_edges_for_clique(*g);

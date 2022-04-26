@@ -374,41 +374,28 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
 
 
 void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set, long long& local_ans, int depth) {
-    int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
-    int loop_size = vertex_set[loop_set_prefix_id].get_size();
-    int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
+    int loop_set_prefix_id1 = schedule.get_loop_set_prefix_id(depth);
+    int loop_size1 = vertex_set[loop_set_prefix_id1].get_size();
+    int* loop_data_ptr1 = vertex_set[loop_set_prefix_id1].get_data_ptr();
 
-    // if (depth == schedule.get_size() - 1)
-    // {
-    //     // local_ans += vertex_set[loop_set_prefix_id].get_size();
-    //     return;
-    // }
+    // second_point
+    for (int i = 0; i < loop_size1; ++i) {
+        int vertex1 = loop_data_ptr1[i]; unsigned int l1, r1; this->get_edge_index(vertex1, l1, r1);
+        int loop_set_prefix_id2 = schedule.get_last(1);
+        vertex_set[loop_set_prefix_id2].build_vertex_set(schedule, vertex_set, &edge[l1], (int)r1 - l1, loop_set_prefix_id2, -1, false);
+        if( vertex_set[loop_set_prefix_id2].get_size() == 0) {
+            continue;
+        }
 
-
-    for (int i = 0; i < loop_size; ++i) {
-        int vertex = loop_data_ptr[i];
-        unsigned int l, r;
-        this->get_edge_index(vertex, l, r);
-        // bool is_zero = false;
-        int prefix_id = schedule.get_last(depth);
-        // for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
-        // {
-            if(depth == schedule.get_size() - 2)
-                vertex_set[prefix_id].build_vertex_set_only_size(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, false);
-            else 
-                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, false);
-            if( vertex_set[prefix_id].get_size() == 0) {
-                // is_zero = true;
-                // break;
-                continue;
-            }
-        // }
-        // if( is_zero ) continue;
-        if(depth == schedule.get_size() - 2)
-            // for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
-                local_ans += vertex_set[prefix_id].get_size();
-        else 
-                clique_matching_func(schedule, vertex_set, local_ans, depth + 1);
+        int loop_size2 = vertex_set[loop_set_prefix_id2].get_size();
+        int* loop_data_ptr2 = vertex_set[loop_set_prefix_id2].get_data_ptr();
+        // third point
+        for (int i = 0; i < loop_size2; ++i) {
+            int vertex2 = loop_data_ptr2[i]; unsigned int l2, r2; this->get_edge_index(vertex2, l2, r2);
+            int loop_set_prefix_id3 = schedule.get_last(2);
+            vertex_set[loop_set_prefix_id3].build_vertex_set_only_size(schedule, vertex_set, &edge[l2], (int)r2 - l2, loop_set_prefix_id3, -1, false);
+            local_ans += vertex_set[loop_set_prefix_id3].get_size();
+        }
     }
 }
 
