@@ -378,14 +378,14 @@ void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set
     int loop_size = vertex_set[loop_set_prefix_id].get_size();
     int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
 
-    if (depth == schedule.get_size() - 1)
-    {
-        local_ans += vertex_set[loop_set_prefix_id].get_size();
-        return;
-    }
+    // if (depth == schedule.get_size() - 1)
+    // {
+    //     // local_ans += vertex_set[loop_set_prefix_id].get_size();
+    //     return;
+    // }
 
-    for (int i = 0; i < loop_size; ++i)
-    {
+
+    for (int i = 0; i < loop_size; ++i) {
         int vertex = loop_data_ptr[i];
         unsigned int l, r;
         this->get_edge_index(vertex, l, r);
@@ -393,7 +393,10 @@ void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set
         int prefix_id = schedule.get_last(depth);
         // for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
         // {
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, false);
+            if(depth == schedule.get_size() - 2)
+                vertex_set[prefix_id].build_vertex_set_only_size(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, false);
+            else 
+                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, false);
             if( vertex_set[prefix_id].get_size() == 0) {
                 // is_zero = true;
                 // break;
@@ -401,7 +404,11 @@ void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set
             }
         // }
         // if( is_zero ) continue;
-        clique_matching_func(schedule, vertex_set, local_ans, depth + 1);
+        if(depth == schedule.get_size() - 2)
+            // for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
+                local_ans += vertex_set[prefix_id].get_size();
+        else 
+                clique_matching_func(schedule, vertex_set, local_ans, depth + 1);
     }
 }
 

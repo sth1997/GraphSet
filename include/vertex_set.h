@@ -7,7 +7,8 @@ void long_add(long long &low, long long &high, int num);
 
 struct Bitmap{
     unsigned long long *s;
-    Bitmap(int size);
+    int size;
+    Bitmap(int _size);
     ~Bitmap();
     inline void set_bit(int pos);
     inline bool read_bit(int pos);
@@ -28,6 +29,7 @@ public:
     void intersection(const VertexSet& set0, int *input_data, int input_size);
     void intersection_with(const VertexSet& set1);
     void intersection_bs(const VertexSet &set0, int * input_data, int input_size);
+    void intersection_only_size(const VertexSet &set0, const VertexSet& set1);
     void build_bitmap();
     //set1 is unordered
     static int unorderd_subtraction_size(const VertexSet& set0, const VertexSet& set1, int size_after_restrict = -1);
@@ -42,6 +44,7 @@ public:
     bool has_data(int val);
     static int max_intersection_size;
     void build_vertex_set(const Schedule& schedule, const VertexSet* vertex_set, int* input_data, int input_size, int prefix_id, int min_vertex = -1, bool clique = false);
+    void build_vertex_set_only_size(const Schedule& schedule, const VertexSet* vertex_set, int* input_data, int input_size, int prefix_id, int min_vertex = -1, bool clique = false);
 private:
     int* data;
     int size;
