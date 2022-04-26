@@ -232,7 +232,7 @@ void Graph::pattern_matching_func(const Schedule& schedule, VertexSet* vertex_se
 
 // static double local_time;
 
-long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bool clique, bool clique_optimization)
+long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bool clique)
 {
 //    intersection_times_low = intersection_times_high = 0;
 //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
@@ -245,26 +245,33 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
         VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
         VertexSet subtraction_set;
         VertexSet tmp_set;
-        subtraction_set.init();
+        if(!clique)
+            subtraction_set.init();
         long long local_ans = 0;
         // TODO : try different chunksize
- #pragma omp for schedule(dynamic) nowait
+ #pragma omp for schedule(dynamic, 5) nowait
         for (int vertex = 0; vertex < v_cnt; ++vertex)
         {
             unsigned int l, r;
             this->get_edge_index(vertex, l, r);
             for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
             {
-                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id);
+                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, clique);
             }
             //subtraction_set.insert_ans_sort(vertex);
-            subtraction_set.push_back(vertex);
+            if(!clique)
+                subtraction_set.push_back(vertex);
             //if (schedule.get_total_restrict_num() > 0 && clique == false)
-            if(true)
-                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1, clique_optimization);
+            if(true){
+                if(clique)
+                    clique_matching_func(schedule, vertex_set, local_ans, 1);
+                else 
+                    pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1);
+            }
             else
                 pattern_matching_func(schedule, vertex_set, subtraction_set, local_ans, 1, clique);
-            subtraction_set.pop_back();
+            if(!clique)
+                subtraction_set.pop_back();
             //printf("for %d %d\n", omp_get_thread_num(), vertex);
         }
         //double end_time = get_wall_time();
@@ -281,91 +288,124 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
 }
 
 
-void Graph::use_local_graph(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long &local_ans, int depth, int u, int v, int *loop_data_ptr, int loop_size){
+// void Graph::use_local_graph(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long &local_ans, int depth, int u, int v, int *loop_data_ptr, int loop_size){
 
-    // is_local_graph = true;
+//     // is_local_graph = true;
 
-    // this->pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth);
-    // return;
-    // before we enter the third level
+//     // this->pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth);
+//     // return;
+//     // before we enter the third level
     
-    // if the Graph is DAG here
+//     // if the Graph is DAG here
 
-    double t_1, t_2;
+//     double t_1, t_2;
 
-    assert(u > v);
+//     assert(u > v);
 
-    t_1 = get_wall_time();
+//     t_1 = get_wall_time();
 
-    int new_u,new_v, new_loop;
+//     int new_u,new_v, new_loop;
 
-    Local_Graph * lg = new Local_Graph(*this, u, v, loop_data_ptr, loop_size, new_loop);
-
-
-    // pop u & v
-    subtraction_set.pop_back();
-    subtraction_set.pop_back();
-    // push 0 & 1
-    subtraction_set.push_back(new_loop + 1);
-    subtraction_set.push_back(new_loop);
-
-    // deal with vertex_set
-    // 理论上来说，改这个应该不会有影响
-
-    // int *new0 = new int [loop_size * 2];
-    int *new1 = new int [new_loop];
-
-    // int *tmp0 = new int [vertex_set[0].get_size() + 5], size0 = vertex_set[0].get_size();
-    int *tmp1 = new int [vertex_set[1].get_size() + 5], size1 = vertex_set[1].get_size();
+//     Local_Graph * lg = new Local_Graph(*this, u, v, loop_data_ptr, loop_size, new_loop);
 
 
-    // printf("%d: %d %d\n", 1, , loop_size);
-    memcpy(tmp1, vertex_set[1].get_data_ptr(), sizeof(int) * (size1));
+//     // pop u & v
+//     subtraction_set.pop_back();
+//     subtraction_set.pop_back();
+//     // push 0 & 1
+//     subtraction_set.push_back(new_loop + 1);
+//     subtraction_set.push_back(new_loop);
 
-    for(int i = 0; i < new_loop; i++){
-        new1[i] = i;
+//     // deal with vertex_set
+//     // 理论上来说，改这个应该不会有影响
+
+//     // int *new0 = new int [loop_size * 2];
+//     int *new1 = new int [new_loop];
+
+//     // int *tmp0 = new int [vertex_set[0].get_size() + 5], size0 = vertex_set[0].get_size();
+//     int *tmp1 = new int [vertex_set[1].get_size() + 5], size1 = vertex_set[1].get_size();
+
+
+//     // printf("%d: %d %d\n", 1, , loop_size);
+//     memcpy(tmp1, vertex_set[1].get_data_ptr(), sizeof(int) * (size1));
+
+//     for(int i = 0; i < new_loop; i++){
+//         new1[i] = i;
+//     }
+
+//     vertex_set[1].copy(new_loop, new1);
+
+
+//     t_2 = get_wall_time();
+
+//     // #pragma omp critical
+//     // {
+//         // local_time += (t_2 - t_1);
+//     // }
+
+
+//     lg->pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth);
+    
+//     t_1 = get_wall_time();
+
+//     // restore vertex_set
+//     vertex_set[1].copy((size1), tmp1);
+
+
+//     subtraction_set.pop_back();
+//     subtraction_set.pop_back();
+//     // push 0 & 1
+//     subtraction_set.push_back(u);
+//     subtraction_set.push_back(v);
+
+//     delete lg;
+//     // delete[] tmp0;
+//     delete[] tmp1;
+//     // delete[] new0;
+//     delete[] new1;
+
+//     t_2 = get_wall_time();
+
+//     // #pragma omp critical
+//     // {
+//         // local_ans += (t_2 - t_1);
+//     // }
+// }
+
+
+void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set, long long& local_ans, int depth) {
+    int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
+    int loop_size = vertex_set[loop_set_prefix_id].get_size();
+    int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
+
+    if (depth == schedule.get_size() - 1)
+    {
+        local_ans += vertex_set[loop_set_prefix_id].get_size();
+        return;
     }
 
-    vertex_set[1].copy(new_loop, new1);
-
-
-    t_2 = get_wall_time();
-
-    // #pragma omp critical
-    // {
-        // local_time += (t_2 - t_1);
-    // }
-
-
-    lg->pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth);
-    
-    t_1 = get_wall_time();
-
-    // restore vertex_set
-    vertex_set[1].copy((size1), tmp1);
-
-
-    subtraction_set.pop_back();
-    subtraction_set.pop_back();
-    // push 0 & 1
-    subtraction_set.push_back(u);
-    subtraction_set.push_back(v);
-
-    delete lg;
-    // delete[] tmp0;
-    delete[] tmp1;
-    // delete[] new0;
-    delete[] new1;
-
-    t_2 = get_wall_time();
-
-    // #pragma omp critical
-    // {
-        // local_ans += (t_2 - t_1);
-    // }
+    for (int i = 0; i < loop_size; ++i)
+    {
+        int vertex = loop_data_ptr[i];
+        unsigned int l, r;
+        this->get_edge_index(vertex, l, r);
+        // bool is_zero = false;
+        int prefix_id = schedule.get_last(depth);
+        // for (int prefix_id = schedule.get_last(depth); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
+        // {
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, false);
+            if( vertex_set[prefix_id].get_size() == 0) {
+                // is_zero = true;
+                // break;
+                continue;
+            }
+        // }
+        // if( is_zero ) continue;
+        clique_matching_func(schedule, vertex_set, local_ans, depth + 1);
+    }
 }
 
-void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth, bool is_clique_optimzition)
+void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
 
@@ -378,12 +418,12 @@ void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet
     int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
 
 
-    if(depth == 2 && is_local_graph == false && is_clique_optimzition) {
-        // printf("use local_graph.");
-        int u =  subtraction_set.get_data(0), v = subtraction_set.get_data(1);
-        use_local_graph(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth, u, v, loop_data_ptr, loop_size);
-        return;
-    }
+    // if(depth == 2 && is_local_graph == false && is_clique_optimzition) {
+    //     // printf("use local_graph.");
+    //     int u =  subtraction_set.get_data(0), v = subtraction_set.get_data(1);
+    //     use_local_graph(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth, u, v, loop_data_ptr, loop_size);
+    //     return;
+    // }
     //Case: in_exclusion_optimize_num > 1
     if( depth == schedule.get_size() - schedule.get_in_exclusion_optimize_num() ) {
         // assert(false);
@@ -474,7 +514,7 @@ void Graph::pattern_matching_aggressive_func(const Schedule& schedule, VertexSet
         if( is_zero ) continue;
         //subtraction_set.insert_ans_sort(vertex);
         subtraction_set.push_back(vertex);
-        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1, is_clique_optimzition);
+        pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, depth + 1);
         subtraction_set.pop_back();
     }
 }

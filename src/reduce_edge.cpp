@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include <unordered_set>
+#include <omp.h>
 
 bool exists_edge(Graph &g, int i, int j){
     // edge[ vertex[i], vertex[i+1]-1 ]

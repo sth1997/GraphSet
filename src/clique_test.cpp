@@ -11,7 +11,7 @@
 #include <algorithm>
 
 void test_pattern(Graph* g, Pattern &pattern) {
-    int thread_num = 56;
+    int thread_num = 64;
     int tri_cnt = 627584181;
 
     double t1,t2,t3,t4;
@@ -26,24 +26,24 @@ void test_pattern(Graph* g, Pattern &pattern) {
     assert(is_pattern_valid==true);
 
 
-    std::vector< std::vector< std::pair<int,int> > >restricts;
-    schedule_our.restricts_generate(schedule_our.get_adj_mat_ptr(), restricts);
+    // std::vector< std::vector< std::pair<int,int> > >restricts;
+    // schedule_our.restricts_generate(schedule_our.get_adj_mat_ptr(), restricts);
 
-    std::vector< std::pair<int,int> > our_pairs;
-    schedule_our.restrict_selection(g->v_cnt, g->e_cnt, tri_cnt, restricts, our_pairs);
-    schedule_our.add_restrict(our_pairs);
+    // std::vector< std::pair<int,int> > our_pairs;
+    // schedule_our.restrict_selection(g->v_cnt, g->e_cnt, tri_cnt, restricts, our_pairs);
+    // schedule_our.add_restrict(our_pairs);
    
     for(int i = 0; i < 3; ++i) {
         t1 = get_wall_time();
-        long long ans_our = g->pattern_matching(schedule_our, thread_num, true, false);
+        long long ans_our = g->pattern_matching(schedule_our, thread_num, true);
         t2 = get_wall_time();
 
         printf("our ans: %lld time: %.6lf\n", ans_our, t2 - t1);
         if(i == 2) {
             schedule_our.print_schedule();
-            for(int i = 0; i < our_pairs.size(); ++i)
-                printf("(%d,%d)",our_pairs[i].first, our_pairs[i].second);
-            puts("");
+            // for(int i = 0; i < our_pairs.size(); ++i)
+            //     printf("(%d,%d)",our_pairs[i].first, our_pairs[i].second);
+            // puts("");
         }
         fflush(stdout);
     }
@@ -64,6 +64,8 @@ int main(int argc,char *argv[]) {
 
     bool ok = D.fast_load(g, path.c_str()); 
 
+    
+
     fflush(stdout);
 
     if(!ok){
@@ -79,6 +81,9 @@ int main(int argc,char *argv[]) {
     pattern.add_edge(1, 2);
     pattern.add_edge(1, 3);
     pattern.add_edge(2, 3);
+
+    reduce_edges_for_clique(*g);
+
     test_pattern(g, pattern);
     /*
        test_pattern(g, PatternType::Rectangle);

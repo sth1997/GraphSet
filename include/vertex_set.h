@@ -1,7 +1,18 @@
 #pragma once
 #include "schedule.h"
+#include <bitset>
 
 void long_add(long long &low, long long &high, int num);
+
+
+struct Bitmap{
+    unsigned long long *s;
+    Bitmap(int size);
+    ~Bitmap();
+    inline void set_bit(int pos);
+    inline bool read_bit(int pos);
+    inline void set_0();
+};
 
 class VertexSet
 {
@@ -14,7 +25,10 @@ public:
     void copy(int input_size, int* input_data);
     ~VertexSet();
     void intersection(const VertexSet& set0, const VertexSet& set1, int min_vertex = -1, bool clique = false);
+    void intersection(const VertexSet& set0, int *input_data, int input_size);
     void intersection_with(const VertexSet& set1);
+    void intersection_bs(const VertexSet &set0, int * input_data, int input_size);
+    void build_bitmap();
     //set1 is unordered
     static int unorderd_subtraction_size(const VertexSet& set0, const VertexSet& set1, int size_after_restrict = -1);
     void insert_ans_sort(int val);
@@ -32,4 +46,5 @@ private:
     int* data;
     int size;
     bool allocate;
+    Bitmap *bs;
 };

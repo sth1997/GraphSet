@@ -1,22 +1,57 @@
 #include "../include/vertex_set.h"
 #include <algorithm>
 #include <cassert>
+#include <cstring>
+
+
+Bitmap::Bitmap(int size) : s(nullptr) {
+    s = new unsigned long long[size / 64 + 1];
+    memset(s, 0, sizeof(s));
+}
+
+Bitmap::~Bitmap(){
+    delete[] s;
+}
+
+void Bitmap::set_bit(int pos){
+    s[pos / 64] |= (1 << (pos % 64));
+}
+
+bool Bitmap::read_bit(int pos) {
+    return bool(s[pos / 64] & (1 << (pos % 64)));
+}
+
+void Bitmap::set_0() {
+    memset(s, 0, sizeof(s));
+}
 
 int VertexSet::max_intersection_size = -1;
 
 VertexSet::VertexSet()
 :data(nullptr), size(0), allocate(false)
-{}
+{
+    // bs = new Bitmap(5000000);
+}
 
 void VertexSet::init()
 {
-    if (allocate == true && data != nullptr)
+    if (allocate == true && data != nullptr){
         size = 0; // do not reallocate
+        // bs->set_0();
+    }
     else
     {
         size = 0;
         allocate = true;
         data = new int[max_intersection_size * 2];
+    }
+}
+
+void VertexSet::build_bitmap() {
+    bs->set_0();
+    #pragma unroll
+    for(int i = 0; i < size; i++) {
+        bs->set_bit(data[i]);
     }
 }
 
@@ -27,6 +62,7 @@ void VertexSet::init(int input_size, int* input_data)
         delete[] data;
     size = input_size;
     data = input_data;
+    // build_bitmap();
     allocate = false;
 }
 
@@ -34,17 +70,62 @@ void VertexSet::copy(int input_size, int* input_data)
 {
     init();
     size = input_size;
-    for(int i = 0; i < input_size; ++i) data[i] = input_data[i];
+    // bs->set_0();
+    for(int i = 0; i < input_size; ++i) {
+        data[i] = input_data[i];
+        // bs->set_bit(data[i]);
+    }
 }
 
 VertexSet::~VertexSet()
 {
-    if (allocate== true && data != nullptr)
+    if (allocate == true && data != nullptr)
         delete[] data;
+    // delete bs;
+}
+ 
+void VertexSet::intersection_bs(const VertexSet &set0, int *input_data, int input_size) {
+
+    size = 0;
+    bs->set_0();
+
+    #pragma unroll
+    for(int i = 0; i < input_size; i++){
+        if(set0.bs->read_bit(input_data[i])){
+            push_back(input_data[i]);
+            bs->set_bit(input_data[i]);
+        }
+    }
+}
+
+void VertexSet::intersection(const VertexSet& set0, int *input_data, int input_size) {
+    
+    const int *set0_data = set0.get_data_ptr(), *set1_data = input_data;
+    int size0 = set0.get_size(), size1 = input_size;
+    int i = 0, j = 0, data0, data1;
+    size = 0;
+    while (i < size0 && j < size1)
+    {
+        data0 = set0_data[i];
+        data1 = set1_data[j];
+        if (data0 < data1)
+            ++i;
+        else if (data0 > data1)
+            ++j;
+        else
+        {
+            push_back(data0);
+            ++i;
+            ++j;
+        }
+    }
+
+
 }
 
 void VertexSet::intersection(const VertexSet& set0, const VertexSet& set1, int min_vertex, bool clique)
 {
+    // assert(0);
     int i = 0;
     int j = 0;
     int size0 = set0.get_size();
@@ -113,6 +194,7 @@ void VertexSet::intersection(const VertexSet& set0, const VertexSet& set1, int m
 }
 
 void VertexSet::intersection_with(const VertexSet& set1) {
+    // assert(0);
     const VertexSet& set0 = *this;
     int i = 0;
     int j = 0;
@@ -162,9 +244,14 @@ void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vert
     else
     {
         init();
-        VertexSet tmp_vset;
-        tmp_vset.init(input_size, input_data);
-        intersection(vertex_set[father_id], tmp_vset, min_vertex, clique);
+        if(clique)
+            intersection_bs(vertex_set[father_id], input_data, input_size);
+        else {
+            VertexSet tmp_vset;
+            tmp_vset.init(input_size, input_data);
+            intersection(vertex_set[father_id], tmp_vset, min_vertex, clique);
+            // intersection(vertex_set[father_id], input_data, input_size);
+        }
     }
 }
 
