@@ -253,13 +253,13 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
  #pragma omp for schedule(dynamic, 1) nowait
         for (int vertex = 0; vertex < v_cnt; ++vertex)
         {
-            bs->set_0();
+            // bs->set_0();
             unsigned int l, r;
             this->get_edge_index(vertex, l, r);
             // assert(bs->count() == 0);
             for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
             {
-                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, -1, clique);
+                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, 0);
                 // if(!(bs->count() == vertex_set[prefix_id].get_size())){
                 //     #pragma omp critical
                 //     {
@@ -282,6 +282,8 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
             }
             else
                 pattern_matching_func(schedule, vertex_set, subtraction_set, local_ans, 1, clique);
+            int prefix_id = schedule.get_last(0), *data = vertex_set[prefix_id].get_data_ptr();
+            for(int i = 0; i < vertex_set[prefix_id].get_size(); i++) bs->dec(data[i]);
             if(!clique)
                 subtraction_set.pop_back();
             //printf("for %d %d\n", omp_get_thread_num(), vertex);
@@ -403,9 +405,9 @@ void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set
         this->get_edge_index(vertex, l, r);
         int prefix_id = schedule.get_last(depth);// only one prefix
         if(depth == schedule.get_size() - 2)
-            vertex_set[prefix_id].build_vertex_set_only_size(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, -1, false);
+            vertex_set[prefix_id].build_vertex_set_only_size(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, depth);
         else 
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, -1, false);
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, depth);
 
         if(depth == schedule.get_size() - 2)
             local_ans += vertex_set[prefix_id].get_size();
@@ -414,15 +416,7 @@ void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set
                 clique_matching_func(schedule, vertex_set, bs, local_ans, depth + 1);
             }
             int *_data = vertex_set[prefix_id].get_data_ptr(), _size = vertex_set[prefix_id].get_size();
-            for(int j = 0; j < loop_size; j++) {
-                // set1
-                bs->flip_bit(loop_data_ptr[j]);
-            }
-            for(int j = 0; j < _size; j++) {
-                // set1 and set2
-                bs->flip_bit(_data[j]);
-            }
-            // assert(bs->count() == loop_size);
+            for(int j = 0; j < _size; j++) bs->dec(_data[j]);
         }
     }
 }

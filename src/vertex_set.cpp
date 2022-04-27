@@ -2,17 +2,6 @@
 #include <algorithm>
 #include <cassert>
 
-
-Bitmap::Bitmap(int _size) : s(nullptr) {
-    size = _size / 64 + 1;
-    s = new unsigned long long[size];
-    set_0();
-}
-
-Bitmap::~Bitmap(){
-    delete[] s;
-}
-
 int VertexSet::max_intersection_size = -1;
 
 VertexSet::VertexSet()
@@ -62,10 +51,7 @@ void VertexSet::init(Bitmap* bs, int input_size, int* input_data)
         delete[] data;
     size = input_size;
     data = input_data;
-    for(int i = 0; i < size; i++){
-        // if(i > 1) assert(data[i] != data[i-1]);
-        bs->set_bit(data[i]);
-    }
+    for(int i = 0; i < size; i++) bs->inc(data[i]);
     allocate = false;
 }
 
@@ -76,7 +62,6 @@ void VertexSet::copy(int input_size, int* input_data)
     size = input_size;
     for(int i = 0; i < input_size; ++i) {
         data[i] = input_data[i];
-        // bs->set_bit(data[i]);
     }
 }
 
@@ -124,20 +109,17 @@ void VertexSet::intersection(const VertexSet& set0, int *input_data, int input_s
     }
 }
 
-void VertexSet::intersection(const VertexSet& set0, Bitmap *bs, int *input_data, int input_size) {
+void VertexSet::intersection(const VertexSet& set0, Bitmap *bs, int *input_data, int input_size, int depth) {
     
     const int *set0_data = set0.get_data_ptr(), *set1_data = input_data;
     int size0 = set0.get_size(), size1 = input_size;
     int i = 0, j = 0, data0, data1;
     size = 0;
     for(int i = 0; i < size1; i++) {
-        if(bs->read_bit(set1_data[i])) {
+        if(bs->read(set1_data[i]) == depth) {
             push_back(set1_data[i]);
-            bs->flip_bit(set1_data[i]);
+            bs->inc(set1_data[i]);
         }
-    }
-    for(int i = 0; i < size0; i++) {
-        bs->flip_bit(set0_data[i]);
     }
 }
 
@@ -254,7 +236,7 @@ void VertexSet::intersection_with(const VertexSet& set1) {
     }*/
 }
 
-void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
+void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int depth)
 {
     int father_id = schedule.get_father_prefix_id(prefix_id);
     if (father_id == -1)
@@ -262,7 +244,7 @@ void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vert
     else
     {
         init();
-        intersection(vertex_set[father_id], bs, input_data, input_size);
+        intersection(vertex_set[father_id], bs, input_data, input_size, depth);
     }
 }
 
@@ -282,23 +264,23 @@ void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vert
     }
 }
 
-void VertexSet::build_vertex_set_only_size(const Schedule& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
+void VertexSet::build_vertex_set_only_size(const Schedule& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int depth)
 {
     int father_id = schedule.get_father_prefix_id(prefix_id);
     // assert (father_id != -1);
     size = 0;
     VertexSet tmp_vset;
     tmp_vset.init(input_size, input_data);
-    intersection_only_size(vertex_set[father_id], bs, tmp_vset);
+    intersection_only_size(vertex_set[father_id], bs, tmp_vset, depth);
 }
 
-void VertexSet::intersection_only_size(const VertexSet& set0, Bitmap *bs, const VertexSet& set1) {
+void VertexSet::intersection_only_size(const VertexSet& set0, Bitmap *bs, const VertexSet& set1, int depth) {
     const int *set0_data = set0.get_data_ptr(), *set1_data = set1.get_data_ptr();
     int size0 = set0.get_size(), size1 = set1.get_size();
     int i = 0, j = 0, data0, data1;
     size = 0;
     for(int i = 0; i < size1;i++){
-        if(bs->read_bit(set1_data[i])) {
+        if(bs->read(set1_data[i]) == depth) {
             size++;
         }
     }
