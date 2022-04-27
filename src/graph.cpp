@@ -238,8 +238,9 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
 //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
     // local_time = 0;
     long long global_ans = 0;
- #pragma omp parallel num_threads(thread_count) reduction(+: global_ans)
+#pragma omp parallel num_threads(thread_count) reduction(+: global_ans)
     {
+        Bitmap *bs = new Bitmap(v_cnt);
      //   double start_time = get_wall_time();
      //   double current_time;
         VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
@@ -249,22 +250,33 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
             subtraction_set.init();
         long long local_ans = 0;
         // TODO : try different chunksize
- #pragma omp for schedule(dynamic, 5) nowait
+ #pragma omp for schedule(dynamic, 1) nowait
         for (int vertex = 0; vertex < v_cnt; ++vertex)
         {
+            bs->set_0();
             unsigned int l, r;
             this->get_edge_index(vertex, l, r);
+            // assert(bs->count() == 0);
             for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id))
             {
-                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id, -1, clique);
+                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, -1, clique);
+                // if(!(bs->count() == vertex_set[prefix_id].get_size())){
+                //     #pragma omp critical
+                //     {
+                //         printf("tid:%d vertex:%d size:%d %d %lld\n",omp_get_thread_num(), vertex, r - l, bs->count(), vertex_set[prefix_id].get_size());
+                //         for(int i = 0; i < vertex_set[prefix_id].get_size(); i ++){
+                //             printf("%d ",vertex_set[prefix_id].get_data(i));
+                //         }
+                //         printf("\n");
+                //         assert(false);
+                //     }
+                // }
             }
-            //subtraction_set.insert_ans_sort(vertex);
             if(!clique)
                 subtraction_set.push_back(vertex);
-            //if (schedule.get_total_restrict_num() > 0 && clique == false)
             if(true){
                 if(clique)
-                    clique_matching_func(schedule, vertex_set, local_ans, 1);
+                    clique_matching_func(schedule, vertex_set, bs, local_ans, 1);
                 else 
                     pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1);
             }
@@ -277,12 +289,12 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
         //double end_time = get_wall_time();
         //printf("my thread time %d %.6lf\n", omp_get_thread_num(), end_time - start_time);
         delete[] vertex_set;
+        delete bs;
         // TODO : Computing multiplicty for a pattern
         global_ans += local_ans;
         //printf("local_ans %d %lld\n", omp_get_thread_num(), local_ans);
         
     }
-
     // printf("local_time %.3lf\n", local_time);
     return global_ans / schedule.get_in_exclusion_optimize_redundancy();
 }
@@ -373,28 +385,44 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
 // }
 
 
-void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set, long long& local_ans, int depth) {
-    int loop_set_prefix_id1 = schedule.get_loop_set_prefix_id(depth);
-    int loop_size1 = vertex_set[loop_set_prefix_id1].get_size();
-    int* loop_data_ptr1 = vertex_set[loop_set_prefix_id1].get_data_ptr();
+void Graph::clique_matching_func(const Schedule& schedule, VertexSet* vertex_set, Bitmap* bs, long long& local_ans, int depth) {
+    int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
+    int loop_size = vertex_set[loop_set_prefix_id].get_size();
+    int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
 
-    // second_point
-    for (int i = 0; i < loop_size1; ++i) {
-        int vertex1 = loop_data_ptr1[i]; unsigned int l1, r1; this->get_edge_index(vertex1, l1, r1);
-        int loop_set_prefix_id2 = schedule.get_last(1);
-        vertex_set[loop_set_prefix_id2].build_vertex_set(schedule, vertex_set, &edge[l1], (int)r1 - l1, loop_set_prefix_id2, -1, false);
-        if( vertex_set[loop_set_prefix_id2].get_size() == 0) {
-            continue;
-        }
+    // if (depth == schedule.get_size() - 1)
+    // {
+    //     // local_ans += vertex_set[loop_set_prefix_id].get_size();
+    //     return;
+    // }
 
-        int loop_size2 = vertex_set[loop_set_prefix_id2].get_size();
-        int* loop_data_ptr2 = vertex_set[loop_set_prefix_id2].get_data_ptr();
-        // third point
-        for (int i = 0; i < loop_size2; ++i) {
-            int vertex2 = loop_data_ptr2[i]; unsigned int l2, r2; this->get_edge_index(vertex2, l2, r2);
-            int loop_set_prefix_id3 = schedule.get_last(2);
-            vertex_set[loop_set_prefix_id3].build_vertex_set_only_size(schedule, vertex_set, &edge[l2], (int)r2 - l2, loop_set_prefix_id3, -1, false);
-            local_ans += vertex_set[loop_set_prefix_id3].get_size();
+
+    for (int i = 0; i < loop_size; ++i) {
+        int vertex = loop_data_ptr[i];
+        unsigned int l, r;
+        this->get_edge_index(vertex, l, r);
+        int prefix_id = schedule.get_last(depth);// only one prefix
+        if(depth == schedule.get_size() - 2)
+            vertex_set[prefix_id].build_vertex_set_only_size(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, -1, false);
+        else 
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, bs, &edge[l], (int)r - l, prefix_id, -1, false);
+
+        if(depth == schedule.get_size() - 2)
+            local_ans += vertex_set[prefix_id].get_size();
+        else {
+            if(vertex_set[prefix_id].get_size() > 0) {
+                clique_matching_func(schedule, vertex_set, bs, local_ans, depth + 1);
+            }
+            int *_data = vertex_set[prefix_id].get_data_ptr(), _size = vertex_set[prefix_id].get_size();
+            for(int j = 0; j < loop_size; j++) {
+                // set1
+                bs->flip_bit(loop_data_ptr[j]);
+            }
+            for(int j = 0; j < _size; j++) {
+                // set1 and set2
+                bs->flip_bit(_data[j]);
+            }
+            // assert(bs->count() == loop_size);
         }
     }
 }

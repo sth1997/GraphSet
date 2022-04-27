@@ -1,29 +1,16 @@
 #include "../include/vertex_set.h"
 #include <algorithm>
 #include <cassert>
-#include <cstring>
 
 
 Bitmap::Bitmap(int _size) : s(nullptr) {
     size = _size / 64 + 1;
     s = new unsigned long long[size];
-    memset(s, 0, sizeof(unsigned long long) * size);
+    set_0();
 }
 
 Bitmap::~Bitmap(){
     delete[] s;
-}
-
-void Bitmap::set_bit(int pos){
-    s[pos / 64] |= (1 << (pos % 64));
-}
-
-bool Bitmap::read_bit(int pos) {
-    return bool(s[pos / 64] & (1 << (pos % 64)));
-}
-
-void Bitmap::set_0() {
-    memset(s, 0, sizeof(unsigned long long) * size);
 }
 
 int VertexSet::max_intersection_size = -1;
@@ -31,7 +18,7 @@ int VertexSet::max_intersection_size = -1;
 VertexSet::VertexSet()
 :data(nullptr), size(0), allocate(false)
 {
-    // bs = new Bitmap(5000000);
+
 }
 
 void VertexSet::init()
@@ -49,13 +36,13 @@ void VertexSet::init()
     }
 }
 
-void VertexSet::build_bitmap() {
-    bs->set_0();
-    #pragma unroll
-    for(int i = 0; i < size; i++) {
-        bs->set_bit(data[i]);
-    }
-}
+// void VertexSet::build_bitmap() {
+//     bs->set_0();
+//     #pragma unroll
+//     for(int i = 0; i < size; i++) {
+//         bs->set_bit(data[i]);
+//     }
+// }
 
 void VertexSet::init(int input_size, int* input_data)
 {
@@ -68,8 +55,23 @@ void VertexSet::init(int input_size, int* input_data)
     allocate = false;
 }
 
+void VertexSet::init(Bitmap* bs, int input_size, int* input_data)
+{
+    // assert(false);
+    if (allocate == true && data != nullptr)
+        delete[] data;
+    size = input_size;
+    data = input_data;
+    for(int i = 0; i < size; i++){
+        // if(i > 1) assert(data[i] != data[i-1]);
+        bs->set_bit(data[i]);
+    }
+    allocate = false;
+}
+
 void VertexSet::copy(int input_size, int* input_data)
 {
+    assert(false);
     init();
     size = input_size;
     for(int i = 0; i < input_size; ++i) {
@@ -85,19 +87,19 @@ VertexSet::~VertexSet()
     // delete bs;
 }
  
-void VertexSet::intersection_bs(const VertexSet &set0, int *input_data, int input_size) {
+// void VertexSet::intersection_bs(const VertexSet &set0, int *input_data, int input_size) {
 
-    size = 0;
-    bs->set_0();
+    // size = 0;
+    // bs->set_0();
 
-    #pragma unroll
-    for(int i = 0; i < input_size; i++){
-        if(set0.bs->read_bit(input_data[i])){
-            push_back(input_data[i]);
-            bs->set_bit(input_data[i]);
-        }
-    }
-}
+    // #pragma unroll
+    // for(int i = 0; i < input_size; i++){
+    //     if(set0.bs->read_bit(input_data[i])){
+    //         push_back(input_data[i]);
+    //         bs->set_bit(input_data[i]);
+    //     }
+    // }
+// }
 
 void VertexSet::intersection(const VertexSet& set0, int *input_data, int input_size) {
     
@@ -120,8 +122,23 @@ void VertexSet::intersection(const VertexSet& set0, int *input_data, int input_s
             ++j;
         }
     }
+}
 
-
+void VertexSet::intersection(const VertexSet& set0, Bitmap *bs, int *input_data, int input_size) {
+    
+    const int *set0_data = set0.get_data_ptr(), *set1_data = input_data;
+    int size0 = set0.get_size(), size1 = input_size;
+    int i = 0, j = 0, data0, data1;
+    size = 0;
+    for(int i = 0; i < size1; i++) {
+        if(bs->read_bit(set1_data[i])) {
+            push_back(set1_data[i]);
+            bs->flip_bit(set1_data[i]);
+        }
+    }
+    for(int i = 0; i < size0; i++) {
+        bs->flip_bit(set0_data[i]);
+    }
 }
 
 void VertexSet::intersection(const VertexSet& set0, const VertexSet& set1, int min_vertex, bool clique)
@@ -237,6 +254,18 @@ void VertexSet::intersection_with(const VertexSet& set1) {
     }*/
 }
 
+void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
+{
+    int father_id = schedule.get_father_prefix_id(prefix_id);
+    if (father_id == -1)
+        init(bs, input_size, input_data);
+    else
+    {
+        init();
+        intersection(vertex_set[father_id], bs, input_data, input_size);
+    }
+}
+
 void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vertex_set, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
 {
     int father_id = schedule.get_father_prefix_id(prefix_id);
@@ -245,48 +274,49 @@ void VertexSet::build_vertex_set(const Schedule& schedule, const VertexSet* vert
     else
     {
         init();
-        if(clique)
-            intersection_bs(vertex_set[father_id], input_data, input_size);
-        else {
-            // VertexSet tmp_vset;
-            // tmp_vset.init(input_size, input_data);
-            // intersection(vertex_set[father_id], tmp_vset, min_vertex, clique);
-            intersection(vertex_set[father_id], input_data, input_size);
-        }
+        // VertexSet tmp_vset;
+        // tmp_vset.init(input_size, input_data);
+        // intersection(vertex_set[father_id], tmp_vset, min_vertex, clique);
+        intersection(vertex_set[father_id], input_data, input_size);
+
     }
 }
 
-void VertexSet::build_vertex_set_only_size(const Schedule& schedule, const VertexSet* vertex_set, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
+void VertexSet::build_vertex_set_only_size(const Schedule& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int min_vertex, bool clique)
 {
     int father_id = schedule.get_father_prefix_id(prefix_id);
-    assert (father_id != -1);
-    // init();
+    // assert (father_id != -1);
     size = 0;
     VertexSet tmp_vset;
     tmp_vset.init(input_size, input_data);
-    intersection_only_size(vertex_set[father_id], tmp_vset);
+    intersection_only_size(vertex_set[father_id], bs, tmp_vset);
 }
 
-void VertexSet::intersection_only_size(const VertexSet& set0, const VertexSet& set1) {
+void VertexSet::intersection_only_size(const VertexSet& set0, Bitmap *bs, const VertexSet& set1) {
     const int *set0_data = set0.get_data_ptr(), *set1_data = set1.get_data_ptr();
     int size0 = set0.get_size(), size1 = set1.get_size();
     int i = 0, j = 0, data0, data1;
     size = 0;
-    while (i < size0 && j < size1)
-    {
-        data0 = set0_data[i];
-        data1 = set1_data[j];
-        if (data0 < data1)
-            ++i;
-        else if (data0 > data1)
-            ++j;
-        else
-        {
+    for(int i = 0; i < size1;i++){
+        if(bs->read_bit(set1_data[i])) {
             size++;
-            ++i;
-            ++j;
         }
     }
+    // while (i < size0 && j < size1)
+    // {
+    //     data0 = set0_data[i];
+    //     data1 = set1_data[j];
+    //     if (data0 < data1)
+    //         ++i;
+    //     else if (data0 > data1)
+    //         ++j;
+    //     else
+    //     {
+    //         size++;
+    //         ++i;
+    //         ++j;
+    //     }
+    // }
 
 }
 

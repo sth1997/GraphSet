@@ -11,7 +11,7 @@
 #include <algorithm>
 
 void test_pattern(Graph* g, Pattern &pattern) {
-    int thread_num = 16;
+    int thread_num = 64;
     int tri_cnt = 627584181;
 
     double t1,t2,t3,t4;
