@@ -13,7 +13,9 @@ struct FileGuard {
 };
 
 struct GraphHeader {
-    uint32_t v_cnt, e_cnt, max_intersection_size, checksum;
+    uint32_t v_cnt;
+    int64_t e_cnt;
+    uint32_t max_intersection_size, checksum;
     int64_t tri_cnt;
 };
 
@@ -140,6 +142,27 @@ static inline bool read_u32_pair(FILE* fp, bool binary, uint32_t& u, uint32_t& v
     }
 }
 
+static inline bool read_i64(FILE* fp, bool binary, int64_t& u)
+{
+    if (!binary) {
+        return fscanf(fp, "%lu", &u) == 1;
+    } else {
+        bool f1 = (fread(&u, sizeof(int64_t), 1, fp) == 1);
+        return f1;
+    }
+}
+
+static inline bool read_u32(FILE* fp, bool binary, uint32_t& u)
+{
+    if (!binary) {
+        return fscanf(fp, "%u", &u) == 1;
+    } else {
+        bool f1 = (fread(&u, sizeof(uint32_t), 1, fp) == 1);
+        return f1;
+    }
+}
+
+
 bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, bool binary, int oriented_type) {
     FILE *fp = fopen(path, binary ? "rb" : "r");
 
@@ -184,11 +207,15 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, b
         }
     }
 
-    uint32_t x, y;
+    uint32_t x,y;
+    int64_t z;
     int tmp_v;
     long long tmp_e;
-    read_u32_pair(fp, binary, x, y);
-    g->v_cnt = x, g->e_cnt = y * 2; 
+    // read_u32_pair(fp, binary, x, y);
+    read_u32(fp, binary, x);
+    read_i64(fp, binary, z);
+
+    g->v_cnt = x, g->e_cnt = z * 2; 
 
     int *degree = new int[g->v_cnt];
     memset(degree, 0, g->v_cnt * sizeof(int));
@@ -213,7 +240,7 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, b
         ++degree[x];
         ++degree[y];
         if (tmp_e % 1000000 == 0) {
-            printf("%u edges loaded\n",tmp_e);
+            printf("%llu edges loaded\n",tmp_e);
             fflush(stdout);
         }
     }
