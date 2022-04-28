@@ -11,7 +11,7 @@ void erase_edge(Graph &g) {
     fflush(stdout);
     for(int v = 0; v < g.v_cnt; v++) {
         int l = newe;
-        for(int e = g.vertex[v]; e < g.vertex[v+1]; e++){
+        for(long long e = g.vertex[v]; e < g.vertex[v+1] && e < g.e_cnt; e++){
             if(g.edge[e] >= v) continue;
             g.edge[newe] = g.edge[e];
             newe++; 
@@ -20,7 +20,7 @@ void erase_edge(Graph &g) {
     }
     g.vertex[g.v_cnt] = newe;
     g.e_cnt = newe;
-    printf("newe: %d\n", g.e_cnt);
+    printf("newe: %lld\n", g.e_cnt);
 }
 
 void reduce_edges_for_clique(Graph &g) {

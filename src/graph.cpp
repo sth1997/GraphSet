@@ -242,10 +242,6 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
     {
         Bitmap *bs = new Bitmap(v_cnt);
         VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
-        VertexSet subtraction_set;
-        VertexSet tmp_set;
-        if(!clique)
-            subtraction_set.init();
         long long local_ans = 0;
  #pragma omp for schedule(dynamic, 1) nowait
         for (int vertex = 0; vertex < v_cnt; ++vertex)
@@ -255,7 +251,7 @@ long long Graph::pattern_matching(const Schedule& schedule, int thread_count, bo
             int prefix_id = schedule.get_last(0);
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, bs, &edge[l], (int)(r - l), prefix_id, 0);
             clique_matching_func(schedule, vertex_set, bs, local_ans, 1);
-            int  *data = vertex_set[prefix_id].get_data_ptr();
+            int *data = vertex_set[prefix_id].get_data_ptr();
             for(int i = 0; i < vertex_set[prefix_id].get_size(); i++) bs->dec(data[i]);
         }
         delete[] vertex_set;

@@ -48,6 +48,7 @@ int main(int argc,char *argv[]) {
 
     if(argc != 3) {
         printf("usage: %s graph_file clique_size", argv[0]);
+        return 0;
     }
 
     DataType type = DataType::Patents;
