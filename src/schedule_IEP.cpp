@@ -110,6 +110,8 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
                 double val;
                 if (performance_modeling_type == 1) {
                     val = new_estimate_schedule_restrict(Empty, v_cnt, e_cnt, tri_cnt);
+                } else {
+                    val = 1e50;
                 }
                 // if(performance_modeling_type == 1) {
                 //     val = our_estimate_schedule_restrict(vec, Empty, v_cnt, e_cnt, tri_cnt);
@@ -136,6 +138,9 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
                 double val;
                 if (performance_modeling_type == 1) {
                     val = new_estimate_schedule_restrict(pairs, v_cnt, e_cnt, tri_cnt);
+                }
+                else {
+                    val = 1e50;
                 }
                 // if(performance_modeling_type == 1) {
                 //     val = our_estimate_schedule_restrict(vec, pairs, v_cnt, e_cnt, tri_cnt);
@@ -1621,7 +1626,7 @@ void Schedule_IEP::restrict_selection(int v_cnt, unsigned int e_cnt, long long t
                 if(adj_mat[INDEX(j, i, size)])
                     invariant_size[j].push_back(c--);
 
-            for(int j = 0; j < invariant_size[i].size(); ++j)
+            for(size_t j = 0; j < invariant_size[i].size(); ++j)
                 if(invariant_size[i][j] > 1) 
                     val += p_size[1] * pp_size[invariant_size[i][j] - 2] + p_size[1];
             val += 1;
@@ -1771,7 +1776,7 @@ double Schedule_IEP::our_estimate_schedule_restrict(const std::vector<int> &orde
             if(cur_adj_mat[INDEX(j, i, size)])
                 invariant_size[j].push_back(c--);
 
-        for(int j = 0; j < invariant_size[i].size(); ++j)
+        for(size_t j = 0; j < invariant_size[i].size(); ++j)
             if(invariant_size[i][j] > 1) 
                 val += p_size[1] * pp_size[invariant_size[i][j] - 2] + p_size[1];
         val += 1;
@@ -1854,7 +1859,7 @@ double Schedule_IEP::GraphZero_estimate_schedule_restrict(const std::vector<int>
             if(cur_adj_mat[INDEX(j, i, size)])
                 invariant_size[j].push_back(c--);
 
-        for(int j = 0; j < invariant_size[i].size(); ++j)
+        for(size_t j = 0; j < invariant_size[i].size(); ++j)
             if(invariant_size[i][j] > 1) 
                 val += p_size[invariant_size[i][j] - 1] + p_size[1];
         for(int j = 0; j < restricts_size; ++j)

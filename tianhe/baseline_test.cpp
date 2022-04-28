@@ -30,7 +30,7 @@ void test_pattern(Graph* g, const Pattern &pattern, int performance_modeling_typ
 //    printf("depth_cnt %lld %lld %lld\n", g->dep1_cnt, g->dep2_cnt, g->dep3_cnt);
     schedule.print_schedule();
     const auto& pairs = schedule.restrict_pair;
-    printf("%d ",pairs.size());
+    printf("%ld ",pairs.size());
     for(auto& p : pairs)
         printf("(%d,%d)",p.first,p.second);
     puts("");

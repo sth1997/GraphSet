@@ -10,7 +10,7 @@
 #include <string>
 #include <algorithm>
 
-void test_pattern(Graph* g, Pattern &pattern) {
+double test_pattern(Graph* g, Pattern &pattern) {
     int thread_num = 16;
 
     bool is_pattern_valid;
@@ -23,6 +23,7 @@ void test_pattern(Graph* g, Pattern &pattern) {
     assert(is_pattern_valid==true);
 
     double t1,t2;
+    double total_time = 0;
    
     for(int i = 0; i < 3; ++i) {
         t1 = get_wall_time();
@@ -30,12 +31,15 @@ void test_pattern(Graph* g, Pattern &pattern) {
         t2 = get_wall_time();
 
         printf("our ans: %lld time: %.6lf\n", ans_our, t2 - t1);
+        total_time += (t2 - t1);
         if(i == 2) {
             schedule_our.print_schedule();
         }
         fflush(stdout);
     }
-
+    total_time /= 3;
+    printf("%.6lf\n",total_time);
+    return total_time;
 }
 
 int main(int argc,char *argv[]) {

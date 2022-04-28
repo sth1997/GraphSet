@@ -91,7 +91,7 @@ static bool load_graph(Graph& g, const char* filename)
     g.tri_cnt = h.tri_cnt;
     VertexSet::max_intersection_size = h.max_intersection_size; // ...
 
-    g.vertex = new unsigned int[h.v_cnt + 1];
+    g.vertex = new long long[h.v_cnt + 1];
     g.edge = new int[g.e_cnt];
 
     if (fread(g.vertex, sizeof(uint32_t), h.v_cnt + 1, fp) != h.v_cnt + 1) {
@@ -102,7 +102,7 @@ static bool load_graph(Graph& g, const char* filename)
         printf("load_graph: failed to load edges.\n");
         return false;
     }
-    printf("load_graph: %u vertexes, %u edges\n", g.v_cnt, g.e_cnt);
+    printf("load_graph: %u vertexes, %llu edges\n", g.v_cnt, g.e_cnt);
     return true;
 }
 
@@ -184,13 +184,15 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, b
         }
     }
 
-    uint32_t x, y, tmp_v, tmp_e;
+    uint32_t x, y;
+    int tmp_v;
+    long long tmp_e;
     read_u32_pair(fp, binary, x, y);
     g->v_cnt = x, g->e_cnt = y * 2; 
 
     int *degree = new int[g->v_cnt];
     memset(degree, 0, g->v_cnt * sizeof(int));
-    auto e = new std::pair<uint32_t, uint32_t>[g->e_cnt];
+    auto e = new std::pair<int, int>[g->e_cnt];
     id.clear();
 
     tmp_v = 0;
@@ -262,11 +264,11 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, b
             return false;
         }
     g->edge = new int[g->e_cnt];
-    g->vertex = new unsigned int[g->v_cnt + 1];
+    g->vertex = new long long[g->v_cnt + 1];
     bool* have_edge = new bool[g->v_cnt];
     int lst_v = -1;
     memset(have_edge, 0, g->v_cnt * sizeof(bool));
-    for(unsigned int i = 0; i < g->e_cnt; ++i) {
+    for(long long i = 0; i < g->e_cnt; ++i) {
         if(e[i].first != lst_v) {
             have_edge[e[i].first] = true;
             g->vertex[e[i].first] = i;
@@ -275,7 +277,7 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, b
         g->edge[i] = e[i].second;
     }
     delete[] e;
-    printf("Success! There are %d nodes and %u edges.\n",g->v_cnt,g->e_cnt);
+    printf("Success! There are %d nodes and %llu edges.\n",g->v_cnt,g->e_cnt);
     fflush(stdout);
     g->vertex[g->v_cnt] = g->e_cnt;
     for(int i = g->v_cnt - 1; i >= 0; --i)
@@ -307,7 +309,7 @@ bool DataLoader::twitter_load_data(Graph *&g, DataType type, const char* path, i
     int mx_degree = buffer[2];
     VertexSet::max_intersection_size = std::max( VertexSet::max_intersection_size, mx_degree);
     g->edge = new int [g->e_cnt];
-    g->vertex = new unsigned int [g->v_cnt + 1];
+    g->vertex = new long long [g->v_cnt + 1];
     for(int i = 0; i < g->v_cnt + 1; ++i)
         g->vertex[i] = buffer[ 3 + i];
     for(unsigned int i = 0; i < g->e_cnt; ++i)
@@ -368,7 +370,7 @@ bool DataLoader::load_data(Graph* &g, int clique_size) {
     std::sort(e,e+tmp_e,cmp_pair);
     g->e_cnt = unique(e,e+tmp_e) - e;
     g->edge = new int[g->e_cnt];
-    g->vertex = new unsigned int[g->v_cnt + 1];
+    g->vertex = new long long[g->v_cnt + 1];
     bool* have_edge = new bool[g->v_cnt];
     int lst_v = -1;
     memset(have_edge, 0, g->v_cnt * sizeof(bool));
@@ -440,7 +442,7 @@ bool DataLoader::load_complete(Graph* &g, int clique_size) {
     std::sort(e,e+tmp_e,cmp_pair);
     g->e_cnt = unique(e,e+tmp_e) - e;
     g->edge = new int[g->e_cnt];
-    g->vertex = new unsigned int[g->v_cnt + 1];
+    g->vertex = new long long[g->v_cnt + 1];
     bool* have_edge = new bool[g->v_cnt];
     int lst_v = -1;
     for(int i = 0; i < g->v_cnt; ++i) have_edge[i] = false;

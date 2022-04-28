@@ -11,13 +11,13 @@ class Graphmpi;
 class Graph {
 public:
     int v_cnt; // number of vertex
-    unsigned int e_cnt; // number of edge
+    long long e_cnt; // number of edge
     long long tri_cnt; // number of triangle
     double max_running_time = 60 * 60 * 24; // second
     bool is_local_graph;
 
     int *edge; // edges
-    unsigned int *vertex; // v_i's neighbor is in edge[ vertex[i], vertex[i+1]-1]
+    long long *vertex; // v_i's neighbor is in edge[ vertex[i], vertex[i+1]-1]
     
     Graph() {
         v_cnt = 0;
@@ -62,7 +62,7 @@ private:
 
     // void use_local_graph(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long &local_ans, int depth, int u, int v, int *loop_data_ptr, int loop_size);
 
-    void get_edge_index(int v, unsigned int& l, unsigned int& r) const;
+    void get_edge_index(int v, long long& l, long long& r) const;
 
     void pattern_matching_func(const Schedule& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, long long& local_ans, int depth, bool clique = false);
 
