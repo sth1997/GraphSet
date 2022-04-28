@@ -127,6 +127,8 @@ bool DataLoader::load_data(Graph* &g, DataType type, const char* path, bool bina
     return false;
 }
 
+
+
 static inline bool read_u32_pair(FILE* fp, bool binary, uint32_t& u, uint32_t& v)
 {
     if (!binary) {
