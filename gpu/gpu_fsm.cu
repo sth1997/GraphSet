@@ -12,13 +12,15 @@
 #include <algorithm>
 
 #include <sys/time.h>
+#include <omp.h>
+
 
 constexpr int THREADS_PER_BLOCK = 256;
 //constexpr int THREADS_PER_BLOCK = 32;
 constexpr int THREADS_PER_WARP = 32;
 constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
 
-constexpr int num_blocks = 32;
+constexpr int num_blocks = 512;
 //constexpr int num_blocks = 2048;
 //constexpr int num_blocks = 1;
 constexpr int num_total_warps = num_blocks * WARPS_PER_BLOCK;
@@ -525,6 +527,8 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
 
     //unsigned long long sum = 0;
 
+    int last_vertex = -1, count = 0, last_degree = -1;
+
     while (true) {
         if (lid == 0) {
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
@@ -585,6 +589,10 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
         unsigned int vertex = vertex_id;
         if(vertex == v_cnt) break;
 
+        // if(lid == 0 && vertex % 1000 == 0)
+        //     printf("vertex: %d\n", vertex);
+        last_vertex = vertex;
+        
         GPUBitVector* fsm_set = block_fsm_set[wid];
         
         //for (int vertex = 0; vertex < v_cnt; ++vertex)
@@ -596,6 +604,9 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
                     unsigned int l, r;
                     int target = schedule->get_prefix_target(prefix_id);
                     get_edge_index(vertex, p_label[target], l, r);
+                    last_degree = int(r) - l;
+                    count++;
+
                     vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id);
                     if (vertex_set[prefix_id].get_size() == 0) {
                         is_zero = true;
@@ -678,6 +689,10 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
         // GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
         //sum += local_sum;
     }
+    // if(lid == 0){
+    //     unsigned int l, r;
+    //     printf("finished %d. last vertex:%d degree:%d count:%d\n",global_wid, last_vertex, last_degree, count);
+    // }
 }
 
 long long pattern_matching_init(const LabeledGraph *g, const Schedule& schedule, const std::vector<std::vector<int> >& automorphisms, unsigned int pattern_is_frequent_index, unsigned int* dev_is_frequent, uint32_t* dev_edge, uint32_t* dev_labeled_vertex, int* dev_v_label, uint32_t* dev_tmp, int max_edge, int job_num, char* dev_all_p_label, GPUBitVector** fsm_set_stack, uint32_t* dev_label_start_idx, long long min_support, uint32_t* dev_left_vertex_cnt) {
@@ -1005,18 +1020,23 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         schedules[i].GraphZero_get_automorphisms(automorphisms);
         size_t all_p_label_idx = 0;
         g->traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
-        gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
         int job_num = all_p_label_idx / schedules[i].get_size();
         for (int j = 0; j < job_num; ++j) {
             char p_label_0 = all_p_label[j * schedules[i].get_size()];
             left_vertex_cnt[j] = g->label_start_idx[p_label_0 + 1] - g->label_start_idx[p_label_0];
         }
-        gpuErrchk( cudaMemcpy(dev_left_vertex_cnt, left_vertex_cnt, job_num * sizeof(uint32_t), cudaMemcpyHostToDevice));
         unsigned int cur_vertex = g->label_start_idx[all_p_label[0]];
-        gpuErrchk( cudaMemcpyToSymbol(dev_cur_vertex, &cur_vertex, sizeof(cur_vertex)));
         unsigned int loop_end_vertex = g->label_start_idx[all_p_label[0] + 1];
-        gpuErrchk( cudaMemcpyToSymbol(dev_loop_end_vertex, &loop_end_vertex, sizeof(loop_end_vertex)));
-        fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set_stack, dev_label_start_idx, min_support, dev_left_vertex_cnt);
+        if(job_num != 1) {
+            gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
+            gpuErrchk( cudaMemcpy(dev_left_vertex_cnt, left_vertex_cnt, job_num * sizeof(uint32_t), cudaMemcpyHostToDevice));
+            gpuErrchk( cudaMemcpyToSymbol(dev_cur_vertex, &cur_vertex, sizeof(cur_vertex)));
+            gpuErrchk( cudaMemcpyToSymbol(dev_loop_end_vertex, &loop_end_vertex, sizeof(loop_end_vertex)));
+            fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set_stack, dev_label_start_idx, min_support, dev_left_vertex_cnt);
+        }
+        else {
+            fsm_cnt += g->fsm_vertex(schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge,min_support);
+        }
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
             fsm_cnt = 0;
@@ -1024,10 +1044,13 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         assert(pattern_is_frequent_index[i + 1] % 32 == 0);
         int is_frequent_index = pattern_is_frequent_index[i] / 32;
         size_t is_frequent_size = (pattern_is_frequent_index[i + 1] - pattern_is_frequent_index[i]) / 32 * sizeof(uint32_t);
-        gpuErrchk( cudaMemcpy(&is_frequent[is_frequent_index], &dev_is_frequent[is_frequent_index], is_frequent_size, cudaMemcpyDeviceToHost));
+        if(job_num != 1) { 
+            gpuErrchk( cudaMemcpy(&is_frequent[is_frequent_index], &dev_is_frequent[is_frequent_index], is_frequent_size, cudaMemcpyDeviceToHost));
+        }
         gettimeofday(&end, NULL);
         timersub(&end, &start, &total_time);
-        printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
+        printf("sum = %lld time = %ld s %06ld us.\n", fsm_cnt,total_time.tv_sec, total_time.tv_usec);
+        fflush(stdout);
     }
 
     gpuErrchk(cudaFree(dev_edge));
