@@ -5,6 +5,7 @@
 #include <set>
 #include <vector>
 #include <unordered_map>
+#include <cstdint>
 
 class LabeledGraph {
 public:
@@ -42,7 +43,7 @@ public:
     long long get_support_pattern_matching(VertexSet* vertex_set, VertexSet& subtraction_set, const Schedule& schedule, const char* p_label, std::vector<std::set<int> >& fsm_set, long long min_support);
     void get_fsm_necessary_info(std::vector<Pattern>& patterns, int max_edge, Schedule*& schedules, int& schedules_num, int*& mapping_start_idx, int*& mappings, unsigned int*& pattern_is_frequent_index, unsigned int*& is_frequent) const;
     void traverse_all_labeled_patterns(const Schedule* schedules, char* all_p_label, char* p_label, const int* mapping_start_idx, const int* mappings, const unsigned int* pattern_is_frequent_index, const unsigned int* is_frequent, int s_id, int depth, int mapping_start_idx_pos, size_t& all_p_label_idx) const;
-    int fsm(int max_edge, long long _min_support, int thread_count); // return the number of frequent labeled patterns with max_edge edges
+    int fsm(int max_edge, long long _min_support, int thread_count, double *time_out = nullptr); // return the number of frequent labeled patterns with max_edge edges
 private:
     //bool 返回值代表是否有至少匹配到一个子图，若匹配到，上一层就可以加入set
     bool get_support_pattern_matching_aggressive_func(const Schedule& schedule, const char* p_label, VertexSet* vertex_set, VertexSet& subtraction_set, std::vector<std::set<int> >& fsm_set, int depth);

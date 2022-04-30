@@ -496,7 +496,7 @@ void LabeledGraph::get_fsm_necessary_info(std::vector<Pattern>& patterns, int ma
     memset(is_frequent, 0, sizeof(unsigned int) * ((index + 31) / 32));
 }
 
-int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
+int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count, double *time_out) {
     std::vector<Pattern> patterns;
     Schedule* schedules;
     int schedules_num;
@@ -594,7 +594,14 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
             global_fsm_cnt = 0;
         gettimeofday(&end, NULL);
         timersub(&end, &start, &total_time);
-        printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
+        printf("time = %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
+    }
+    
+    gettimeofday(&end, NULL);
+    timersub(&end, &start, &total_time);
+
+    if(time_out != nullptr) {
+        *time_out = total_time.tv_sec + total_time.tv_usec / 1000000;
     }
 
     fsm_cnt = global_fsm_cnt;
