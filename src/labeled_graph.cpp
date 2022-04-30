@@ -596,12 +596,12 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count, dou
         timersub(&end, &start, &total_time);
         printf("time = %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
     }
-    
+
     gettimeofday(&end, NULL);
     timersub(&end, &start, &total_time);
 
     if(time_out != nullptr) {
-        *time_out = total_time.tv_sec + total_time.tv_usec / 1000000;
+        *time_out = double(total_time.tv_sec) + double(total_time.tv_usec) / 1000000;
     }
 
     fsm_cnt = global_fsm_cnt;
