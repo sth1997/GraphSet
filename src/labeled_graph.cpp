@@ -626,7 +626,7 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule &schedule, const char *a
         VertexSet subtraction_set;
         subtraction_set.init();
         // int ans = 0;
-        #pragma omp for schedule(dynamic) nowait
+        #pragma omp for schedule(dynamic, 10) nowait
         for (int vertex = label_start_idx[p_label[0]]; vertex < label_start_idx[p_label[0] + 1]; ++vertex) {
             int support = v_cnt;
             for (int i = 0; i < schedule.get_size(); ++i) {

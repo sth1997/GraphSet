@@ -34,7 +34,7 @@ int main(int argc,char *argv[]) {
 
     g = new LabeledGraph();
     assert(D.load_labeled_data(g,my_type,path.c_str())==true);
-    g->fsm(max_edge, min_support, 64);
+    g->fsm(max_edge, min_support, 1);
 
     return 0;
 }
