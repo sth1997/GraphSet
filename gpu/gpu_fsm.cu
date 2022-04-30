@@ -1028,6 +1028,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         unsigned int cur_vertex = g->label_start_idx[all_p_label[0]];
         unsigned int loop_end_vertex = g->label_start_idx[all_p_label[0] + 1];
         if(job_num != 1) {
+            assert(false);
             gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
             gpuErrchk( cudaMemcpy(dev_left_vertex_cnt, left_vertex_cnt, job_num * sizeof(uint32_t), cudaMemcpyHostToDevice));
             gpuErrchk( cudaMemcpyToSymbol(dev_cur_vertex, &cur_vertex, sizeof(cur_vertex)));
@@ -1035,7 +1036,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
             fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set_stack, dev_label_start_idx, min_support, dev_left_vertex_cnt);
         }
         else {
-            fsm_cnt += g->fsm_vertex(schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge,min_support);
+            fsm_cnt += g->fsm_vertex(0, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge,min_support);
         }
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
