@@ -978,38 +978,38 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     GPUBitVector* dev_fsm_set;
     GPUBitVector** dev_fsm_set_stack; //存储着还没有用的fsm_set的地址，一个unlabeled pattern用一个fsm_set，但最多同时有num_total_warps个不同的unlabeled pattern在被搜索
 
-    gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
-    //gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
-    gpuErrchk( cudaMalloc((void**)&dev_labeled_vertex, size_labeled_vertex));
-    gpuErrchk( cudaMalloc((void**)&dev_v_label, size_v_label));
-    gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
-    gpuErrchk( cudaMalloc((void**)&dev_pattern_is_frequent_index, size_pattern_is_frequent_index));
-    gpuErrchk( cudaMalloc((void**)&dev_is_frequent, size_is_frequent));
-    gpuErrchk( cudaMalloc((void**)&dev_all_p_label, size_all_p_label));
-    gpuErrchk( cudaMalloc((void**)&dev_label_start_idx, size_label_start_idx));
-    gpuErrchk( cudaMalloc((void**)&dev_left_vertex_cnt, size_left_vertex_cnt));
+    // gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
+    // //gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
+    // gpuErrchk( cudaMalloc((void**)&dev_labeled_vertex, size_labeled_vertex));
+    // gpuErrchk( cudaMalloc((void**)&dev_v_label, size_v_label));
+    // gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
+    // gpuErrchk( cudaMalloc((void**)&dev_pattern_is_frequent_index, size_pattern_is_frequent_index));
+    // gpuErrchk( cudaMalloc((void**)&dev_is_frequent, size_is_frequent));
+    // gpuErrchk( cudaMalloc((void**)&dev_all_p_label, size_all_p_label));
+    // gpuErrchk( cudaMalloc((void**)&dev_label_start_idx, size_label_start_idx));
+    // gpuErrchk( cudaMalloc((void**)&dev_left_vertex_cnt, size_left_vertex_cnt));
 
-    gpuErrchk( cudaMemcpy(dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
-    //gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(dev_labeled_vertex, g->labeled_vertex, size_labeled_vertex, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(dev_v_label, g->v_label, size_v_label, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(dev_pattern_is_frequent_index, pattern_is_frequent_index, size_pattern_is_frequent_index, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(dev_is_frequent, is_frequent, size_is_frequent, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(dev_label_start_idx, g->label_start_idx, size_label_start_idx, cudaMemcpyHostToDevice));
+    // gpuErrchk( cudaMemcpy(dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
+    // //gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
+    // gpuErrchk( cudaMemcpy(dev_labeled_vertex, g->labeled_vertex, size_labeled_vertex, cudaMemcpyHostToDevice));
+    // gpuErrchk( cudaMemcpy(dev_v_label, g->v_label, size_v_label, cudaMemcpyHostToDevice));
+    // gpuErrchk( cudaMemcpy(dev_pattern_is_frequent_index, pattern_is_frequent_index, size_pattern_is_frequent_index, cudaMemcpyHostToDevice));
+    // gpuErrchk( cudaMemcpy(dev_is_frequent, is_frequent, size_is_frequent, cudaMemcpyHostToDevice));
+    // gpuErrchk( cudaMemcpy(dev_label_start_idx, g->label_start_idx, size_label_start_idx, cudaMemcpyHostToDevice));
 
-    //TODO: 之后考虑把fsm_set的成员变量放在shared memory，只把data内的数据放在global memory，就像vertex set一样
-    gpuErrchk( cudaMallocManaged((void**)&dev_fsm_set, sizeof(GPUBitVector) * num_total_warps * (max_edge + 1))); //每个点一个fsm_set，一个pattern最多max_edge+1个点，每个warp负责一个不同的labeled pattern
-    for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
-        dev_fsm_set[i].construct(g->v_cnt);
+    // //TODO: 之后考虑把fsm_set的成员变量放在shared memory，只把data内的数据放在global memory，就像vertex set一样
+    // gpuErrchk( cudaMallocManaged((void**)&dev_fsm_set, sizeof(GPUBitVector) * num_total_warps * (max_edge + 1))); //每个点一个fsm_set，一个pattern最多max_edge+1个点，每个warp负责一个不同的labeled pattern
+    // for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
+    //     dev_fsm_set[i].construct(g->v_cnt);
 
     GPUBitVector* fsm_set_stack[num_total_warps];
     for (int i = 0; i < num_total_warps; ++i)
         fsm_set_stack[i] = &dev_fsm_set[(num_total_warps - i - 1) * (max_edge + 1)];
-    gpuErrchk( cudaMalloc((void**)&dev_fsm_set_stack, num_total_warps * sizeof(GPUBitVector*)));
-    gpuErrchk( cudaMemcpy(dev_fsm_set_stack, fsm_set_stack, num_total_warps * sizeof(GPUBitVector*), cudaMemcpyHostToDevice));
+    // gpuErrchk( cudaMalloc((void**)&dev_fsm_set_stack, num_total_warps * sizeof(GPUBitVector*)));
+    // gpuErrchk( cudaMemcpy(dev_fsm_set_stack, fsm_set_stack, num_total_warps * sizeof(GPUBitVector*), cudaMemcpyHostToDevice));
 
     unsigned int fsm_set_stack_top = num_total_warps;
-    gpuErrchk( cudaMemcpyToSymbol(dev_fsm_set_stack_top, &fsm_set_stack_top, sizeof(fsm_set_stack_top)));
+    // gpuErrchk( cudaMemcpyToSymbol(dev_fsm_set_stack_top, &fsm_set_stack_top, sizeof(fsm_set_stack_top)));
 
     timeval start, end, total_time;
     gettimeofday(&start, NULL);
@@ -1036,7 +1036,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
             fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set_stack, dev_label_start_idx, min_support, dev_left_vertex_cnt);
         }
         else {
-            fsm_cnt += g->fsm_vertex(0, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge,min_support);
+            fsm_cnt += g->fsm_vertex(0, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, 16);
         }
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
@@ -1054,19 +1054,19 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         fflush(stdout);
     }
 
-    gpuErrchk(cudaFree(dev_edge));
-    //gpuErrchk(cudaFree(dev_edge_from));
-    gpuErrchk(cudaFree(dev_labeled_vertex));
-    gpuErrchk(cudaFree(dev_v_label));
-    gpuErrchk(cudaFree(dev_tmp));
-    gpuErrchk(cudaFree(dev_pattern_is_frequent_index));
-    gpuErrchk(cudaFree(dev_is_frequent));
-    gpuErrchk(cudaFree(dev_all_p_label));
-    gpuErrchk(cudaFree(dev_label_start_idx));
-    gpuErrchk(cudaFree(dev_left_vertex_cnt));
-    for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
-        dev_fsm_set[i].destroy();
-    gpuErrchk(cudaFree(dev_fsm_set));
+    // gpuErrchk(cudaFree(dev_edge));
+    // //gpuErrchk(cudaFree(dev_edge_from));
+    // gpuErrchk(cudaFree(dev_labeled_vertex));
+    // gpuErrchk(cudaFree(dev_v_label));
+    // gpuErrchk(cudaFree(dev_tmp));
+    // gpuErrchk(cudaFree(dev_pattern_is_frequent_index));
+    // gpuErrchk(cudaFree(dev_is_frequent));
+    // gpuErrchk(cudaFree(dev_all_p_label));
+    // gpuErrchk(cudaFree(dev_label_start_idx));
+    // gpuErrchk(cudaFree(dev_left_vertex_cnt));
+    // for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
+    //     dev_fsm_set[i].destroy();
+    // gpuErrchk(cudaFree(dev_fsm_set));
 
 
     printf("fsm cnt = %lld\n", fsm_cnt);

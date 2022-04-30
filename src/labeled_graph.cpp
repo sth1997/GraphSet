@@ -527,7 +527,6 @@ void LabeledGraph::get_fsm_necessary_info(std::vector<Pattern>& patterns, int ma
 }
 
 int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
-    assert(false);
     std::vector<Pattern> patterns;
     Schedule* schedules;
     int schedules_num;
@@ -560,65 +559,20 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
         automorphisms.clear();
         schedules[i].GraphZero_get_automorphisms(automorphisms);
         schedules[i].update_loop_invariant_for_fsm();
+        schedules[i].print_schedule();
         size_t all_p_label_idx = 0;
         traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
 
-        #pragma omp parallel num_threads(thread_count) reduction(+: global_fsm_cnt)
-        {
-            VertexSet* vertex_set = new VertexSet[schedules[i].get_total_prefix_num()];
-            VertexSet subtraction_set;
-            std::vector<std::set<int> > fsm_set;
-            fsm_set.clear();
-            long long local_fsm_cnt = 0;
-            for (int j = 0; j < max_edge + 1; ++j) { //至多max_edge + 1个点
-                fsm_set.push_back(std::set<int>());
-                fsm_set.back().clear();
-            }
-            char* p_label = new char[max_edge + 1];
-            size_t job_num = all_p_label_idx / schedules[i].get_size();
-            #pragma omp for schedule(dynamic) nowait
-            for (size_t job_id = 0; job_id < job_num; ++job_id) {
-                size_t job_start_idx = job_id * schedules[i].get_size();
-                for (int j = 0; j < schedules[i].get_size(); ++j)
-                    p_label[j] = all_p_label[job_start_idx + j];
-                long long support;
-                support = get_support_pattern_matching(vertex_set, subtraction_set, schedules[i], p_label, fsm_set);
-                
-                if (support >= min_support) {
-                    local_fsm_cnt++;
-                    //这里本来是单线程时输出用的
-                    /*printf("support = %d   frequent pattern's label = ", support);
-                    for (int j = 0; j < schedules[i].get_size(); ++j)
-                        for (auto it = label_map.begin(); it != label_map.end(); ++it)
-                            if (it->second == p_label[j]) {
-                                printf("%d ", it->first);
-                                break;
-                            }
-                    printf("   (");
-                    for (int j = 0; j < schedules[i].get_size(); ++j)
-                        printf("%d ", p_label[j]);
-                    printf(")\n");*/
-                        
-                    char tmp_p_label[8]; //TODO: 修改这个magic number
-                    for (const auto& aut : automorphisms) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
-                        for (int j = 0; j < schedules[i].get_size(); ++j)
-                            tmp_p_label[j] = p_label[aut[j]];
-                        unsigned int index = pattern_is_frequent_index[i];
-                        unsigned int pow = 1;
-                        for (int j = 0; j < schedules[i].get_size(); ++j) {
-                            index += tmp_p_label[j] * pow;
-                            pow *= (unsigned int) l_cnt;
-                        }
-                        #pragma omp critical
-                        {
-                            is_frequent[index >> 5] |= (unsigned int) (1 << (index % 32));
-                        }
-                    }
-                }
-            }
-            delete[] vertex_set;
-            delete[] p_label;
-            global_fsm_cnt += local_fsm_cnt;
+        std::vector<std::set<int> > fsm_set;
+        fsm_set.clear();
+        long long local_fsm_cnt = 0;
+        for (int j = 0; j < max_edge + 1; ++j) { //至多max_edge + 1个点
+            fsm_set.push_back(std::set<int>());
+            fsm_set.back().clear();
+        }
+        size_t job_num = all_p_label_idx / schedules[i].get_size();
+        for (size_t job_id = 0; job_id < job_num; ++job_id) {
+           global_fsm_cnt += fsm_vertex(job_id, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, thread_count);
         }
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
@@ -642,7 +596,7 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
     return fsm_cnt;
 }
 
-int LabeledGraph::fsm_vertex(int job_id, const Schedule &schedule, const char *all_p_label, std::vector<std::vector<int> > &automorphisms, unsigned int* is_frequent, unsigned int& pattern_is_frequent_index, int max_edge, int min_support) const {
+int LabeledGraph::fsm_vertex(int job_id, const Schedule &schedule, const char *all_p_label, std::vector<std::vector<int> > &automorphisms, unsigned int* is_frequent, unsigned int& pattern_is_frequent_index, int max_edge, int min_support, int thread_count) const {
     
     int fsm_cnt = 0;
     size_t job_start_idx = job_id * schedule.get_size();
@@ -655,7 +609,7 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule &schedule, const char *a
         fsm_set.push_back(std::set<int>());
         fsm_set.back().clear();
     }
-    #pragma omp parallel num_threads(16)
+    #pragma omp parallel num_threads(thread_count)
     {
         VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
         std::vector<std::set<int> > local_fsm_set;
@@ -666,13 +620,13 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule &schedule, const char *a
         }
         VertexSet subtraction_set;
         subtraction_set.init();
-        int ans = 0;
+        // int ans = 0;
         #pragma omp for schedule(dynamic) nowait
         for (int vertex = label_start_idx[p_label[0]]; vertex < label_start_idx[p_label[0] + 1]; ++vertex) {
-            if(vertex % 100 == 0) {
-                printf("cpu vertex:%d\n", vertex);
-            }
-            ans++;
+            // if(vertex % 100 == 0) {
+            //     printf("cpu vertex:%d\n", vertex);
+            // }
+            // ans++;
             get_support_pattern_matching_vertex(vertex, vertex_set, subtraction_set, schedule, p_label, local_fsm_set);
         }
         double t1 = get_wall_time();
@@ -686,12 +640,12 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule &schedule, const char *a
         }
         double t2 = get_wall_time();
         delete[] vertex_set;
-        printf("finished: thread %d point_count:%d %lf\n", omp_get_thread_num(), ans, t2 - t1);
-        fflush(stdout);
+        // printf("finished: thread %d point_count:%d %lf\n", omp_get_thread_num(), ans, t2 - t1);
+        // fflush(stdout);
     }
-    long long support = v_cnt;
+    int support = v_cnt;
     for (int i = 0; i < schedule.get_size(); ++i) {
-        long long count = fsm_set[i].size();
+        int count = fsm_set[i].size();
         if (count < support)
             support = count;
     }
