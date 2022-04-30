@@ -290,7 +290,8 @@ bool LabeledGraph::get_support_pattern_matching_aggressive_func(const Schedule& 
     return match;
 }
 
-long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, VertexSet& subtraction_set, const Schedule& schedule, const char* p_label, std::vector<std::set<int> >& fsm_set) const {
+//这里返回的不一定是准确的support，只要当前已找到的support>=min_support就直接返回（剪枝）。实际的support>=返回的support。
+long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, VertexSet& subtraction_set, const Schedule& schedule, const char* p_label, std::vector<std::set<int> >& fsm_set, long long min_support) const {
     /*
     //一个点的pattern在omp之前被特殊处理了
     if (schedule.get_size() == 1) {
@@ -324,7 +325,17 @@ long long LabeledGraph::get_support_pattern_matching(VertexSet* vertex_set, Vert
                 continue;
             subtraction_set.push_back(vertex);
             if (get_support_pattern_matching_aggressive_func(schedule, p_label, vertex_set, subtraction_set, fsm_set, 1))
+            {
                 fsm_set[0].insert(vertex);
+                long long support = v_cnt;
+                for (int i = 0; i < schedule.get_size(); ++i) {
+                    long long count = fsm_set[i].size();
+                    if (count < support)
+                        support = count;
+                }
+                if (support >= min_support)
+                    return support;
+            }
             subtraction_set.pop_back();
             //printf("for %d %d\n", omp_get_thread_num(), vertex);
         }
@@ -369,10 +380,7 @@ void LabeledGraph::get_support_pattern_matching_vertex(int vertex, VertexSet* ve
             if (!is_zero) {
                 subtraction_set.push_back(vertex);
                 if (get_support_pattern_matching_aggressive_func(schedule, p_label, vertex_set, subtraction_set, fsm_set, 1)) {
-                    #pragma omp critical
-                    {
-                        fsm_set[0].insert(vertex);
-                    }
+                    fsm_set[0].insert(vertex);
                 }
                 subtraction_set.pop_back();
             }
@@ -563,16 +571,10 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
         size_t all_p_label_idx = 0;
         traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
 
-        std::vector<std::set<int> > fsm_set;
-        fsm_set.clear();
-        long long local_fsm_cnt = 0;
-        for (int j = 0; j < max_edge + 1; ++j) { //至多max_edge + 1个点
-            fsm_set.push_back(std::set<int>());
-            fsm_set.back().clear();
-        }
+
         size_t job_num = all_p_label_idx / schedules[i].get_size();
         for (size_t job_id = 0; job_id < job_num; ++job_id) {
-           global_fsm_cnt += fsm_vertex(job_id, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, thread_count);
+           global_fsm_cnt += fsm_vertex(job_id, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i] ,max_edge, min_support, thread_count);
         }
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
@@ -656,12 +658,13 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule &schedule, const char *a
         for (const auto& aut : automorphisms) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
             for (int j = 0; j < schedule.get_size(); ++j)
                 tmp_p_label[j] = p_label[aut[j]];
+            unsigned int index = pattern_is_frequent_index;
             unsigned int pow = 1;
             for (int j = 0; j < schedule.get_size(); ++j) {
-                pattern_is_frequent_index += tmp_p_label[j] * pow;
+                index += tmp_p_label[j] * pow;
                 pow *= (unsigned int) l_cnt;
             }
-            is_frequent[pattern_is_frequent_index >> 5] |= (unsigned int) (1 << (pattern_is_frequent_index % 32));
+            is_frequent[index >> 5] |= (unsigned int) (1 << (index % 32));
         }
     }
     delete[] p_label;
