@@ -584,7 +584,7 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count) {
             global_fsm_cnt = 0;
         gettimeofday(&end, NULL);
         timersub(&end, &start, &total_time);
-        printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
+        printf("time = %ld.%06ld us.\n", total_time.tv_sec, total_time.tv_usec);
     }
 
     fsm_cnt = global_fsm_cnt;
