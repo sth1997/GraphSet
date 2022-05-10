@@ -28,6 +28,44 @@ void VertexSet::init(int input_size, int* input_data)
     allocate = false;
 }
 
+void VertexSet::init_bs(Bitmap* bs, int input_size, int* input_data)
+{
+    // assert(false);
+    if (allocate == true && data != nullptr)
+        delete[] data;
+    size = input_size;
+    data = input_data;
+    for(int i = 0; i < size; i++) bs->inc(data[i]);
+    allocate = false;
+}
+
+
+void VertexSet::intersection_bs(const VertexSet& set0, Bitmap *bs, int *input_data, int input_size, int depth) {
+
+    const int *set0_data = set0.get_data_ptr(), *set1_data = input_data;
+    int size0 = set0.get_size(), size1 = input_size;
+    int i = 0, j = 0, data0, data1;
+    size = 0;
+    for(int i = 0; i < size1; i++) {
+        if(bs->read(set1_data[i]) == depth) {
+            push_back(set1_data[i]);
+            bs->inc(set1_data[i]);
+        }
+    }
+}
+
+void VertexSet::build_vertex_set_bs(const Schedule_IEP& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int depth)
+{
+    int father_id = schedule.get_father_prefix_id(prefix_id);
+    if (father_id == -1)
+        init_bs(bs, input_size, input_data);
+    else
+    {
+        init();
+        intersection_bs(vertex_set[father_id], bs, input_data, input_size, depth);
+    }
+}
+
 void VertexSet::copy(int input_size, int* input_data)
 {
     init();
@@ -164,6 +202,29 @@ void VertexSet::build_vertex_set(const Schedule_IEP& schedule, const VertexSet* 
         tmp_vset.init(input_size, input_data);
         intersection(vertex_set[father_id], tmp_vset, min_vertex, clique);
     }
+}
+
+void VertexSet::build_vertex_set_bs_only_size(const Schedule_IEP& schedule, const VertexSet* vertex_set, Bitmap *bs, int* input_data, int input_size, int prefix_id, int depth)
+{
+    int father_id = schedule.get_father_prefix_id(prefix_id);
+    // assert (father_id != -1);
+    size = 0;
+    VertexSet tmp_vset;
+    tmp_vset.init(input_size, input_data);
+    intersection_bs_only_size(vertex_set[father_id], bs, tmp_vset, depth);
+}
+
+void VertexSet::intersection_bs_only_size(const VertexSet& set0, Bitmap *bs, const VertexSet& set1, int depth) {
+    const int *set0_data = set0.get_data_ptr(), *set1_data = set1.get_data_ptr();
+    int size0 = set0.get_size(), size1 = set1.get_size();
+    int i = 0, j = 0, data0, data1;
+    size = 0;
+    for(int i = 0; i < size1;i++){
+        if(bs->read(set1_data[i]) == depth) {
+            size++;
+        }
+    }
+
 }
 
 void VertexSet::insert_ans_sort(int val)

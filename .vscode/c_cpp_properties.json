@@ -1,0 +1,16 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Linux",
+            "compilerPath": "/home/spack/spack/opt/spack/linux-debian11-zen2/gcc-10.2.1/cuda-11.1.0-5a6uaeokeonvhwnqgpt44wyp3vkqm45i/bin/nvcc",
+            "includePath": [
+                "${workspaceFolder}",
+                "${workspaceFolder}/include",
+
+                "/home/spack/spack/opt/spack/linux-debian11-zen2/gcc-10.2.1/openmpi-4.0.5-247wpdw4nezzn76fexwf2xuov67oboci/include"
+            ],
+            "cppStandard": "c++11"
+        }
+    ]
+}

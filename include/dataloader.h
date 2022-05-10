@@ -3,6 +3,11 @@
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
+#include <bitset>
+#include <cassert>
+#include <cstring>
+
+
 
 enum DataType {
     Patents,
