@@ -8,6 +8,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <map>
+
 
 struct FileGuard {
     FILE *fp;
@@ -438,36 +440,74 @@ bool DataLoader::general_load_labeled_data(LabeledGraph* &g, DataType type, cons
     // The max size of intersections is the second largest degree.
     //TODO VertexSet::max_intersection_size has different value with different dataset, but we use a static variable now.
     VertexSet::max_intersection_size = std::max( VertexSet::max_intersection_size, degree[g->v_cnt - 2]);
-    delete[] degree;
     if(tmp_v != g->v_cnt) {
         printf("vertex number error!\n");
         delete g;
         delete[] e;
         return false;
     }
+    
+    // 重新命名 label...
+
+
+    std::map<int, int> cnt;
+    std::map<int, int> avg_degree;
+    // memset(cnt, 0, sizeof(int) * g->l_cnt);
+    // memset(avg_degree, 0, sizeof(double) * g->l_cnt);
+
+    for(int i = 0; i < g->v_cnt; i++) {
+        if(cnt.count(g->v_label[i]) == 0){
+            cnt[g->v_label[i]] = 0;
+            avg_degree[g->v_label[i]] = 0.0; 
+        }
+        cnt[g->v_label[i]]++;
+        avg_degree[g->v_label[i]] = std::max(avg_degree[g->v_label[i]], degree[i]); 
+    }
+    
+    std::vector<std::pair<int, double> > label_deg;
+    for(auto item : cnt) {
+        printf("%d %d\n",item.first, avg_degree[item.first]);
+        label_deg.push_back(std::make_pair(item.first, avg_degree[item.first]));
+    }
+    std::sort(label_deg.begin(), label_deg.end(), [](const std::pair<int, double> &a, const std::pair<int, double> &b){
+        return a.second > b.second;
+    });
+    std::map<int, int> new_label_id;
+    assert(label_deg.size() == g->l_cnt);
+    for(int i = 0; i < g->l_cnt; i++) {
+        new_label_id[label_deg[i].first] = i;
+    }
+    memset(g->label_frequency, 0, sizeof(int) * g->v_cnt);
+    for(int i = 0; i < g->v_cnt; i++){
+        g->v_label[i] = new_label_id[g->v_label[i]];
+        g->label_frequency[g->v_label[i]]++;
+    }
 
     //将点按照label重排序（这样子在pattern matching第一层for循环的时候就不需要判断label了）
-    std::pair<int,int> *rank = new std::pair<int,int>[g->v_cnt];
+    std::tuple<int, int, int> *rank = new std::tuple<int, int, int>[g->v_cnt];
     int *new_id = new int[g->v_cnt];
-    for(int i = 0; i < g->v_cnt; ++i) rank[i] = std::make_pair(i,g->v_label[i]);
-    std::sort(rank, rank + g->v_cnt, cmp_label);
+    for(int i = 0; i < g->v_cnt; ++i) rank[i] = std::make_tuple(g->v_label[i], -degree[i], i);
+    std::sort(rank, rank + g->v_cnt, cmp_tuple);
     for(int i = 0; i < g->v_cnt; ++i) {
-        new_id[rank[i].first] = i;
-        g->v_label[i] = rank[i].second;
+        new_id[std::get<2>(rank[i])] = i;
+        g->v_label[i] = std::get<0>(rank[i]);
     }
     for(auto& edge : *e) {
         edge.first = new_id[edge.first];
         edge.second = new_id[edge.second];
     }
+    delete[] degree;
     delete[] rank;
     delete[] new_id;
     g->label_start_idx = new unsigned int[g->l_cnt + 1];
     memset(g->label_start_idx, -1, sizeof(unsigned int) * (g->l_cnt + 1));
     g->label_start_idx[0] = 0;
     g->label_start_idx[g->l_cnt] = g->v_cnt;
-    for (int i = 1; i < g->v_cnt; ++i)
+    for (int i = 1; i < g->v_cnt; ++i) {
+        assert(g->v_label[i] >= g->v_label[i - 1]);
         if (g->v_label[i] != g->v_label[i - 1])
             g->label_start_idx[g->v_label[i]] = i;
+    }
     for (int i = g->l_cnt - 1; i > 0; --i)
         if (g->label_start_idx[i] == -1)
             g->label_start_idx[i] = g->label_start_idx[i + 1];
