@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstdint>
 
+
 enum DataType {
     Patents,
     Orkut,

@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <cstdint>
 
+
 class LabeledGraph {
 public:
     int v_cnt; // number of vertex
