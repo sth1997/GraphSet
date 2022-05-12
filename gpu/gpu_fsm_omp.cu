@@ -535,6 +535,8 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
                 unsigned int job_id = (pattern_idx / chunk_size) * (chunk_size * devices_use) + device_id * chunk_size + pattern_idx % chunk_size;
                 if (job_id < job_num)
                 {
+
+                    printf("wid: %d job_id:%d job_num:%d\n", global_wid, job_id, job_num);
                     subtraction_set.init();
                     //subtraction_set.push_back(edge_from[i]);
                     //subtraction_set.push_back(edge[i]);
@@ -1064,9 +1066,13 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support){
     if (max_edge != 0)
         fsm_cnt = 0;
 
+
+    printf("g->l_cnt:%d\n", int(g->l_cnt));
     
     for (int i = 0; i < max_edge + 1; ++i) //边数最大max_edge，点数最大max_edge + 1
         max_labeled_patterns *= (size_t) g->l_cnt;
+    
+    printf("%d\n", max_labeled_patterns);
 
     all_p_label = new char[max_labeled_patterns * (max_edge + 1)];
     tmp_p_label = new char[max_edge + 1];
@@ -1193,6 +1199,6 @@ int main(int argc,char *argv[]) {
     g = new LabeledGraph();
     assert(D.load_labeled_data(g,my_type,path.c_str())==true);
     fsm_init(g, max_edge, min_support);
-
+    cudaDeviceReset();
     return 0;
 }

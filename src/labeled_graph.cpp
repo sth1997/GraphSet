@@ -492,8 +492,8 @@ void LabeledGraph::get_fsm_necessary_info(std::vector<Pattern>& patterns, int ma
         index = (index + 31) / 32 * 32; //保证pattern_is_frequent_index按照32（4字节）对齐
     }
     pattern_is_frequent_index[patterns.size()] = index;
-    is_frequent = new unsigned int[(index + 31) / 32];
-    memset(is_frequent, 0, sizeof(unsigned int) * ((index + 31) / 32));
+    is_frequent = new unsigned int[(index + 31) / 32 * 10];
+    memset(is_frequent, 0, sizeof(unsigned int) * ((index + 31) / 32 * 10));
 }
 
 int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count, double *time_out) {
