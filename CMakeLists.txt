@@ -9,7 +9,6 @@ SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/libs)
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
-ADD_COMPILE_OPTIONS(-std=c++11)
 
 find_package(OpenMP REQUIRED)
 if(OPENMP_FOUND)
@@ -21,7 +20,7 @@ if(OPENMP_FOUND)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}  ${OpenMP_CXX_FLAGS}" )
     
     #set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_70  -Xcompiler=\"${OpenMP_CXX_FLAGS}\"" )
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_50 -maxrregcount=64  -Xcompiler=\"${OpenMP_CXX_FLAGS}\"" )
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_70 -maxrregcount=64  -Xcompiler=\"${OpenMP_CXX_FLAGS}\"" )
     set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE}" )
     set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --ptxas-options=-v" )
     #set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -lineinfo --ptxas-options=-v" )

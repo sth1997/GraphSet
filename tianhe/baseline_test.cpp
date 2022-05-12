@@ -1,4 +1,5 @@
 #include <../include/graph.h>
+#include <../include/labeled_graph.h>
 #include <../include/dataloader.h>
 #include "../include/pattern.h"
 #include "../include/schedule_IEP.h"

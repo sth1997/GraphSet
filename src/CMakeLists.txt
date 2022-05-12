@@ -1,6 +1,7 @@
 SET(GraphMiningSrc
 TestClass.cpp
 graph.cpp
+labeled_graph.cpp
 dataloader.cpp
 pattern.cpp
 prefix.cpp
@@ -14,6 +15,9 @@ disjoint_set_union.cpp
 )
 
 ADD_LIBRARY(graph_mining SHARED ${GraphMiningSrc}) 
+
+ADD_EXECUTABLE(fsm_test fsm_test.cpp)
+TARGET_LINK_LIBRARIES(fsm_test graph_mining)
 
 #ADD_EXECUTABLE(in_exclusion_performance_test in_exclusion_performance_test.cpp)
 #TARGET_LINK_LIBRARIES(in_exclusion_performance_test graph_mining)
