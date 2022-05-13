@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "algorithm": "cpp",
+        "cstdio": "cpp",
+        "new": "cpp",
+        "cassert": "cpp"
+    }
+}

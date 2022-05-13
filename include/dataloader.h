@@ -5,6 +5,11 @@
 #include <algorithm>
 #include <vector>
 #include <cstdint>
+#include <bitset>
+#include <cassert>
+#include <cstring>
+
+
 
 enum DataType {
     Patents,
