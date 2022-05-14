@@ -801,7 +801,7 @@ __device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
 /**
  * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
  */
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
     __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK]; //用int表示边之后在大图上一定会出问题！
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
@@ -831,7 +831,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 
 
     uint32_t v0, v1;
-    uint32_t l, r;
+    e_index_t l, r;
 
     unsigned long long sum = 0;
 
@@ -852,7 +852,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
 
         __threadfence_block();
 
-        unsigned int i = edge_idx;
+        e_index_t i = edge_idx;
         if(i >= edge_num) break;
        
        // for edge in E

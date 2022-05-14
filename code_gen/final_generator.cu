@@ -386,7 +386,7 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
 
 __global__ void gen_final(const GPUSchedule* schedule) {
     if(threadIdx.x == 0) {
-        printf("__device__ void GPU_pattern_matching_final_in_exclusion(GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,GPUVertexSet& tmp_set, unsigned long long& local_ans,  uint32_t *edge, uint32_t *vertex) {\n");
+        printf("__device__ void GPU_pattern_matching_final_in_exclusion(GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,GPUVertexSet& tmp_set, unsigned long long& local_ans,  uint32_t *edge, e_index_t *vertex) {\n");
         printf("extern __shared__ char ans_array[];\n");
         printf("int* ans = ((int*) (ans_array + %d)) + %d * (threadIdx.x / THREADS_PER_WARP);\n", schedule->ans_array_offset, schedule->in_exclusion_optimize_vertex_id_size);
         for(int i = 0; i < schedule->in_exclusion_optimize_vertex_id_size; ++i) {
@@ -462,7 +462,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
         //WORK SPACE BEGIN
         int indentation = 0;
         //如果图也能确定的话，edge_num也可以确定
-        printf("__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {\n");
+        printf("__global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {\n");
         indentation += 4;
         printf("__shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];\n");
         printf("extern __shared__ GPUVertexSet block_vertex_set[];\n");
@@ -497,7 +497,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
         printf("__threadfence_block();\n");
 
         printf("uint32_t v0, v1;\n");
-        printf("uint32_t l, r;\n");
+        printf("e_index_t l, r;\n");
 
         printf("unsigned long long sum = 0;\n");
 
@@ -519,7 +519,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
 
         printf("__threadfence_block();\n");
 
-        printf("unsigned int i = edge_idx;\n");
+        printf("e_index_t int i = edge_idx;\n");
         printf("if(i >= edge_num) break;\n");
        
         printf("v0 = edge_from[i];\n");
@@ -648,7 +648,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
-    size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
+    size_t size_vertex = (g->v_cnt + 1) * sizeof(e_index_t);
     size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
 
     //schedule_iep.print_schedule();
@@ -661,7 +661,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
-    uint32_t *dev_vertex;
+    e_index_t *dev_vertex;
     uint32_t *dev_tmp;
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));

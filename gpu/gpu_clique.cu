@@ -718,7 +718,9 @@ int main(int argc,char *argv[]) {
 
     DataType type = DataType::Patents;
 
-    bool ok = D.load_data(g, type, argv[1]);
+    bool ok = D.fast_load(g, argv[1]);
+
+    // bool ok = D.load_data(g, type, argv[1]);
 
     if (!ok) {
         printf("data load failure :-(\n");
