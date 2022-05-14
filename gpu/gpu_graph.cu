@@ -183,6 +183,7 @@ public:
         size = 0;
         data = NULL;
     }
+    __device__ int set_size(int _size) { size = _size; }
     __device__ int get_size() const { return size;}
     __device__ uint32_t get_data(int i) const { return data[i];}
     __device__ void push_back(uint32_t val) { data[size++] = val;}
@@ -1098,7 +1099,7 @@ int main(int argc,char *argv[]) {
     Graph *g;
     DataLoader D;
 
-    /*
+    
     if (argc < 2) {
         printf("Usage: %s dataset_name graph_file [binary/text]\n", argv[0]);
         printf("Example: %s Patents ~hzx/data/patents_bin binary\n", argv[0]);
@@ -1121,22 +1122,23 @@ int main(int argc,char *argv[]) {
             printf("Dataset not found!\n");
             return 0;
         }
-    }*/
+    }
 
     using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
     bool ok;
-    /*
+
     if (argc >= 3) {
         // 注：load_data的第四个参数用于指定是否读取二进制文件输入，默认为false
         ok = D.load_data(g, my_type, argv[2], binary_input);
     } else {
         ok = D.fast_load(g, argv[1]);
     }
-    */
 
-    ok = D.fast_load(g, argv[1]);
+
+        
+    // ok = D.fast_load(g, argv[1]);
 
     if (!ok) {
         printf("data load failure :-(\n");
@@ -1155,8 +1157,11 @@ int main(int argc,char *argv[]) {
     // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
     // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
-    int pattern_size = atoi(argv[2]);
-    const char* pattern_str= argv[3];
+    int pattern_size = 4;
+    const char *pattern_str = "0111101111011110"; // 4 - clique
+
+    // int pattern_size = atoi(argv[2]);
+    // const char* pattern_str= argv[3];
 
     Pattern p(pattern_size, pattern_str);
     /*

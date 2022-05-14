@@ -42,6 +42,7 @@ public:
     //set1 is unordered
     static int unordered_subtraction_size(const VertexSet& set0, const VertexSet& set1, int size_after_restrict = -1);
     void insert_ans_sort(int val);
+    inline void set_size(int _size) { size = _size; }
     inline int get_size() const { return size;}
     inline int get_data(int i) const { return data[i];}
     inline const int* get_data_ptr() const { return data;}

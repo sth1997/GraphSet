@@ -256,7 +256,7 @@ public:
         __threadfence_block();
     }
 
-private:
+public:
     uint32_t size;
     uint32_t* data;
 };

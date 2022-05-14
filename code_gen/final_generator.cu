@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdint>
 #include <string>
+#include <iostream>
 #include <algorithm>
 
 #include <cuda_runtime.h>
@@ -462,7 +463,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
         //WORK SPACE BEGIN
         int indentation = 0;
         //如果图也能确定的话，edge_num也可以确定
-        printf("__global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {\n");
+        printf("__global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {\n");
         indentation += 4;
         printf("__shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];\n");
         printf("extern __shared__ GPUVertexSet block_vertex_set[];\n");
@@ -519,7 +520,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
 
         printf("__threadfence_block();\n");
 
-        printf("e_index_t int i = edge_idx;\n");
+        printf("e_index_t i = edge_idx;\n");
         printf("if(i >= edge_num) break;\n");
        
         printf("v0 = edge_from[i];\n");
@@ -893,9 +894,11 @@ int main(int argc,char *argv[]) {
     }
     */
 
+    
     ok = D.fast_load(g, argv[1]);
-
+    
     if (!ok) {
+        std::cerr << argv[1] << std::endl;
         printf("data load failure :-(\n");
         return 0;
     }
