@@ -212,6 +212,8 @@ double motif_counting_init(const Graph* g) {
     auto t2 = system_clock::now();
     double time = duration_cast<microseconds>(t2 - t1).count() * 1e-6;
 
+    wedge_ans -= tri_ans;
+
     tri_ans /= 3;
 
     printf("triangle: %ld wedge: %ld\n", tri_ans, wedge_ans);

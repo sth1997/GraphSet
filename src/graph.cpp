@@ -715,6 +715,9 @@ void Graph::motif_counting_3(int thread_count) {
         e_index_t l1 = vertex[v1],r1 = vertex[v1+1];
         tri_cnt += get_intersection_size(&edge[l0],r0-l0,&edge[l1],r1-l1);
     }
+
+    wedge_cnt -= tri_cnt;
+
     tri_cnt /= 3;
     auto t2 = std::chrono::system_clock::now();
     double time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() * 1e-6;
