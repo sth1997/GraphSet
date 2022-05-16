@@ -54,9 +54,15 @@ public:
 
     //general pattern matching algorithm with multi thread ans multi process
     long long pattern_matching_mpi(const Schedule_IEP& schedule, int thread_count, bool clique = false);
+
+    // naive motif counting
+    void motif_counting(int pattern_size, int thread_count);
+
 private:
     friend Graphmpi;
     void tc_mt(long long * global_ans);
+
+    void remove_anti_edge_vertices(VertexSet& out_buf, const VertexSet& in_buf, const Schedule_IEP& sched, const VertexSet& partial_embedding, int vp);
 
     void get_edge_index(v_index_t v, e_index_t& l, e_index_t& r) const;
 

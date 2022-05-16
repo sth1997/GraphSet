@@ -22,6 +22,9 @@ TARGET_LINK_LIBRARIES(fsm_test graph_mining)
 ADD_EXECUTABLE(clique_test clique_test.cpp)
 TARGET_LINK_LIBRARIES(clique_test graph_mining)
 
+ADD_EXECUTABLE(motif_counting_test motif_counting_test.cpp)
+TARGET_LINK_LIBRARIES(motif_counting_test graph_mining)
+
 #ADD_EXECUTABLE(in_exclusion_performance_test in_exclusion_performance_test.cpp)
 #TARGET_LINK_LIBRARIES(in_exclusion_performance_test graph_mining)
 

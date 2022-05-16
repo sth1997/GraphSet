@@ -21,3 +21,6 @@ TARGET_LINK_LIBRARIES(baseline_test graph_mining)
 
 #ADD_EXECUTABLE(schedules_our_generator_test schedules_our_generator_test.cpp)
 #TARGET_LINK_LIBRARIES(schedules_our_generator_test graph_mining)
+
+ADD_EXECUTABLE(mc_ref mc_ref.cc)
+TARGET_LINK_LIBRARIES(mc_ref graph_mining)

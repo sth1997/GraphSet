@@ -2,6 +2,7 @@
 #include "../include/graphmpi.h"
 #include "../include/vertex_set.h"
 #include "../include/common.h"
+#include "../include/motif_generator.h"
 #include <cstdio>
 #include <sys/time.h>
 #include <unistd.h>
@@ -177,19 +178,77 @@ void Graph::get_edge_index(v_index_t v, e_index_t & l, e_index_t& r) const
     r = vertex[v + 1];
 }
 
+template <typename T>
+bool binary_search(const T data[], int n, const T& target) {
+    int mid, l = 0, r = n - 1;
+    while (l <= r) {
+        mid = (l + r) >> 1;
+        if (data[mid] < target) {
+            l = mid + 1;
+        } else if (data[mid] > target) {
+            r = mid - 1;
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Graph::remove_anti_edge_vertices(VertexSet& out_buf, const VertexSet& in_buf,
+    const Schedule_IEP& sched, const VertexSet& partial_embedding, int vp) {
+
+    auto d_out = out_buf.get_data_ptr();
+    assert(d_out != nullptr);
+    auto d_in = in_buf.get_data_ptr();
+    int n_in = in_buf.get_size();
+    int out_size = 0;
+    
+    for (int i = 0; i < n_in; i++) {
+        bool produce_output = true;
+        for (int u = 0; u < vp; ++u) {
+            if (sched.get_adj_mat_ptr()[u * sched.get_size() + vp] != 0)
+                continue;
+            
+            auto v = partial_embedding.get_data(u);
+            e_index_t v_neighbor_begin, v_neighbor_end;
+            get_edge_index(v, v_neighbor_begin, v_neighbor_end);
+            int m = v_neighbor_end - v_neighbor_begin; // m = |N(v)|
+
+            if (binary_search(&edge[v_neighbor_begin], m, d_in[i])) {
+                produce_output = false;
+                break;
+            }
+        }
+        if(produce_output) {
+            d_out[out_size] = d_in[i];
+        }
+        out_size++;
+    }
+    out_buf.init(out_size, d_out);
+}
+
 void Graph::pattern_matching_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, long long& local_ans, int depth, bool clique)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
-    int loop_size = vertex_set[loop_set_prefix_id].get_size();
+    auto &vset = vertex_set[loop_set_prefix_id];
+    int loop_size = vset.get_size();
     if (loop_size <= 0)
         return;
-    int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
+    int* loop_data_ptr = vset.get_data_ptr();
     /*if (clique == true)
       {
       int last_vertex = subtraction_set.get_last();
     // The number of this vertex must be greater than the number of last vertex.
     loop_start = std::upper_bound(loop_data_ptr, loop_data_ptr + loop_size, last_vertex) - loop_data_ptr;
     }*/
+    if (schedule.is_vertex_induced) {
+        VertexSet &diff_buf = vertex_set[schedule.get_total_prefix_num() + depth];
+        diff_buf.init();
+        remove_anti_edge_vertices(diff_buf, vertex_set[loop_set_prefix_id], schedule, subtraction_set, depth);
+        loop_data_ptr = diff_buf.get_data_ptr();
+        loop_size = diff_buf.get_size();
+        vset = diff_buf;
+    }
     if (depth == schedule.get_size() - 1)
     {
         // TODO : try more kinds of calculation.
@@ -197,7 +256,7 @@ void Graph::pattern_matching_func(const Schedule_IEP& schedule, VertexSet* verte
         if (clique == true)
             local_ans += loop_size;
         else if (loop_size > 0)
-            local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
+            local_ans += VertexSet::unordered_subtraction_size(vset, subtraction_set);
         return;
     }
 
@@ -239,7 +298,7 @@ long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count
      //   double start_time = get_wall_time();
      //   double current_time;
         int* ans_buffer = new int[schedule.in_exclusion_optimize_vertex_id.size()];
-        VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num()];
+        VertexSet* vertex_set = new VertexSet[schedule.get_total_prefix_num() + schedule.get_size()];
         VertexSet subtraction_set;
         VertexSet tmp_set;
         subtraction_set.init();
@@ -305,11 +364,22 @@ void Graph::clique_matching_func(const Schedule_IEP& schedule, VertexSet* vertex
 void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth, int* ans_buffer)
 {
     int loop_set_prefix_id = schedule.get_loop_set_prefix_id(depth);
-    int loop_size = vertex_set[loop_set_prefix_id].get_size();
+    auto &vset = vertex_set[loop_set_prefix_id];
+
+    int loop_size = vset.get_size();
     if (loop_size <= 0)
         return;
 
-    int* loop_data_ptr = vertex_set[loop_set_prefix_id].get_data_ptr();
+    int* loop_data_ptr = vset.get_data_ptr();
+
+    if (schedule.is_vertex_induced) {
+        VertexSet &diff_buf = vertex_set[schedule.get_total_prefix_num() + depth];
+        diff_buf.init();
+        remove_anti_edge_vertices(diff_buf, vertex_set[loop_set_prefix_id], schedule, subtraction_set, depth);
+        loop_data_ptr = diff_buf.get_data_ptr();
+        loop_size = diff_buf.get_size();
+        vset = diff_buf;
+    }
     //Case: in_exclusion_optimize_num > 1
     if( depth == schedule.get_size() - schedule.get_in_exclusion_optimize_num() ) {
         
@@ -352,13 +422,12 @@ void Graph::pattern_matching_aggressive_func(const Schedule_IEP& schedule, Verte
             for (int i = schedule.get_restrict_last(depth); i != -1; i = schedule.get_restrict_next(i))
                 if (min_vertex > subtraction_set.get_data(schedule.get_restrict_index(i)))
                     min_vertex = subtraction_set.get_data(schedule.get_restrict_index(i));
-            const VertexSet& vset = vertex_set[loop_set_prefix_id];
             int size_after_restrict = std::lower_bound(vset.get_data_ptr(), vset.get_data_ptr() + vset.get_size(), min_vertex) - vset.get_data_ptr();
             if (size_after_restrict > 0)
-                local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set, size_after_restrict);
+                local_ans += VertexSet::unordered_subtraction_size(vset, subtraction_set, size_after_restrict);
         }
         else
-            local_ans += VertexSet::unordered_subtraction_size(vertex_set[loop_set_prefix_id], subtraction_set);
+            local_ans += VertexSet::unordered_subtraction_size(vset, subtraction_set);
         return;
     }
 
@@ -543,4 +612,58 @@ void reduce_edges_for_clique(Graph &g) {
     printf("Trying to reduce edge. the pattern is a clique.\n");
     erase_edge(g);
     printf("Finish reduce.\n");
+}
+
+class TimeInterval{
+public:
+    TimeInterval(){
+        check();
+    }
+
+    void check(){
+        gettimeofday(&tp, NULL);
+    }
+
+    void print(const char* title){
+        struct timeval tp_end, tp_res;
+        gettimeofday(&tp_end, NULL);
+        timersub(&tp_end, &tp, &tp_res);
+        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
+    }
+private:
+    struct timeval tp;
+};
+
+
+void Graph::motif_counting(int pattern_size, int thread_count) {
+
+    TimeInterval allTime;
+
+    allTime.check();
+
+    MotifGenerator mg(pattern_size);
+    std::vector<Pattern> motifs = mg.generate();
+    for (int i = 0; i < motifs.size(); ++i) {
+        Pattern p = motifs[i];
+
+        printf("pattern = \n");
+        p.print();
+    
+        printf("max intersection size %d\n", VertexSet::max_intersection_size);
+        bool is_pattern_valid;
+        bool use_in_exclusion_optimize = true;
+
+        Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, v_cnt, e_cnt, tri_cnt, true);
+
+        if (!is_pattern_valid) {
+            printf("pattern is invalid!\n");
+            continue;
+        }
+
+        long long ans = this->pattern_matching(schedule_iep, thread_count);
+
+        printf("ans: %lld\n",ans);
+
+        allTime.print("Total time cost");
+    }
 }

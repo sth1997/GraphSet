@@ -8,10 +8,19 @@
 #include <stdexcept>
 #include <algorithm>
 
-Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize ,int v_cnt, unsigned int e_cnt, long long tri_cnt)
+Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, 
+    int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize ,
+    int v_cnt, unsigned int e_cnt, long long tri_cnt,
+    bool vertex_induced)
 {
-    if (!use_in_exclusion_optimize) {
-        throw std::logic_error("Schedule_IEP: must set use_in_exclusion_optimize to true.\n");
+    // if (!use_in_exclusion_optimize) {
+    //     throw std::logic_error("Schedule_IEP: must set use_in_exclusion_optimize to true.\n");
+    // }
+
+    is_vertex_induced = vertex_induced;
+    if (vertex_induced) {
+        use_in_exclusion_optimize = false;
+        in_exclusion_optimize_redundancy = 1;
     }
 
     if( performance_modeling_type == 1 && tri_cnt == -1) {
@@ -216,6 +225,19 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
     if( restricts_type != 0) add_restrict(best_pairs);
 
     set_in_exclusion_optimize_redundancy();
+    printf("loop_set_prefix_ids:");
+    for (int i = 0; i < size; ++i)
+        printf(" %d", loop_set_prefix_id[i]);
+    printf("\nlast:");
+    for (int i = 0; i < size; ++i)
+        printf(" %d", last[i]);
+    printf("\nfather_prefix_id:");
+    for (int i = 0; i < size; ++i)
+        printf(" %d", father_prefix_id[i]);
+    printf("\nrestrictions:");
+    for (auto &pair : restrict_pair)
+        printf(" (%d, %d)", pair.first, pair.second);
+    printf("\n");
 }
 
 Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)

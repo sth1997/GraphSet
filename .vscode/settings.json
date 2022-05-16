@@ -3,6 +3,7 @@
         "algorithm": "cpp",
         "cstdio": "cpp",
         "new": "cpp",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "atomic": "cpp"
     }
 }
