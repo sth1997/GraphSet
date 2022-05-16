@@ -58,6 +58,10 @@ public:
     // naive motif counting
     void motif_counting(int pattern_size, int thread_count);
 
+    // hand optimized 3-motif counting
+    void motif_counting_3(int thread_count);
+
+
 private:
     friend Graphmpi;
     void tc_mt(long long * global_ans);

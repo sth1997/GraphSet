@@ -4,6 +4,16 @@
         "cstdio": "cpp",
         "new": "cpp",
         "cassert": "cpp",
-        "atomic": "cpp"
+        "atomic": "cpp",
+        "chrono": "cpp",
+        "__bit_reference": "cpp",
+        "bitset": "cpp",
+        "map": "cpp",
+        "set": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp",
+        "ios": "cpp",
+        "random": "cpp",
+        "*.tcc": "cpp"
     }
 }

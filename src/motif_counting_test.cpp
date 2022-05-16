@@ -30,6 +30,8 @@ int main(int argc,char *argv[]) {
 
     int thread_count = 16;
     g->motif_counting(size, thread_count);
+    g->motif_counting_3(thread_count);
     delete g;
     return 0;
 }
+

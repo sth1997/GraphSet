@@ -15,7 +15,7 @@ void VertexSet::init()
     {
         size = 0;
         allocate = true;
-        data = new int[max_intersection_size];
+        data = new int[max_intersection_size * 2];
     }
 }
 

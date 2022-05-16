@@ -80,9 +80,9 @@ __device__ uint32_t get_intersection_size(const uint32_t* a, const uint32_t* b, 
 __device__ uint32_t dev_cur_edge = 0;
 __device__ unsigned long long dev_tri_cnt = 0, dev_wedge_cnt = 0;
 
-__global__ void motif_counting_3(uint32_t nr_edges, uint32_t* edge_from, uint32_t* edge_to, uint32_t* vertex)
+__global__ void motif_counting_3(uint32_t nr_edges, uint32_t* edge_from, uint32_t* edge_to, e_index_t* vertex)
 {
-    __shared__ uint32_t block_edge_idx[WARPS_PER_BLOCK];
+    __shared__ e_index_t block_edge_idx[WARPS_PER_BLOCK];
 
     int wid = threadIdx.x / THREADS_PER_WARP;
     int lid = threadIdx.x % THREADS_PER_WARP;
@@ -91,7 +91,8 @@ __global__ void motif_counting_3(uint32_t nr_edges, uint32_t* edge_from, uint32_
     if (lid == 0)
         edge_idx = 0;
 
-    uint32_t v0, v1, l0, r0, l1, r1;
+    uint32_t v0, v1;
+    e_index_t l0, r0, l1, r1;
     uint64_t local_tri_cnt = 0, local_wedge_cnt = 0;
     while (true) {
         if (lid == 0)
@@ -106,7 +107,7 @@ __global__ void motif_counting_3(uint32_t nr_edges, uint32_t* edge_from, uint32_
         v1 = edge_to[i];
         l0 = vertex[v0], r0 = vertex[v0 + 1];
         if (i == l0 && lid == 0) {
-            uint64_t d = r0 - l0;
+            e_index_t d = r0 - l0;
             local_wedge_cnt += d * (d - 1) / 2;
         }
 
@@ -134,7 +135,8 @@ __global__ void triangle_counting(uint32_t nr_edges, uint32_t* edge_from, uint32
     if (lid == 0)
         edge_idx = 0;
 
-    uint32_t v0, v1, l0, r0, l1, r1;
+    uint32_t v0, v1;
+    e_index_t l0, r0, l1, r1;
     uint64_t local_tri_cnt = 0;
     while (true) {
         if (lid == 0)
@@ -176,17 +178,17 @@ double motif_counting_init(const Graph* g) {
     int nr_blocks = max_active_blocks_per_sm * nr_sms;
     printf("nr_blocks = %d\n", nr_blocks);
 
-    size_t size_edge = g->e_cnt * sizeof(uint32_t);
-    size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
+    size_t size_edge = g->e_cnt * sizeof(v_index_t);
+    size_t size_vertex = (g->v_cnt + 1) * sizeof(e_index_t);
 
     uint32_t *edge_from = new uint32_t[g->e_cnt];
     for (uint32_t i = 0; i < g->v_cnt; ++i)
-        for (uint32_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
+        for (e_index_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
             edge_from[j] = i;
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
-    uint32_t *dev_vertex;
+    e_index_t *dev_vertex;
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
     gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));

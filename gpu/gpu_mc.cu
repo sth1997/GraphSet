@@ -613,7 +613,7 @@ __device__ void GPU_pattern_matching_aggressive_func(const GPUSchedule* schedule
  * @brief 最终层的容斥原理优化计算。
  */
 __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans,  uint32_t *edge, uint32_t *vertex)
+    GPUVertexSet& tmp_set, unsigned long long& local_ans,  uint32_t *edge, e_index_t *vertex)
 {
     /*
     int in_exclusion_optimize_num = schedule->get_in_exclusion_optimize_num();
@@ -737,7 +737,7 @@ __device__ bool binary_search(const T data[], int n, const T& target) {
 
 __device__ void remove_anti_edge_vertices(GPUVertexSet& out_buf, const GPUVertexSet& in_buf,
     const GPUSchedule& sched, const GPUVertexSet& partial_embedding, int vp,
-    const uint32_t* edge, const uint32_t* vertex) {
+    const uint32_t* edge, const e_index_t* vertex) {
 
     __shared__ uint32_t block_out_offset[THREADS_PER_BLOCK];
     __shared__ uint32_t block_out_size[WARPS_PER_BLOCK];
@@ -803,7 +803,7 @@ constexpr int MAX_DEPTH = 5; // 非递归pattern matching支持的最大深度
 
 template <int depth>
 __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-    GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, uint32_t *vertex)
+    GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
 {
 
     if (depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num()) {
@@ -886,7 +886,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
 
     template <>
 __device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule, GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,
-        GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, uint32_t *vertex)
+        GPUVertexSet& tmp_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
 {
     // assert(false);
 }
@@ -894,8 +894,8 @@ __device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
 /**
  * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
  */
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
-    __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK]; //用int表示边之后在大图上一定会出问题！
+__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+    __shared__ e_index_t block_edge_idx[WARPS_PER_BLOCK]; //用int表示边之后在大图上一定会出问题！
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
     
@@ -905,7 +905,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id within the block
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
     int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id
-    unsigned int &edge_idx = block_edge_idx[wid];
+    e_index_t &edge_idx = block_edge_idx[wid];
     GPUVertexSet *vertex_set = block_vertex_set + wid * num_vertex_sets_per_warp;
 
     if (lid == 0) {
@@ -994,21 +994,21 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     //prefix + subtraction + tmp + extra (n-2)
     int num_vertex_sets_per_warp = schedule_iep.get_total_prefix_num() + schedule_iep.get_size();
 
-    size_t size_edge = g->e_cnt * sizeof(uint32_t);
-    size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
+    size_t size_edge = g->e_cnt * sizeof(v_index_t);
+    size_t size_vertex = (g->v_cnt + 1) * sizeof(e_index_t);
     size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * num_vertex_sets_per_warp;
 
     schedule_iep.print_schedule();
     uint32_t *edge_from = new uint32_t[g->e_cnt];
     for(uint32_t i = 0; i < g->v_cnt; ++i)
-        for(uint32_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
+        for(e_index_t j = g->vertex[i]; j < g->vertex[i+1]; ++j)
             edge_from[j] = i;
 
     tmpTime.check(); 
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
-    uint32_t *dev_vertex;
+    e_index_t *dev_vertex;
     uint32_t *dev_tmp;
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));

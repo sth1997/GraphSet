@@ -896,7 +896,7 @@ __device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
  * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
  */
 __global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
-    __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK]; //用int表示边之后在大图上一定会出问题！
+    __shared__ e_index_t block_edge_idx[WARPS_PER_BLOCK]; //用int表示边之后在大图上一定会出问题！
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
     
@@ -906,7 +906,7 @@ __global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, u
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id within the block
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
     int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id
-    unsigned int &edge_idx = block_edge_idx[wid];
+    e_index_t &edge_idx = block_edge_idx[wid];
     GPUVertexSet *vertex_set = block_vertex_set + wid * num_vertex_sets_per_warp;
 
     if (lid == 0) {
@@ -934,7 +934,7 @@ __global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, u
             //if(++edgeI >= edgeEnd) { //这个if语句应该是每次都会发生吧？（是的
                 edge_idx = atomicAdd(&dev_cur_edge, 1);
                 //edgeEnd = min(edge_num, edgeI + 1); //这里不需要原子读吗
-                unsigned int i = edge_idx;
+                e_index_t i = edge_idx;
                 if (i < edge_num)
                 {
                     subtraction_set.init();
