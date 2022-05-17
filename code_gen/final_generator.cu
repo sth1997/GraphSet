@@ -7,11 +7,13 @@
 #include <vertex_set.h>
 #include <common.h>
 #include <schedule_IEP.h>
+#include <motif_generator.h>
 
 #include <cassert>
 #include <cstring>
 #include <cstdint>
 #include <string>
+#include <iostream>
 #include <algorithm>
 
 #include <cuda_runtime.h>
@@ -244,7 +246,7 @@ private:
 };
 
 __device__ unsigned long long dev_sum = 0;
-__device__ unsigned int dev_cur_edge = 0;
+__device__ unsigned int dev_cur_edge = 0; //用int表示边之后在大图上一定会出问题！
 
 /**
  * search-based intersection
@@ -385,7 +387,7 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
 
 __global__ void gen_final(const GPUSchedule* schedule) {
     if(threadIdx.x == 0) {
-        printf("__device__ void GPU_pattern_matching_final_in_exclusion(GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,GPUVertexSet& tmp_set, unsigned long long& local_ans,  uint32_t *edge, uint32_t *vertex) {\n");
+        printf("__device__ void GPU_pattern_matching_final_in_exclusion(GPUVertexSet* vertex_set, GPUVertexSet& subtraction_set,GPUVertexSet& tmp_set, unsigned long long& local_ans,  uint32_t *edge, e_index_t *vertex) {\n");
         printf("extern __shared__ char ans_array[];\n");
         printf("int* ans = ((int*) (ans_array + %d)) + %d * (threadIdx.x / THREADS_PER_WARP);\n", schedule->ans_array_offset, schedule->in_exclusion_optimize_vertex_id_size);
         for(int i = 0; i < schedule->in_exclusion_optimize_vertex_id_size; ++i) {
@@ -461,7 +463,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
         //WORK SPACE BEGIN
         int indentation = 0;
         //如果图也能确定的话，edge_num也可以确定
-        printf("__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {\n");
+        printf("__global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {\n");
         indentation += 4;
         printf("__shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];\n");
         printf("extern __shared__ GPUVertexSet block_vertex_set[];\n");
@@ -496,7 +498,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
         printf("__threadfence_block();\n");
 
         printf("uint32_t v0, v1;\n");
-        printf("uint32_t l, r;\n");
+        printf("e_index_t l, r;\n");
 
         printf("unsigned long long sum = 0;\n");
 
@@ -518,7 +520,7 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
 
         printf("__threadfence_block();\n");
 
-        printf("unsigned int i = edge_idx;\n");
+        printf("e_index_t i = edge_idx;\n");
         printf("if(i >= edge_num) break;\n");
        
         printf("v0 = edge_from[i];\n");
@@ -542,9 +544,6 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
             if (prefix_id < schedule->get_basic_prefix_num())
                 printf("if (vertex_set[%d].get_size() == 0) continue;\n", prefix_id); //因为代码生成后没有外层的for循环了，所以不需要先break再continue了
         }
-        //TODO
-        //TODO
-        //TODO
         
         printf("extern __shared__ char ans_array[];\n");
         printf("int* ans = ((int*) (ans_array + %d)) + %d * (threadIdx.x / THREADS_PER_WARP);\n", schedule->ans_array_offset, schedule->in_exclusion_optimize_vertex_id_size);
@@ -563,6 +562,12 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
 
             for (int i = schedule->get_restrict_last(depth); i != -1; i = schedule->get_restrict_next(i)) {
                 printf("if(min_vertex_depth%d > subtraction_set.get_data(%d)) min_vertex_depth%d = subtraction_set.get_data(%d);\n", depth, schedule->get_restrict_index(i), depth, schedule->get_restrict_index(i));
+            }
+
+            if (depth == schedule->get_size() - 1 && schedule->get_in_exclusion_optimize_num() == 0) {
+                printf("int size_after_restrict = lower_bound(loop_data_ptr_depth%d, loop_size_depth%d, min_vertex_depth%d);\n", depth, depth, depth);
+                printf("sum += unordered_subtraction_size(vertex_set[%d], subtraction_set, size_after_restrict);\n", loop_set_prefix_id);
+                break;
             }
 
             printf("for(int i_depth%d = 0; i_depth%d < loop_size_depth%d; ++i_depth%d) {\n", depth, depth, depth, depth);
@@ -592,30 +597,38 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
 
         }
         
-        for(int i = 0; i < schedule->in_exclusion_optimize_vertex_id_size; ++i) {
-            if(schedule->in_exclusion_optimize_vertex_flag[i]) {
-                printf("ans[%d] = vertex_set[%d].get_size() - %d;\n", i, schedule->in_exclusion_optimize_vertex_id[i], schedule->in_exclusion_optimize_vertex_coef[i]);
+        if (schedule->get_in_exclusion_optimize_num() != 0)
+        {
+            for(int i = 0; i < schedule->in_exclusion_optimize_vertex_id_size; ++i) {
+                if(schedule->in_exclusion_optimize_vertex_flag[i]) {
+                    printf("ans[%d] = vertex_set[%d].get_size() - %d;\n", i, schedule->in_exclusion_optimize_vertex_id[i], schedule->in_exclusion_optimize_vertex_coef[i]);
+                }
+                else {
+                    printf("ans[%d] = unordered_subtraction_size(vertex_set[%d], subtraction_set);\n", i, schedule->in_exclusion_optimize_vertex_id[i]);
+                }
             }
-            else {
-                printf("ans[%d] = unordered_subtraction_size(vertex_set[%d], subtraction_set);\n", i, schedule->in_exclusion_optimize_vertex_id[i]);
-            }
-        }
-        int last_pos = -1;
-        printf("long long val;\n");
-        for(int pos = 0; pos < schedule->in_exclusion_optimize_array_size; ++pos) {
-            if(pos == last_pos + 1) {
-                printf("val = ans[%d];\n", schedule->in_exclusion_optimize_ans_pos[pos]);
-            }
-            else {
-                printf("val = val * ans[%d];\n", schedule->in_exclusion_optimize_ans_pos[pos]);
-            }
-            if(schedule->in_exclusion_optimize_flag[pos]) {
-                last_pos = pos;
-                printf("sum += val * %d;\n", schedule->in_exclusion_optimize_coef[pos]);
+            int last_pos = -1;
+            printf("long long val;\n");
+            for(int pos = 0; pos < schedule->in_exclusion_optimize_array_size; ++pos) {
+                if(pos == last_pos + 1) {
+                    printf("val = ans[%d];\n", schedule->in_exclusion_optimize_ans_pos[pos]);
+                }
+                else {
+                    printf("val = val * ans[%d];\n", schedule->in_exclusion_optimize_ans_pos[pos]);
+                }
+                if(schedule->in_exclusion_optimize_flag[pos]) {
+                    last_pos = pos;
+                    printf("sum += val * %d;\n", schedule->in_exclusion_optimize_coef[pos]);
+                }
             }
         }
 
-        for(int depth = schedule->get_size() - schedule->get_in_exclusion_optimize_num() - 1; depth >= 2; --depth) {
+        int last_depth;
+        if (schedule->get_in_exclusion_optimize_num() != 0)
+            last_depth = schedule->get_size() - schedule->get_in_exclusion_optimize_num() - 1;
+        else
+            last_depth = schedule->get_size() - 2;
+        for(int depth = last_depth; depth >= 2; --depth) {
             printf("if (threadIdx.x % THREADS_PER_WARP == 0) subtraction_set.pop_back();\n");
             printf("__threadfence_block();\n");
             indentation -= 4;
@@ -636,7 +649,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 
     size_t size_edge = g->e_cnt * sizeof(uint32_t);
-    size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
+    size_t size_vertex = (g->v_cnt + 1) * sizeof(e_index_t);
     size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) * num_total_warps * (schedule_iep.get_total_prefix_num() + 2); //prefix + subtraction + tmp
 
     //schedule_iep.print_schedule();
@@ -649,7 +662,7 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
 
     uint32_t *dev_edge;
     uint32_t *dev_edge_from;
-    uint32_t *dev_vertex;
+    e_index_t *dev_vertex;
     uint32_t *dev_tmp;
 
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
@@ -662,6 +675,9 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
     gpuErrchk( cudaMemcpy(dev_vertex, g->vertex, size_vertex, cudaMemcpyHostToDevice));
 
     unsigned long long sum = 0;
+    gpuErrchk( cudaMemcpyToSymbol(dev_sum, &sum, sizeof(sum)));
+    unsigned int cur_edge = 0;
+    gpuErrchk( cudaMemcpyToSymbol(dev_cur_edge, &cur_edge, sizeof(cur_edge)));
 
     //memcpy schedule
     GPUSchedule* dev_schedule;
@@ -703,23 +719,28 @@ void pattern_matching_init(Graph *g, const Schedule_IEP& schedule_iep) {
         in_exclusion_optimize_ans_pos[i] = schedule_iep.in_exclusion_optimize_ans_pos[i];
     }
 
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_id, in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_flag, in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_coef, in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
+    if (in_exclusion_optimize_vertex_id_size > 0) {
+        gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size));
+        gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_id, in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size));
+        gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_flag, in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size));
+        gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_coef, in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
+    }
 
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_coef, in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
+    if (in_exclusion_optimize_array_size > 0)
+    {
+        gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size));
+        gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_coef, in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
 
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_flag, in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_ans_pos, in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
+        gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size));
+        gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_flag, in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size));
+        gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_ans_pos, in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
+    }
 
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule->adj_mat, sizeof(int) * schedule_size * schedule_size));
     gpuErrchk( cudaMemcpy(dev_schedule->adj_mat, schedule_iep.get_adj_mat_ptr(), sizeof(int) * schedule_size * schedule_size, cudaMemcpyHostToDevice));
@@ -873,9 +894,11 @@ int main(int argc,char *argv[]) {
     }
     */
 
+    
     ok = D.fast_load(g, argv[1]);
-
+    
     if (!ok) {
+        std::cerr << argv[1] << std::endl;
         printf("data load failure :-(\n");
         return 0;
     }

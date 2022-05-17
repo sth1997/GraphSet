@@ -1,8 +1,15 @@
 #pragma once
 #include "graph.h"
+#include "labeled_graph.h"
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
+#include <cstdint>
+#include <bitset>
+#include <cassert>
+#include <cstring>
+
+
 
 enum DataType {
     Patents,
@@ -34,6 +41,9 @@ public:
         // oriented_type == 0 do nothing
         //               == 1 high degree first
         //               == 2 low degree first
+
+    bool load_labeled_data(LabeledGraph* &g, DataType type, const char* path);
+        
     bool load_data(Graph* &g, int clique_size);
 
     bool fast_load(Graph* &g, const char* path);
@@ -42,12 +52,16 @@ public:
 
 private:
     static bool cmp_pair(std::pair<int,int>a, std::pair<int,int>b);
+    static bool cmp_tuple(std::tuple<int,int,int>a, std::tuple<int,int,int>b);
+    static bool cmp_label(std::pair<int,int> a,std::pair<int,int> b);
     static bool cmp_degree_gt(std::pair<int,int> a,std::pair<int,int> b);
     static bool cmp_degree_lt(std::pair<int,int> a,std::pair<int,int> b);
 
     long long comb(int n,int k);
     bool general_load_data(Graph* &g, DataType type, const char* path, bool binary_input, int oriented_type = 0);
     bool twitter_load_data(Graph* &g, DataType type, const char* path, int oriented_type = 0);
+    bool general_load_labeled_data(LabeledGraph* &g, DataType type, const char* path);
 
     std::unordered_map<uint32_t, uint32_t> id;
+    std::unordered_map<uint32_t, uint32_t> label;
 };

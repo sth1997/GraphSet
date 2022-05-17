@@ -1,4 +1,4 @@
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
 __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
 extern __shared__ GPUVertexSet block_vertex_set[];
 int wid = threadIdx.x / THREADS_PER_WARP;
@@ -17,7 +17,7 @@ offset += buffer_size;
 GPUVertexSet& subtraction_set = vertex_set[6];
 __threadfence_block();
 uint32_t v0, v1;
-uint32_t l, r;
+e_index_t l, r;
 unsigned long long sum = 0;
 while (true) {
 if (lid == 0) {
@@ -30,7 +30,7 @@ subtraction_set.push_back(edge[i]);
 }
 }
 __threadfence_block();
-unsigned int i = edge_idx;
+e_index_t i = edge_idx;
 if(i >= edge_num) break;
 v0 = edge_from[i];
 v1 = edge[i];

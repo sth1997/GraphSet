@@ -1,23 +1,23 @@
-__global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
+__global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, uint32_t *edge_from, uint32_t *edge, e_index_t *vertex, uint32_t *tmp, const GPUSchedule* schedule) {
 __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
 extern __shared__ GPUVertexSet block_vertex_set[];
 int wid = threadIdx.x / THREADS_PER_WARP;
 int lid = threadIdx.x % THREADS_PER_WARP;
 int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid;
 unsigned int &edge_idx = block_edge_idx[wid];
-GPUVertexSet *vertex_set = block_vertex_set + wid * 7;
+GPUVertexSet *vertex_set = block_vertex_set + wid * 6;
 if (lid == 0) {
 edge_idx = 0;
-uint32_t offset = buffer_size * global_wid * 7;
-for (int i = 0; i < 7; ++i) {
+uint32_t offset = buffer_size * global_wid * 6;
+for (int i = 0; i < 6; ++i) {
 vertex_set[i].set_data_ptr(tmp + offset);
 offset += buffer_size;
 }
 }
-GPUVertexSet& subtraction_set = vertex_set[5];
+GPUVertexSet& subtraction_set = vertex_set[4];
 __threadfence_block();
 uint32_t v0, v1;
-uint32_t l, r;
+e_index_t l, r;
 unsigned long long sum = 0;
 while (true) {
 if (lid == 0) {
@@ -30,7 +30,7 @@ subtraction_set.push_back(edge[i]);
 }
 }
 __threadfence_block();
-unsigned int i = edge_idx;
+e_index_t i = edge_idx;
 if(i >= edge_num) break;
 v0 = edge_from[i];
 v1 = edge[i];
@@ -44,7 +44,7 @@ GPUVertexSet* tmp_vset;
 intersection2(vertex_set[1].get_data_ptr(), vertex_set[0].get_data_ptr(), &edge[l], vertex_set[0].get_size(), r - l, &vertex_set[1].size);
 if (vertex_set[1].get_size() == 0) continue;
 extern __shared__ char ans_array[];
-int* ans = ((int*) (ans_array + 896)) + 3 * (threadIdx.x / THREADS_PER_WARP);
+int* ans = ((int*) (ans_array + 768)) + 3 * (threadIdx.x / THREADS_PER_WARP);
 int loop_size_depth2 = vertex_set[1].get_size();
 if( loop_size_depth2 <= 0) continue;
 uint32_t* loop_data_ptr_depth2 = vertex_set[1].get_data_ptr();
@@ -76,21 +76,10 @@ else
     tmp_vset->size = vertex_set[2].get_size() - unordered_subtraction_size(vertex_set[2], *tmp_vset, -1);
 }
 if (vertex_set[3].get_size() == 0) continue;
-{
-tmp_vset = &vertex_set[4];
-if (threadIdx.x % THREADS_PER_WARP == 0)
-    tmp_vset->init(r_depth3 - l_depth3, &edge[l_depth3]);
-__threadfence_block();
-if (r_depth3 - l_depth3 > vertex_set[1].get_size())
-    tmp_vset->size -= unordered_subtraction_size(*tmp_vset, vertex_set[1], -1);
-else
-    tmp_vset->size = vertex_set[1].get_size() - unordered_subtraction_size(vertex_set[1], *tmp_vset, -1);
-}
-if (vertex_set[4].get_size() == 1) continue;
 if (threadIdx.x % THREADS_PER_WARP == 0) subtraction_set.push_back(v_depth3);
 __threadfence_block();
 ans[0] = vertex_set[3].get_size() - 0;
-ans[1] = vertex_set[4].get_size() - 1;
+ans[1] = vertex_set[2].get_size() - 1;
 ans[2] = vertex_set[1].get_size() - 2;
 long long val;
 val = ans[0];

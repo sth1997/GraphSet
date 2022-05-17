@@ -10,7 +10,10 @@ class Schedule_IEP
 {
 public:
     //TODO : more kinds of constructors to construct different Schedules from one Pattern
-    Schedule_IEP(const Pattern& pattern, bool& is_pattern_valid, int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize, int v_cnt, unsigned int e_cnt, long long tri_cnt = 0);
+    Schedule_IEP(const Pattern& pattern, bool& is_pattern_valid, 
+        int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize,
+        int v_cnt, unsigned int e_cnt, long long tri_cnt = 0,
+        bool vertex_induced = false);
     // performance_modeling type = 0 : not use modeling
     //                      type = 1 : use our modeling
     //                      type = 2 : use GraphZero's modeling
@@ -19,6 +22,8 @@ public:
     //                = 1 : use our restricts
     //                = 2 : use GraphZero's restricts
     Schedule_IEP(const int* _adj_mat, int _size);
+    Schedule_IEP(const Schedule_IEP& s) = delete;
+    Schedule_IEP& operator = (const Schedule_IEP& s) = delete;
     ~Schedule_IEP();
     inline int get_total_prefix_num() const { return total_prefix_num;}
     inline int get_basic_prefix_num() const { return basic_prefix_num;}
@@ -33,6 +38,8 @@ public:
     inline int get_next(int i) const { return next[i];}
     inline int* get_next_ptr() const {return next;}
     inline int* get_break_size_ptr() const {return break_size;}
+    inline int get_prefix_target(int i) const {return prefix_target[i];}
+    inline int* get_prefix_target_ptr() const {return prefix_target;}
     inline int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
     int get_in_exclusion_optimize_num_when_not_optimize();
     void add_restrict(const std::vector< std::pair<int, int> >& restricts);
@@ -64,6 +71,8 @@ public:
 
     void print_schedule() const;
 
+    void update_loop_invariant_for_fsm();
+
     std::vector< std::pair<int,int> > restrict_pair;
 
     std::vector<int> in_exclusion_optimize_vertex_id;
@@ -76,12 +85,15 @@ public:
     
     int* break_size;
 
+    bool is_vertex_induced;
+
 private:
     int* adj_mat;
     int* father_prefix_id;
     int* last;
     int* next;
     int* loop_set_prefix_id;
+    int* prefix_target; //这个是给带label时使用的，因为带label时，需要提前知道一个prefix最终是为了给哪个点作为循环集合来确定prefix中点的label，比如这个prefix经过几次求交后，得到的集合要给pattern中的第4个点作为循环集合，那么target就是4
     Prefix* prefix;
     int* restrict_last;
     int* restrict_next;
@@ -98,6 +110,9 @@ private:
     std::vector< std::vector< std::vector<int> > >in_exclusion_optimize_group;
     std::vector< int > in_exclusion_optimize_val;
 
+    bool check_connectivity() const;
+    void setup_optimization_info(bool use_in_exclusion_optimize = true);
+    void copy_adj_mat_from(const std::vector<int>& vec, const int* src_adj_mat);
     void build_loop_invariant(int in_exclusion_optimize_num = 0);
     int find_father_prefix(int data_size, const int* data);
     void get_full_permutation(std::vector< std::vector<int> >& vec, bool use[], std::vector<int> tmp_vec, int depth) const;
@@ -106,6 +121,7 @@ private:
     void new_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt, long long tri_cnt);
     void GraphZero_performance_modeling(int* best_order, int v_cnt, unsigned int e_cnt);
 
+    double new_estimate_schedule_restrict(const std::vector<std::pair<int, int>>& restrictions, int v_cnt, unsigned int e_cnt, long long tri_cnt);
     double our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt);
     double GraphZero_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt);
     double Naive_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &paris, int v_cnt, unsigned int e_cnt);

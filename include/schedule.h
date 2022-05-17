@@ -19,6 +19,8 @@ public:
     //                = 1 : use our restricts
     //                = 2 : use GraphZero's restricts
     Schedule(const int* _adj_mat, int _size);
+    Schedule(const Schedule& s) = delete;
+    Schedule& operator = (const Schedule& s) = delete;
     ~Schedule();
     inline int get_total_prefix_num() const { return total_prefix_num;}
     inline int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
@@ -30,6 +32,8 @@ public:
     inline int* get_last_ptr() const { return last;}
     inline int get_next(int i) const { return next[i];}
     inline int* get_next_ptr() const {return next;}
+    inline int get_prefix_target(int i) const {return prefix_target[i];}
+    inline int* get_prefix_target_ptr() const {return prefix_target;}
     inline int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
     int get_in_exclusion_optimize_num_when_not_optimize();
     void add_restrict(const std::vector< std::pair<int, int> >& restricts);
@@ -60,6 +64,8 @@ public:
 
     void print_schedule() const;
 
+    void update_loop_invariant_for_fsm();
+
     std::vector< std::vector< std::vector<int> > >in_exclusion_optimize_group;
     std::vector< int > in_exclusion_optimize_val;
     std::vector< std::pair<int,int> > restrict_pair;
@@ -69,6 +75,7 @@ private:
     int* last;
     int* next;
     int* loop_set_prefix_id;
+    int* prefix_target; //这个是给带label时使用的，因为带label时，需要提前知道一个prefix最终是为了给哪个点作为循环集合来确定prefix中点的label，比如这个prefix经过几次求交后，得到的集合要给pattern中的第4个点作为循环集合，那么target就是4
     Prefix* prefix;
     int* restrict_last;
     int* restrict_next;
@@ -79,7 +86,6 @@ private:
     int in_exclusion_optimize_num;
     int k_val; // inner k loop, WARNING: this val not always meaningful @TODO here
                // only when performance_modeling_type == 1 , this val will be calculated.
-
     long long in_exclusion_optimize_redundancy;
 
     void build_loop_invariant();

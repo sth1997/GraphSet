@@ -1,22 +1,26 @@
 #pragma once
 #include "schedule_IEP.h"
 #include "vertex_set.h"
-#include <assert.h>
+#include <cassert>
+#include <cstdint>
+
+typedef int32_t v_index_t;
+typedef int64_t e_index_t ; 
 
 class Graphmpi;
 class Graph {
 public:
-    int v_cnt; // number of vertex
-    unsigned int e_cnt; // number of edge
+    v_index_t v_cnt; // number of vertex
+    e_index_t e_cnt; // number of edge
     long long tri_cnt; // number of triangle
     double max_running_time = 60 * 60 * 24; // second
 
-    int *edge; // edges
-    unsigned int *vertex; // v_i's neighbor is in edge[ vertex[i], vertex[i+1]-1]
+    v_index_t *edge; // edges
+    e_index_t *vertex; // v_i's neighbor is in edge[ vertex[i], vertex[i+1]-1]
     
     Graph() {
         v_cnt = 0;
-        e_cnt = 0;
+        e_cnt = 0LL;
         edge = nullptr;
         vertex = nullptr;
     }
@@ -26,9 +30,9 @@ public:
         if(vertex != nullptr) delete[] vertex;
     }
 
-    int intersection_size(int v1,int v2);
-    int intersection_size_mpi(int v1,int v2);
-    int intersection_size_clique(int v1,int v2);
+    int intersection_size(v_index_t v1,v_index_t v2);
+    int intersection_size_mpi(v_index_t v1,v_index_t v2);
+    int intersection_size_clique(v_index_t v1,v_index_t v2);
 
 /*    long long intersection_times_low;
     long long intersection_times_high;
@@ -50,11 +54,23 @@ public:
 
     //general pattern matching algorithm with multi thread ans multi process
     long long pattern_matching_mpi(const Schedule_IEP& schedule, int thread_count, bool clique = false);
+
+    // naive motif counting
+    void motif_counting(int pattern_size, int thread_count);
+
+    // hand optimized 3-motif counting
+    void motif_counting_3(int thread_count);
+
+
 private:
     friend Graphmpi;
     void tc_mt(long long * global_ans);
 
-    void get_edge_index(int v, unsigned int& l, unsigned int& r) const;
+    void remove_anti_edge_vertices(VertexSet& out_buf, const VertexSet& in_buf, const Schedule_IEP& sched, const VertexSet& partial_embedding, int vp);
+
+    void get_edge_index(v_index_t v, e_index_t& l, e_index_t& r) const;
+
+    void clique_matching_func(const Schedule_IEP& schedule, VertexSet* vertex_set, Bitmap* bs, long long& local_ans, int depth);
 
     void pattern_matching_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, long long& local_ans, int depth, bool clique = false);
 
@@ -62,3 +78,5 @@ private:
 
     void pattern_matching_aggressive_func_mpi(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet &tmp_set, long long& local_ans, int depth);
 };
+
+void reduce_edges_for_clique(Graph &g);

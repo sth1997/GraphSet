@@ -1,17 +1,30 @@
 #include "../include/schedule_IEP.h"
 #include "../include/graph.h"
 #include "../include/dataloader.h"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <assert.h>
+#include <cassert>
+#include <stdexcept>
 #include <algorithm>
 
-Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize ,int v_cnt, unsigned int e_cnt, long long tri_cnt)
+Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, 
+    int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize ,
+    int v_cnt, unsigned int e_cnt, long long tri_cnt,
+    bool vertex_induced)
 {
-    if( performance_modeling_type != 0 && tri_cnt == -1) {
-        printf("Fatal: Can not use performance modeling if not have triangle number of this dataset.\n");
-        fflush(stdout);
-        assert(0);
+    // if (!use_in_exclusion_optimize) {
+    //     throw std::logic_error("Schedule_IEP: must set use_in_exclusion_optimize to true.\n");
+    // }
+
+    is_vertex_induced = vertex_induced;
+    if (vertex_induced) {
+        use_in_exclusion_optimize = false;
+        in_exclusion_optimize_redundancy = 1;
+    }
+
+    if( performance_modeling_type == 1 && tri_cnt == -1) {
+        throw std::logic_error("Fatal: Can not use performance modeling if not have triangle number of this dataset.\n");
     }
 
     is_pattern_valid = true;
@@ -20,6 +33,19 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
     
     // not use performance_modeling, simply copy the adj_mat from pattern
     memcpy(adj_mat, pattern.get_adj_mat_ptr(), size * size * sizeof(int));
+
+    // The I-th loop consists of at most the intersection of i-1 VertexSet.
+    // So the max number of prefix = 0 + 1 + ... + size-1 = size * (size-1) / 2
+    int max_prefix_num = size * (size - 1) / 2;
+    father_prefix_id = new int[max_prefix_num];
+    last = new int[size];
+    next = new int[max_prefix_num];
+    break_size = new int[max_prefix_num];
+    loop_set_prefix_id = new int[size];
+    prefix = new Prefix[max_prefix_num];
+    restrict_last = new int[size];
+    restrict_next = new int[max_prefix_num];
+    restrict_index = new int[max_prefix_num];
 
     std::vector< std::pair<int,int> > best_pairs;
     best_pairs.clear();
@@ -58,30 +84,26 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
             candidate_permutations = tmp;
         }
 
-        int *best_order = new int[size];
+        std::vector<int> best_order(size);
         double min_val;
         bool have_best = false;
-        
+        const int* pattern_adj_mat = pattern.get_adj_mat_ptr();
+
+        // printf("number of candidate permutations: %ld\n", candidate_permutations.size());
 
         for(const auto &vec : candidate_permutations) {
-            int rank[size];
-            for(int i = 0; i < size; ++i) rank[vec[i]] = i;
-        
-            int* cur_adj_mat;
-            cur_adj_mat = new int[size*size];
-            for(int i = 0; i < size; ++i)
-                for(int j = 0; j < size; ++j)
-                    cur_adj_mat[INDEX(rank[i], rank[j], size)] = adj_mat[INDEX(i, j, size)];
+            copy_adj_mat_from(vec, pattern_adj_mat);
+
+            setup_optimization_info(use_in_exclusion_optimize);
 
             std::vector< std::vector< std::pair<int,int> > > restricts_vector;
-
             restricts_vector.clear();
 
             if(restricts_type == 1) {
-                restricts_generate(cur_adj_mat, restricts_vector);
+                restricts_generate(adj_mat, restricts_vector);
             }
             else {
-                Schedule_IEP schedule(cur_adj_mat, size);
+                Schedule_IEP schedule(adj_mat, size);
 
                 std::vector< std::pair<int,int> > pairs;
                 schedule.GraphZero_aggressive_optimize(pairs);
@@ -95,17 +117,20 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
                 Empty.clear();
 
                 double val;
-                if(performance_modeling_type == 1) {
-                    val = our_estimate_schedule_restrict(vec, Empty, v_cnt, e_cnt, tri_cnt);
+                if (performance_modeling_type == 1) {
+                    val = new_estimate_schedule_restrict(Empty, v_cnt, e_cnt, tri_cnt);
                 }
-                else {
-                    if(performance_modeling_type == 2) {
-                        val = GraphZero_estimate_schedule_restrict(vec, Empty, v_cnt, e_cnt);
-                    }
-                    else {
-                        val = Naive_estimate_schedule_restrict(vec, Empty, v_cnt, e_cnt);
-                    }
-                }
+                // if(performance_modeling_type == 1) {
+                //     val = our_estimate_schedule_restrict(vec, Empty, v_cnt, e_cnt, tri_cnt);
+                // }
+                // else {
+                //     if(performance_modeling_type == 2) {
+                //         val = GraphZero_estimate_schedule_restrict(vec, Empty, v_cnt, e_cnt);
+                //     }
+                //     else {
+                //         val = Naive_estimate_schedule_restrict(vec, Empty, v_cnt, e_cnt);
+                //     }
+                // }
 
                 if(have_best == false || val < min_val) {
                     have_best = true;
@@ -118,17 +143,20 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
 
             for(const auto& pairs : restricts_vector) {
                 double val;
-                if(performance_modeling_type == 1) {
-                    val = our_estimate_schedule_restrict(vec, pairs, v_cnt, e_cnt, tri_cnt);
+                if (performance_modeling_type == 1) {
+                    val = new_estimate_schedule_restrict(pairs, v_cnt, e_cnt, tri_cnt);
                 }
-                else {
-                    if(performance_modeling_type == 2) {
-                        val = GraphZero_estimate_schedule_restrict(vec, pairs, v_cnt, e_cnt);
-                    }
-                    else {
-                        val = Naive_estimate_schedule_restrict(vec, pairs, v_cnt, e_cnt);
-                    }
-                }
+                // if(performance_modeling_type == 1) {
+                //     val = our_estimate_schedule_restrict(vec, pairs, v_cnt, e_cnt, tri_cnt);
+                // }
+                // else {
+                //     if(performance_modeling_type == 2) {
+                //         val = GraphZero_estimate_schedule_restrict(vec, pairs, v_cnt, e_cnt);
+                //     }
+                //     else {
+                //         val = Naive_estimate_schedule_restrict(vec, pairs, v_cnt, e_cnt);
+                //     }
+                // }
 
                 if(have_best == false || val < min_val) {
                     have_best = true;
@@ -140,19 +168,12 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
 
         }
 
-        int rank[size];
-        for(int i = 0; i < size; ++i) rank[best_order[i]] = i;
-
-        const int* pattern_adj_mat = pattern.get_adj_mat_ptr();
-        for(int i = 0; i < size; ++i)
-            for(int j = 0; j < size; ++j)
-                adj_mat[INDEX(rank[i], rank[j], size)] = pattern_adj_mat[INDEX(i, j, size)]; 
-        delete[] best_order;
+        copy_adj_mat_from(best_order, pattern_adj_mat);
     }
     else {
-        std::vector< int > I;
-        I.clear();
-        for(int i = 0; i < size; ++i) I.push_back(i);
+        // std::vector< int > I;
+        // I.clear();
+        // for(int i = 0; i < size; ++i) I.push_back(i);
 
         std::vector< std::vector< std::pair<int,int> > > restricts_vector;
         restricts_vector.clear();
@@ -176,83 +197,47 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, int p
 
         for(const auto& pairs : restricts_vector) {
             double val;
-            if(restricts_type == 1) {
-                val = our_estimate_schedule_restrict(I, pairs, v_cnt, e_cnt, tri_cnt);
+            // if(restricts_type == 1) {
+            //     val = our_estimate_schedule_restrict(I, pairs, v_cnt, e_cnt, tri_cnt);
+            // }
+            // else {
+            //     val = GraphZero_estimate_schedule_restrict(I, pairs, v_cnt, e_cnt);
+            // }
+            if (restricts_type) {
+                val = new_estimate_schedule_restrict(pairs, v_cnt, e_cnt, tri_cnt);
             }
-            else {
-                val = GraphZero_estimate_schedule_restrict(I, pairs, v_cnt, e_cnt);
-            }
+
             if(have_best == false || val < min_val) {
                 have_best = true;
                 min_val = val;
                 best_pairs = pairs;
             }
         }
-
     }
 
-    if( use_in_exclusion_optimize) {
-        std::vector<int> I;
-        I.clear();
-        for(int i = 0; i < size; ++i) I.push_back(i);
-        in_exclusion_optimize_num = get_vec_optimize_num(I);
-        if( in_exclusion_optimize_num <= 1) {
-            printf("Can not use in_exclusion_optimize with this schedule\n");
-            in_exclusion_optimize_num = 0;
-        }
-        else {
-            printf("use in_exclusion_optimize with size %d\n", in_exclusion_optimize_num);
-            init_in_exclusion_optimize();
-        }
-    }
-    else {
-            in_exclusion_optimize_num = 0;
+    if (!check_connectivity()) {
+        is_pattern_valid = false;
+        throw std::runtime_error("pattern is not connected");
     }
 
-    // The I-th loop consists of at most the intersection of i-1 VertexSet.
-    // So the max number of prefix = 0 + 1 + ... + size-1 = size * (size-1) / 2
-    int max_prefix_num = size * (size - 1) / 2;
-    father_prefix_id = new int[max_prefix_num];
-    last = new int[size];
-    next = new int[max_prefix_num];
-    break_size = new int[max_prefix_num];
-    loop_set_prefix_id = new int[size];
-    prefix = new Prefix[max_prefix_num];
-    restrict_last = new int[size];
-    restrict_next = new int[max_prefix_num];
-    restrict_index = new int[max_prefix_num];
-    memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
-    memset(last, -1, size * sizeof(int));
-    memset(next, -1, max_prefix_num * sizeof(int));
-    memset(break_size, -1, max_prefix_num * sizeof(int));
-    memset(restrict_last, -1, size * sizeof(int));
-    memset(restrict_next, -1, max_prefix_num * sizeof(int));
+    setup_optimization_info(use_in_exclusion_optimize);
 
-    total_prefix_num = 0;
-    total_restrict_num = 0;
-
-    // The I-th vertex must connect with at least one vertex from 0 to i-1.
-    for (int i = 1; i < size; ++i)
-    {
-        bool valid = false;
-        for (int j = 0; j < i; ++j)
-            if (adj_mat[INDEX(i, j, size)])
-            {
-                valid = true;
-                break;
-            }
-        if (valid == false)
-        {
-            //Invalid Schedule_IEP
-            is_pattern_valid = false;
-            return;
-        }
-    }
-
-    build_loop_invariant(in_exclusion_optimize_num);
     if( restricts_type != 0) add_restrict(best_pairs);
 
     set_in_exclusion_optimize_redundancy();
+    printf("loop_set_prefix_ids:");
+    for (int i = 0; i < size; ++i)
+        printf(" %d", loop_set_prefix_id[i]);
+    printf("\nlast:");
+    for (int i = 0; i < size; ++i)
+        printf(" %d", last[i]);
+    printf("\nfather_prefix_id:");
+    for (int i = 0; i < size; ++i)
+        printf(" %d", father_prefix_id[i]);
+    printf("\nrestrictions:");
+    for (auto &pair : restrict_pair)
+        printf(" (%d, %d)", pair.first, pair.second);
+    printf("\n");
 }
 
 Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
@@ -285,22 +270,8 @@ Schedule_IEP::Schedule_IEP(const int* _adj_mat, int _size)
     total_restrict_num = 0;
     in_exclusion_optimize_num = 0;
 
-    // The I-th vertex must connect with at least one vertex from 0 to i-1.
-    for (int i = 1; i < size; ++i)
-    {
-        bool valid = false;
-        for (int j = 0; j < i; ++j)
-            if (adj_mat[INDEX(i, j, size)])
-            {
-                valid = true;
-                break;
-            }
-        if (valid == false)
-        {
-            printf("invalid schedule!\n");
-            assert(0);
-        }
-    }
+    if (!check_connectivity())
+        throw std::runtime_error("pattern is not connected");
 
     build_loop_invariant();
 
@@ -318,6 +289,169 @@ Schedule_IEP::~Schedule_IEP()
     delete[] restrict_last;
     delete[] restrict_next;
     delete[] restrict_index;
+}
+
+// note: this function no longer takes `order` as a parameter, instead, it uses `this->adj_mat` directly
+double Schedule_IEP::new_estimate_schedule_restrict(const std::vector<std::pair<int, int>>& pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt)
+{
+    int max_degree = get_max_degree();
+
+    double p_size[max_degree];
+    double pp_size[max_degree];
+
+    double p0 = e_cnt * 1.0 / v_cnt / v_cnt;
+    double p1 = tri_cnt * 1.0 * v_cnt / e_cnt / e_cnt; 
+    
+    p_size[0] = v_cnt;
+    for(int i = 1;i < max_degree; ++i) {
+        p_size[i] = p_size[i-1] * p0;
+    }
+    pp_size[0] = 1;
+    for(int i = 1; i < max_degree; ++i) {
+        pp_size[i] = pp_size[i-1] * p1;
+    }
+
+    std::vector< std::pair<int,int> > restricts = pairs;
+    int restricts_size = restricts.size();
+    std::sort(restricts.begin(), restricts.end());
+
+    double sum[restricts_size];
+    for(int i = 0; i < restricts_size; ++i) sum[i] = 0;
+    
+    int tmp[size];
+    for(int i = 0; i < size; ++i) tmp[i] = i;
+    do {
+        for(int i = 0; i < restricts_size; ++i)
+            if(tmp[restricts[i].first] > tmp[restricts[i].second]) {
+                sum[i] += 1;
+            }
+            else break;
+    } while( std::next_permutation(tmp, tmp + size));
+    
+    double total = 1;
+    for(int i = 2; i <= size; ++i) total *= i;
+    for(int i = 0; i < restricts_size; ++i)
+        sum[i] = sum[i] /total;
+    for(int i = restricts_size - 1; i > 0; --i)
+        sum[i] /= sum[i - 1];
+
+    std::vector<int> invariant_size[size];
+    for(int i = 0; i < size; ++i) invariant_size[i].clear();
+    
+    double val = 1;
+    for(int i = size - in_exclusion_optimize_num - 1; i >= 0; --i) {
+        int cnt_forward = 0;
+        for(int j = 0; j < i; ++j)
+            if(adj_mat[INDEX(j, i, size)])
+                ++cnt_forward;
+
+        int c = cnt_forward;
+        for(int j = i - 1; j >= 0; --j)
+            if(adj_mat[INDEX(j, i, size)])
+                invariant_size[j].push_back(c--);
+
+        for(int j = 0; j < invariant_size[i].size(); ++j)
+            if(invariant_size[i][j] > 1)
+                val += p_size[1] * pp_size[invariant_size[i][j] - 2] * std::log2(p_size[1]);
+                // val += p_size[1] * pp_size[invariant_size[i][j] - 2] + p_size[1];
+        // val += 1;
+        for(int j = 0; j < restricts_size; ++j)
+            if(restricts[j].second == i)
+                val *=  sum[j];
+        if( i ) {
+            val *= p_size[1] * pp_size[ cnt_forward - 1 ];
+        }
+        else {
+            val *= p_size[0];
+        }
+    }
+
+    return val;
+}
+
+void Schedule_IEP::copy_adj_mat_from(const std::vector<int>& vec, const int* src_adj_mat)
+{
+    int rank[size];
+    for (int i = 0; i < size; ++i) rank[vec[i]] = i;
+    for (int i = 0; i < size; ++i)
+        for (int j = 0; j < size; ++j)
+            adj_mat[INDEX(rank[i], rank[j], size)] = src_adj_mat[INDEX(i, j, size)];
+}
+
+void Schedule_IEP::update_loop_invariant_for_fsm() {
+    int max_prefix_num = size * (size - 1) / 2;
+    memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
+    memset(last, -1, size * sizeof(int));
+    memset(next, -1, max_prefix_num * sizeof(int));
+    total_prefix_num = 0;
+    prefix_target = new int[max_prefix_num];
+    memset(prefix_target, -1, max_prefix_num * sizeof(int));
+
+    loop_set_prefix_id[0] = -1;
+    for (int i = 1; i < size; ++i) //为每个loop_set独立地建立prefix，因为每个点的label不同（暂不考虑相同的情况），所以不同点的loop_set的prefix没有关系
+    {
+        int last_prefix = -1;
+        for (int j = 0; j < i; ++j)
+            if (adj_mat[INDEX(i, j, size)]) {
+                int father = last_prefix;
+                father_prefix_id[total_prefix_num] = father;
+                next[total_prefix_num] = last[j];
+                last[j] = total_prefix_num;
+                prefix_target[total_prefix_num] = i;
+                last_prefix = total_prefix_num++;
+            }
+        loop_set_prefix_id[i] = last_prefix;
+    }
+    assert(total_prefix_num <= max_prefix_num);
+}
+
+void Schedule_IEP::setup_optimization_info(bool use_in_exclusion_optimize)
+{
+    int max_prefix_num = size * (size - 1) / 2;
+    memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
+    memset(last, -1, size * sizeof(int));
+    memset(next, -1, max_prefix_num * sizeof(int));
+    memset(break_size, -1, max_prefix_num * sizeof(int));
+    memset(restrict_last, -1, size * sizeof(int));
+    memset(restrict_next, -1, max_prefix_num * sizeof(int));
+
+    total_prefix_num = 0;
+    total_restrict_num = 0;
+
+    if (use_in_exclusion_optimize) {
+        std::vector<int> I;
+        I.clear();
+        for (int i = 0; i < size; ++i) I.push_back(i);
+        in_exclusion_optimize_num = get_vec_optimize_num(I);
+        if (in_exclusion_optimize_num <= 1) {
+            // printf("Can not use in_exclusion_optimize with this schedule\n");
+            in_exclusion_optimize_num = 0;
+        } else {
+            // printf("use in_exclusion_optimize with size %d\n", in_exclusion_optimize_num);
+            init_in_exclusion_optimize();
+        }
+    } else {
+        in_exclusion_optimize_num = 0;
+    }
+
+    build_loop_invariant(in_exclusion_optimize_num);
+}
+
+bool Schedule_IEP::check_connectivity() const
+{
+    // The I-th vertex must connect with at least one vertex from 0 to i-1.
+    for (int i = 1; i < size; ++i) {
+        bool valid = false;
+        for (int j = 0; j < i; ++j) {
+            if (adj_mat[INDEX(i, j, size)]) {
+                valid = true;
+                break;
+            }
+        }
+        if (!valid)
+            return false;
+    }
+    return true;
 }
 
 int Schedule_IEP::get_max_degree() const{
@@ -446,14 +580,16 @@ void Schedule_IEP::build_loop_invariant(int in_exclusion_optimize_num)
             }
         }
 
-        for(int i = 0; i < in_exclusion_optimize_vertex_flag.size(); ++i)
-            if(in_exclusion_optimize_vertex_flag[i]){
+        for (int i = 0; i < in_exclusion_optimize_vertex_flag.size(); ++i) {
+            if (in_exclusion_optimize_vertex_flag[i] && i < in_exclusion_optimize_vertex_id.size()) {
                 int prefix_id = in_exclusion_optimize_vertex_id[i];
+                // printf("prefix_id=%d i=%d in_exclusion_optimize_vertex_id.size()=%ld\n", prefix_id, i, in_exclusion_optimize_vertex_id.size());
                 if(prefix[prefix_id].get_has_child() == false)
                     prefix[prefix_id].set_only_need_size(true);
             }
 
         printf("total prefix num = %d\n", total_prefix_num);
+        }
     }
 
     for(int i = 0; i < size; ++i) 
@@ -1608,7 +1744,8 @@ int Schedule_IEP::get_vec_optimize_num(const std::vector<int> &vec) {
     }
     if( !is_valid) return -1;
 
-    for(int k = 2; k <= size; ++k) {
+    //for(int k = 2; k <= size; ++k) {
+    for(int k = 2; k <= size - 2; ++k) { //之所以k最大可能为size - 2，是因为第一次取了一条边而不是一个点，所以前两个点都不可能在IEP内
         bool flag = true;
         for(int i = size - k + 1; i < size; ++i)
             if(adj_mat[INDEX(vec[size - k], vec[i], size)]) {
@@ -1617,8 +1754,7 @@ int Schedule_IEP::get_vec_optimize_num(const std::vector<int> &vec) {
             }
         if(flag == false) return k - 1;
     }
-    assert(0);
-    return -1;
+    return size - 2;
 }
 
 double Schedule_IEP::our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt) {

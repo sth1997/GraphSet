@@ -362,6 +362,33 @@ int Schedule::find_father_prefix(int data_size, const int* data)
     return total_prefix_num - 1;
 }
 
+void Schedule::update_loop_invariant_for_fsm() {
+    int max_prefix_num = size * (size - 1) / 2;
+    memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
+    memset(last, -1, size * sizeof(int));
+    memset(next, -1, max_prefix_num * sizeof(int));
+    total_prefix_num = 0;
+    prefix_target = new int[max_prefix_num];
+    memset(prefix_target, -1, max_prefix_num * sizeof(int));
+
+    loop_set_prefix_id[0] = -1;
+    for (int i = 1; i < size; ++i) //为每个loop_set独立地建立prefix，因为每个点的label不同（暂不考虑相同的情况），所以不同点的loop_set的prefix没有关系
+    {
+        int last_prefix = -1;
+        for (int j = 0; j < i; ++j)
+            if (adj_mat[INDEX(i, j, size)]) {
+                int father = last_prefix;
+                father_prefix_id[total_prefix_num] = father;
+                next[total_prefix_num] = last[j];
+                last[j] = total_prefix_num;
+                prefix_target[total_prefix_num] = i;
+                last_prefix = total_prefix_num++;
+            }
+        loop_set_prefix_id[i] = last_prefix;
+    }
+    assert(total_prefix_num <= max_prefix_num);
+}
+
 void Schedule::add_restrict(const std::vector< std::pair<int, int> >& restricts)
 {
     restrict_pair = restricts;

@@ -1,12 +1,13 @@
 /**
- * 这个版本里面没有细粒度计时。有计时的在gpu_graph_with_timer.cu里面。
- * 而且计时的方式与zms版本略有区别。
- */
+* 这个版本里面没有细粒度计时。有计时的在gpu_graph_with_timer.cu里面。
+* 而且计时的方式与zms版本略有区别。
+*/
 #include <graph.h>
 #include <dataloader.h>
 #include <vertex_set.h>
 #include <common.h>
 #include <schedule_IEP.h>
+#include <motif_generator.h>
 
 #include <cassert>
 #include <cstring>
@@ -55,11 +56,15 @@ TimeInterval tmpTime;
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
+if (code != cudaSuccess) 
    if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
+if (code != cudaSuccess) 
+   if (code != cudaSuccess) 
+if (code != cudaSuccess) 
+{
+    fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+    if (abort) exit(code);
+}
 }
 
 #define get_edge_index(v, l, r) do { \
@@ -92,6 +97,33 @@ struct GPUGroupDim0 {
 
 class GPUSchedule {
 public:
+    /*
+    __host__ void transform_in_exclusion_optimize_group_val(const Schedule& schedule)
+    {
+        // @todo 注意当容斥优化无法使用时，内存分配会失败。需要修正 
+        int in_exclusion_optimize_num = schedule.get_in_exclusion_optimize_num();
+        gpuErrchk( cudaMallocManaged((void**)&in_exclusion_optimize_val, sizeof(int) * schedule.in_exclusion_optimize_val.size()));
+        for (auto val : schedule.in_exclusion_optimize_val)
+            in_exclusion_optimize_val[in_exclusion_optimize_val_size++] = val;
+        in_exclusion_optimize_val_size = schedule.in_exclusion_optimize_val.size();
+        
+        //这部分有太多重复访存操作了（比如循环中的.data[i].data[j]，直接用一个tmp指针就行了），之后考虑优化掉（不过感觉O3会帮忙自动优化的）
+        in_exclusion_optimize_group.size = schedule.in_exclusion_optimize_group.size();
+        gpuErrchk( cudaMallocManaged((void**)&in_exclusion_optimize_group.data, sizeof(GPUGroupDim1) * in_exclusion_optimize_group.size));
+        for (int i = 0; i < schedule.in_exclusion_optimize_group.size(); ++i)
+        {
+            in_exclusion_optimize_group.data[i].size = schedule.in_exclusion_optimize_group[i].size();
+            gpuErrchk( cudaMallocManaged((void**)&in_exclusion_optimize_group.data[i].data, sizeof(GPUGroupDim2) * in_exclusion_optimize_group.data[i].size));
+            for (int j = 0; j < schedule.in_exclusion_optimize_group[i].size(); ++j)
+            {
+                in_exclusion_optimize_group.data[i].data[j].size = schedule.in_exclusion_optimize_group[i][j].size();
+                gpuErrchk( cudaMallocManaged((void**)&in_exclusion_optimize_group.data[i].data[j].data, sizeof(int) * in_exclusion_optimize_group.data[i].data[j].size));
+                for (int k = 0; k < schedule.in_exclusion_optimize_group[i][j].size(); ++k)
+                    in_exclusion_optimize_group.data[i].data[j].data[k] = schedule.in_exclusion_optimize_group[i][j][k];
+            }
+        }
+    }
+    */
 
     inline __device__ int get_total_prefix_num() const { return total_prefix_num;}
     inline __device__ int get_basic_prefix_num() const { return basic_prefix_num;}
@@ -188,6 +220,33 @@ public:
             data[i] = input_data[i];
         __threadfence_block();
     }
+    __device__ void build_vertex_set(const GPUSchedule* schedule, const GPUVertexSet* vertex_set, uint32_t* input_data, uint32_t input_size, int prefix_id)
+    {
+        int father_id = schedule->get_father_prefix_id(prefix_id);
+        if (father_id == -1)
+        {
+            if (threadIdx.x % THREADS_PER_WARP == 0)
+                init(input_size, input_data);
+            __threadfence_block();
+        }
+        else
+        {
+            bool only_need_size = schedule->only_need_size[prefix_id];
+            if(only_need_size) {
+                if (threadIdx.x % THREADS_PER_WARP == 0)
+                    init(input_size, input_data);
+                __threadfence_block();
+                if(input_size > vertex_set[father_id].get_size())
+                    this->size -= unordered_subtraction_size(*this, vertex_set[father_id], -1);
+                else
+                    this->size = vertex_set[father_id].get_size() - unordered_subtraction_size(vertex_set[father_id], *this, -1);
+            }
+            else {
+                intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
+            }
+        }
+    }
+
 
     __device__ void intersection_with(const GPUVertexSet& other)
     {
@@ -203,16 +262,24 @@ public:
 };
 
 __device__ unsigned long long dev_sum = 0;
-__device__ unsigned int dev_cur_edge = 0;
+__device__ unsigned int dev_cur_edge = 0; //用int表示边之后在大图上一定会出问题！
 
 /**
- * search-based intersection
+* search-based intersection
+* 
  * 
- * returns the size of the intersection set
+* 
  * 
- * @note：a和b并不是地位相等的。如果要进行in-place操作，请把输入放在a而不是b。
- * @todo：shared memory缓存优化
- */
+* 
+* returns the size of the intersection set
+* 
+ * 
+* 
+ * 
+* 
+* @note：a和b并不是地位相等的。如果要进行in-place操作，请把输入放在a而不是b。
+* @todo：shared memory缓存优化
+*/
 __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint32_t* b, uint32_t na, uint32_t nb)
 {
     __shared__ uint32_t block_out_offset[THREADS_PER_BLOCK];
@@ -320,10 +387,10 @@ __device__ uint32_t do_intersection(uint32_t* out, const uint32_t* a, const uint
 
 
 /**
- * wrapper of search based intersection `do_intersection`
- * 
- * 注意：不能进行in-place操作。若想原地操作则应当把交换去掉。
- */
+* wrapper of search based intersection `do_intersection`
+*
+* 注意：不能进行in-place操作。若想原地操作则应当把交换去掉。
+*/
 __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size)
 {
     // make sure ln <= rn
@@ -332,8 +399,8 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
         swap(lbases, rbases);
     }
     /**
-     * @todo 考虑ln < rn <= 32时，每个线程在lbases里面找rbases的一个元素可能会更快
-     */
+    * @todo 考虑ln < rn <= 32时，每个线程在lbases里面找rbases的一个元素可能会更快
+    */
 
     uint32_t intersection_size = do_intersection(tmp, lbases, rbases, ln, rn);
 
@@ -343,10 +410,10 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
 }
 
 /**
- * @brief calculate | set0 - set1 |
- * @note set0 should be an ordered set, while set1 can be unordered
- * @todo rename 'subtraction' => 'difference'
- */
+* @brief calculate | set0 - set1 |
+* @note set0 should be an ordered set, while set1 can be unordered
+* @todo rename 'subtraction' => 'difference'
+*/
 __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, int size_after_restrict = -1)
 {
     __shared__ int block_ret[WARPS_PER_BLOCK];
@@ -449,3 +516,17 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     ans1 = ret1;
     ans2 = ret2;
 }*/
+
+__device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min_vertex)
+{
+    int l = 0, r = loop_size - 1;
+    while (l <= r)
+    {
+        int mid = r - ((r - l) >> 1);
+        if (loop_data_ptr[mid] < min_vertex)
+            l = mid + 1;
+        else
+            r = mid - 1;
+    }
+    return l;
+}
