@@ -18,10 +18,8 @@ int main(int argc,char *argv[]) {
         printf("usage: %s graph_file pattern_size\n", argv[0]);
         return 0;
     }
-
-    DataType type = DataType::Patents;
-
-    bool ok = D.load_data(g, type, argv[1]);
+    
+    bool ok = D.fast_load(g, argv[1]);
     if(!ok) { printf("Load data failed\n"); return 0; }
 
     printf("Load data success!\n");
