@@ -46,13 +46,54 @@ make -j
 
 ## Usage
 
+in `build/` directory:
+
 ### Pattern Matching(include Clique Counting)
 
-#### Code Generation
+GPU:
+
+`./bin/gpu_graph <graph_file> <pattern_size> <pattern_matrix_string>`
+
+CPU:
+
+`./bin/pattern_matching_test <graph_file> <pattern_size> <pattern_matrix_string>`
+
+#### Clique Counting
+
+GPU:
+
+`./bin/gpu_clique <graph_file> <clique_size>`
+
+CPU:
+
+`./bin/clique_test <graph_file> <clique_size>`
+
+#### Use code generation
+
+
 
 ### Frequent Subgraph Mining
 
+CPU:
+
+`./bin/fsm_test <labelled_graph_file> <max_edge> <min_support>`
+
+GPU:
+
+`./bin/gpu_fsm <labelled_graph_file> <max_edge> <min_support>` 
+
 ### Motif Counting
+
+CPU:
+
+`./bin/motif_counting_test <graph_file> <pattern_size>`
+
+GPU:
+
+`./bin/gpu_mc <graph_file> <pattern_size>`
+
+`./bin/mc3 <graph_file>` (for 3-motif counting)
+
 
 ## Input Graph
 

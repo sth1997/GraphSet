@@ -1254,11 +1254,11 @@ int main(int argc,char *argv[]) {
     // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
     // const char *pattern_str = "0111111101111111011001110100111100011000001100000"; // 7 p6
 
-    int pattern_size = 3;
-    const char *pattern_str = "011000000"; // 4 - clique
+    // int pattern_size = 3;
+    // const char *pattern_str = "011000000"; // 4 - clique
 
-    // int pattern_size = atoi(argv[2]);
-    // const char* pattern_str= argv[3];
+    int pattern_size = atoi(argv[2]);
+    const char* pattern_str= argv[3];
 
     Pattern p(pattern_size, pattern_str);
     /*

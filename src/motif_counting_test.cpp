@@ -27,8 +27,10 @@ int main(int argc,char *argv[]) {
     int size = atoi(argv[2]);
 
     int thread_count = 16;
-    g->motif_counting(size, thread_count);
-    g->motif_counting_3(thread_count);
+    if(size == 3)
+        g->motif_counting_3(thread_count);
+    else
+        g->motif_counting(size, thread_count);
     delete g;
     return 0;
 }
