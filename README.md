@@ -48,7 +48,9 @@ make -j
 
 in `build/` directory:
 
-### Pattern Matching(include Clique Counting)
+### Pattern Matching
+
+#### End-to-End
 
 GPU:
 
@@ -58,7 +60,13 @@ CPU:
 
 `./bin/pattern_matching_test <graph_file> <pattern_size> <pattern_matrix_string>`
 
-#### Clique Counting
+
+#### Code Generation
+
+
+Although it is convenient to use **end-to-end** pattern matching directly, its performance will be worse than that of **code generation**. We are refactoring the code generation method and will update them later.
+
+### Clique Counting
 
 GPU:
 
@@ -67,8 +75,6 @@ GPU:
 CPU:
 
 `./bin/clique_test <graph_file> <clique_size>`
-
-#### Use code generation
 
 
 
