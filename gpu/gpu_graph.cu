@@ -1207,35 +1207,35 @@ int main(int argc,char *argv[]) {
         return 0;
     }
 
-    bool binary_input = false;
-    if (argc >= 4)
-        binary_input = (strcmp(argv[3], "binary") == 0);
+    // bool binary_input = false;
+    // if (argc >= 4)
+    //     binary_input = (strcmp(argv[3], "binary") == 0);
 
-    DataType my_type;
-    if (argc >= 3) {
-        GetDataType(my_type, argv[1]);
+    // DataType my_type;
+    // if (argc >= 3) {
+    //     GetDataType(my_type, argv[1]);
 
-        if (my_type == DataType::Invalid) {
-            printf("Dataset not found!\n");
-            return 0;
-        }
-    }
+    //     if (my_type == DataType::Invalid) {
+    //         printf("Dataset not found!\n");
+    //         return 0;
+    //     }
+    // }
 
     using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
     bool ok;
 
-    if (argc >= 3) {
-        // 注：load_data的第四个参数用于指定是否读取二进制文件输入，默认为false
-        ok = D.load_data(g, my_type, argv[2], binary_input);
-    } else {
-        ok = D.fast_load(g, argv[1]);
-    }
+    // if (argc >= 3) {
+    //     // 注：load_data的第四个参数用于指定是否读取二进制文件输入，默认为false
+    //     ok = D.load_data(g, my_type, argv[2], binary_input);
+    // } else {
+    //     ok = D.fast_load(g, argv[1]);
+    // }
 
 
         
-    // ok = D.fast_load(g, argv[1]);
+    ok = D.fast_load(g, argv[1]);
 
     if (!ok) {
         printf("data load failure :-(\n");
