@@ -27,6 +27,18 @@ ADD_EXECUTABLE(gpu_fsm gpu_fsm.cu)
 SET_PROPERTY(TARGET gpu_fsm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_fsm graph_mining)
 
+ADD_EXECUTABLE(gpu_test_intersect_1 gpu_test_intersect_1.cu)
+SET_PROPERTY(TARGET gpu_test_intersect_1 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_test_intersect_1 graph_mining)
+
+ADD_EXECUTABLE(gpu_test_intersect_2 gpu_test_intersect_2.cu)
+SET_PROPERTY(TARGET gpu_test_intersect_2 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_test_intersect_2 graph_mining)
+
+ADD_EXECUTABLE(gpu_test_intersect_3 gpu_test_intersect_3.cu)
+SET_PROPERTY(TARGET gpu_test_intersect_3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_test_intersect_3 graph_mining)
+
 
 ADD_EXECUTABLE(gpu_fsm_omp gpu_fsm_omp.cu)
 SET_PROPERTY(TARGET gpu_fsm_omp PROPERTY CUDA_SEPARABLE_COMPILATION ON)
