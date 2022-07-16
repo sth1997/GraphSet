@@ -14,7 +14,7 @@ TEST(pattern_matching_test, pattern_matching_patents_Cycle6Tri) {
     DataLoader D;
     
     std::string type = "Patents";
-    std::string path = "/home/zms/patents_input";
+    std::string path = "/home/cqq/data/patents_input";
     DataType my_type;
     if(type == "Patents") my_type = DataType::Patents;
     else {
@@ -31,7 +31,7 @@ TEST(pattern_matching_test, pattern_matching_patents_Cycle6Tri) {
     bool is_pattern_valid = false;
     int performance_modeling_type = 0;
     bool use_in_exclusion_optimize = false;
-    Schedule schedule(pattern, is_pattern_valid, performance_modeling_type, use_in_exclusion_optimize, g->v_cnt, g->e_cnt);
+    Schedule_IEP schedule(pattern, is_pattern_valid, performance_modeling_type, 0, use_in_exclusion_optimize, g->v_cnt, g->e_cnt);
     ASSERT_EQ(is_pattern_valid, true);
 
     std::vector< std::pair<int,int> > pairs;
@@ -53,6 +53,8 @@ TEST(pattern_matching_test, pattern_matching_patents_Cycle6Tri) {
     t2 = get_wall_time();
 
     printf("ans: %lld time: %.6lf\n", ans, t2 - t1);
+
+    ASSERT_EQ(ans, 19186236035LL);
 
     delete g;
 }

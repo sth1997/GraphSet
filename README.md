@@ -34,6 +34,15 @@ spack load --first cmake@3.21.4
 spack load openmpi
 ```
 
+### Submodules
+
+We add GoogleTest as submodule to perform unit tests:
+
++ please add `--recursive` while cloning `git clone https://github.com/sth1997/GraphIndor.git --recursive`,
+
++ or use `git submodule init`, `git submodule update` after clone.
+
+
 ## Build
 
 In the root directory of the project:
@@ -42,6 +51,14 @@ In the root directory of the project:
 mkdir build && cd build
 cmake ..
 make -j
+```
+
+## test 
+
+After build stage, in the root directory of the project:
+
+```bash
+cd build/test && ctest
 ```
 
 ## Usage

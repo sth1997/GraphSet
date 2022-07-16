@@ -3,6 +3,7 @@
 #include "../include/vertex_set.h"
 #include "../include/common.h"
 #include "../include/motif_generator.h"
+#include "timeinterval.h"
 #include <cstdio>
 #include <chrono>
 #include <sys/time.h>
@@ -617,27 +618,6 @@ void reduce_edges_for_clique(Graph &g) {
     erase_edge(g);
     printf("Finish reduce.\n");
 }
-
-class TimeInterval{
-public:
-    TimeInterval(){
-        check();
-    }
-
-    void check(){
-        gettimeofday(&tp, NULL);
-    }
-
-    void print(const char* title){
-        struct timeval tp_end, tp_res;
-        gettimeofday(&tp_end, NULL);
-        timersub(&tp_end, &tp, &tp_res);
-        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
-    }
-private:
-    struct timeval tp;
-};
-
 
 void Graph::motif_counting(int pattern_size, int thread_count) {
 

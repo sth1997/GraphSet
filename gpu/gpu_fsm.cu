@@ -13,6 +13,10 @@
 
 #include <sys/time.h>
 
+#include <timeinterval.h>
+#include "utils.cuh"
+#include "gpu_schedule.cuh"
+
 constexpr int THREADS_PER_BLOCK = 128;
 //constexpr int THREADS_PER_BLOCK = 32;
 constexpr int THREADS_PER_WARP = 32;
@@ -25,106 +29,12 @@ constexpr int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 __device__ unsigned long long dev_sum = 0;
 __device__ unsigned int dev_cur_labeled_pattern = 0;
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
 
-#define get_edge_index(v, label, l, r) do { \
-    int index = v * l_cnt + label; \
-    l = labeled_vertex[index]; \
-    r = labeled_vertex[index+ 1]; \
-} while(0)
 
-template <typename T>
-__device__ inline void swap(T& a, T& b)
-{
-    T t(std::move(a));
-    a = std::move(b);
-    b = std::move(t);
-}
-
-class TimeInterval{
-public:
-    TimeInterval(){
-        check();
-    }
-
-    void check(){
-        gettimeofday(&tp, NULL);
-    }
-
-    void print(const char* title){
-        struct timeval tp_end, tp_res;
-        gettimeofday(&tp_end, NULL);
-        timersub(&tp_end, &tp, &tp_res);
-        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
-    }
-private:
-    struct timeval tp;
-};
 
 TimeInterval allTime;
 TimeInterval tmpTime;
 
-class GPUSchedule {
-public:
-    inline __device__ int get_total_prefix_num() const { return total_prefix_num;}
-    //inline __device__ int get_basic_prefix_num() const { return basic_prefix_num;}
-    inline __device__ int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
-    inline __device__ int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
-    inline __device__ int get_size() const { return size;}
-    inline __device__ int get_last(int i) const { return last[i];}
-    inline __device__ int get_next(int i) const { return next[i];}
-    inline __device__ int get_prefix_target(int i) const {return prefix_target[i];}
-    //inline __device__ int get_break_size(int i) const { return break_size[i];}
-    //inline __device__ int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
-    // inline __device__ int get_total_restrict_num() const { return total_restrict_num;}
-    // inline __device__ int get_restrict_last(int i) const { return restrict_last[i];}
-    // inline __device__ int get_restrict_next(int i) const { return restrict_next[i];}
-    // inline __device__ int get_restrict_index(int i) const { return restrict_index[i];}
-    //inline __device__ int get_k_val() const { return k_val;} // see below (the k_val's definition line) before using this function
-
-    //int* adj_mat;
-    int* father_prefix_id;
-    int* last;
-    int* next;
-    //int* break_size;
-    int* loop_set_prefix_id;
-    int* prefix_target;
-    // int* restrict_last;
-    // int* restrict_next;
-    // int* restrict_index;
-    //bool* only_need_size;
-    //int* in_exclusion_optimize_val;
-    //GPUGroupDim0 in_exclusion_optimize_group;
-    //int in_exclusion_optimize_val_size;
-    int size;
-    int total_prefix_num;
-    //int basic_prefix_num;
-    //int total_restrict_num;
-    //int in_exclusion_optimize_num;
-    //int k_val;
-
-    // int in_exclusion_optimize_vertex_id_size;
-    // int* in_exclusion_optimize_vertex_id;
-    // bool* in_exclusion_optimize_vertex_flag;
-    // int* in_exclusion_optimize_vertex_coef;
-    
-    // int in_exclusion_optimize_array_size;
-    // int* in_exclusion_optimize_coef;
-    // bool* in_exclusion_optimize_flag;
-    // int* in_exclusion_optimize_ans_pos;
-
-    //uint32_t ans_array_offset;
-    uint32_t p_label_offset;
-    int max_edge;
-};
 
 // __device__ void intersection1(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
 __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
@@ -443,7 +353,7 @@ __device__ bool GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
         {
             unsigned int l, r;
             int target = schedule->get_prefix_target(prefix_id);
-            get_edge_index(v, p_label[target], l, r);
+            get_labeled_edge_index(v, p_label[target], l, r);
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
             if (vertex_set[prefix_id].get_size() == 0) {
                 is_zero = true;
@@ -557,7 +467,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
                 for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
                     unsigned int l, r;
                     int target = schedule->get_prefix_target(prefix_id);
-                    get_edge_index(vertex, p_label[target], l, r);
+                    get_labeled_edge_index(vertex, p_label[target], l, r);
                     vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], (int)r - l, prefix_id);
                     if (vertex_set[prefix_id].get_size() == 0) {
                         is_zero = true;
@@ -633,7 +543,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
         v1 = edge[i];
 
         bool is_zero = false;
-        get_edge_index(v0, l, r);
+        get_labeled_edge_index(v0, l, r);
         for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
 
@@ -642,7 +552,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
         if (schedule->get_restrict_last(1) != -1 && v0 <= v1)
             continue;
         
-        get_edge_index(v1, l, r);
+        get_labeled_edge_index(v1, l, r);
         for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
