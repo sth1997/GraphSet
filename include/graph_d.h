@@ -41,4 +41,5 @@ public:
     void get_neighbor(v_index_t x,Edges& E); //获取一个在此机器的点的信息
     void ask_neighbor(v_index_t x,Edges& E); //获取一个不在此机器的点的信息
     void give_neighbor(); //回复其他机器的询问
+    int get_block_index(v_index_t x); //返回vet所在的块的编号
 }
