@@ -23,6 +23,7 @@ inline int Embedding::get_request()
 void Embedding::add_edge(Edges edge)
 {
     list[size - 1] = new Edges(edge);
+    state = 1;
 }
 
 inline Embedding* Embedding::get_father()

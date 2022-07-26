@@ -1,8 +1,10 @@
+#pragma once
+#include "edges.h"
+
 class Embedding //维护嵌入的点集、活动边列表
 {
 public:
-
-    Embedding();
+    Embedding()
     {
         size = 0;
         state = 1;
@@ -10,17 +12,17 @@ public:
         list = nullptr;
         father = nullptr;
     }
-    Embedding(Embedding *fa, int v); //在它的父亲Extendable Embedding中增加一个新的点，即伪代码中的create_extendable_embedding，状态为Pending
+    Embedding(Embedding *fa, int v) //在它的父亲Extendable Embedding中增加一个新的点，即伪代码中的create_extendable_embedding，状态为Pending
     {
         father = fa;
         size = (fa->size) + 1;
         state = 0;
-        list = new (*Edges)[size];
+        last = v;
+        list = new Edges*[size];
         for (int i = 0; i < size - 1; i++)
         {
             list[i] = fa->list[i];
         }
-        last = v;
     }
     ~Embedding()
     {
@@ -34,7 +36,7 @@ public:
         if (list != nullptr) delete[] list;
         father = nullptr;
         size = 0;
-        state = 0;
+        state = 3;
         last = 0;
     }
     inline int get_state();
@@ -49,6 +51,7 @@ public:
 private:
     int state; //state = 0, 1, 2, 3 分别表示Pending, Ready, Zombie, Terminated
     int size;
+    int last;
     Edges **list;
     Embedding *father;
-}
+};
