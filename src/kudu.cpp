@@ -3,33 +3,24 @@
 #include "../include/embedding.h"
 
 //1号线程用于通信
-void fetch(std::queue<Embedding> &que)
+void fetch(std::vector<Embedding> &vec)
 {
-    std::queue<Embedding> new_que;
     Edges edge;
-    while (! que.empty())
+    for (int i = 0; i < (int)vec.size(); i++)
     {
-        Embedding now = que.front();
-        que.pop();
-        if (now.get_state() == 0)
+        if (vec[i].get_state() == 0)
         {
-            if (in_this_part(now.get_request()))
+            if (in_this_part(vec[i].get_request()))
             {
-                get_neighbor(now.get_request(), edge);
+                get_neighbor(vec[i].get_request(), edge);
             }
             else
             {
-                ask_neighbor(now.get_request(), edge);
+                ask_neighbor(vec[i].get_request(), edge);
             }
-            now.add_edge(edge);
-            new_que.push(now);
-        }
-        else
-        {
-            new_que.push(now);
+            vec[i].add_edge(edge);
         }
     }//Todo：一组同时进行通信
-    que = new_que;
 }
 
 int main(int argc, char *argv[])
