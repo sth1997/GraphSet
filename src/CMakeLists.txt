@@ -1,5 +1,7 @@
 SET(GraphMiningSrc
 graph.cpp
+graph_d.cpp
+embedding.cpp
 labeled_graph.cpp
 dataloader.cpp
 pattern.cpp
