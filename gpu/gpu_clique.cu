@@ -223,10 +223,7 @@ __device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min
     return l;
 }
 
-constexpr int MAX_DEPTH = 5; // 非递归pattern matching支持的最大深度
-
-template <int depth>
-__device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
+__device__ void GPU_pattern_matching_func(int depth, const GPUSchedule* schedule, GPUVertexSet* vertex_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
 {
 
     if (depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num()) {
@@ -260,14 +257,8 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
         }
         if (is_zero)
             continue;
-        GPU_pattern_matching_func<depth + 1>(schedule, vertex_set, local_ans, edge, vertex);
+        GPU_pattern_matching_func(depth + 1, schedule, vertex_set, local_ans, edge, vertex);
     }
-}
-
-    template <>
-__device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule, GPUVertexSet* vertex_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
-{
-    // assert(false);
 }
 
 /**
@@ -364,7 +355,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
             continue;
         
         unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
-        GPU_pattern_matching_func<2>(schedule, vertex_set, local_sum, edge, vertex);
+        GPU_pattern_matching_func(2, schedule, vertex_set, local_sum, edge, vertex);
         // GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
         sum += local_sum;
     }
