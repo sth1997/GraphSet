@@ -28,6 +28,7 @@ Embedding Task_Queue::new_task()
         if (q[current_depth][current_machine[current_depth]].size())
         {
             size[current_depth]--;
+            while (*q[current_depth][current_machine[current_depth]].back().get_state() != 1); //while直到状态变为Ready
             Embedding e = (*q[current_depth][current_machine[current_depth]].back());
             q[current_depth][current_machine[current_depth]].pop_back();
             return e;
