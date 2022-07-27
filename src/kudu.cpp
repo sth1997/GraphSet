@@ -1,8 +1,11 @@
 #include "../include/graph.h"
 #include "../include/graph_d.h"
 #include "../include/embedding.h"
+#include <queue>
+#include <vector>
+#include <algorithm>
 
-//1号线程用于通信
+//主线程用于通信
 void fetch(std::vector<Embedding> &vec)
 {
     Edges edge;
@@ -23,8 +26,3 @@ void fetch(std::vector<Embedding> &vec)
     }//Todo：一组同时进行通信
 }
 
-int main(int argc, char *argv[])
-{
-    //调用Graph_D::init()
-    //0号线程用来发送信息，其他进入kudu函数
-}
