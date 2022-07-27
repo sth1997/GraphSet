@@ -1,12 +1,11 @@
 #include "../include/graph_d.h"
+#include "../include/graph.h"
 #include <mpi.h>
 #include <omp.h>
 
-void Graph_D::init(int threadcnt, Graph* graph , v_index_t& block_size , v_index_t& v_cnt , e_index_t& e_cnt , v_index_t& range_l , v_index_t& range_r)
+void Graph_D::init(Graph* graph)
 {
-    int provided;
     Graph G=graph;
-    MPI_Init_thread(NULL, NULL, MPI_THREAD_FUNNELED, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Barrier(MPI_COMM_WORLD);
