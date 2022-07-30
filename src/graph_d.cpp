@@ -80,3 +80,8 @@ void Graph_D::give_neighbor()
         }
     }
 }
+
+int Graph_D::get_block_index(v_index_t x)
+{
+    return x / block_size;
+}
