@@ -1,31 +1,12 @@
 #include "../include/graph.h"
 #include "../include/graph_d.h"
 #include "../include/embedding.h"
+#include "../include/task_queue.h"
+#include "../include/communicator.h"
 #include <queue>
 #include <vector>
 #include <algorithm>
 #include <omp.h>
-
-//1号线程用于通信
-void communication(std::vector<Embedding> &vec)
-{
-    Edges edge;
-    for (int i = 0; i < (int)vec.size(); i++)
-    {
-        if (vec[i].get_state() == 0)
-        {
-            if (graph.in_this_part(vec[i].get_request()))
-            {
-                graph.get_neighbor(vec[i].get_request(), edge);
-            }
-            else
-            {
-                graph.ask_neighbor(vec[i].get_request(), edge);
-            }
-            vec[i].add_edge(edge);
-        }
-    }//Todo：一组同时进行通信
-}
 
 void computation(std::vector<Embedding> (*extend)(Embedding *e), Embedding *e)
 {
@@ -78,6 +59,7 @@ std::vector<Embedding> triangle_extend(Embedding *e)
 
 void graph_mining(std::vector<Embedding> (*extend)(Embedding *e))
 {
+    Comm comm;
     Task_Queue task(graph);
     Embedding nul;
     for (int i = graph.range_l; i < graph.range_r; i++) //加入一个点的embedding
@@ -88,33 +70,16 @@ void graph_mining(std::vector<Embedding> (*extend)(Embedding *e))
     {
         int my_rank = omp_get_thread_num();
         int thread_count = omp_get_num_threads();
-        if (my_rank == 0)
-        {
-            //发送数据
-        }
-        if (my_rank == 1)
-        {
-            while (true)
-            {
-                #pragma omp flush(task)
-                int depth = task.current_depth, index = task.current_machine[task.current_depth];
-                if (depth == 0)
-                {
-                    break;
-                }
-                communication(task.q[depth][index]);
-            }
-        }
-        if (my_rank > 1)
+        if (my_rank == 0) comm.give_ans();
+        else if (my_rank == 1) comm.ask_ans(task);
+        else if (my_rank > 1)
         {
             while (true)
             {
                 #pragma omp flush(task)
                 Embedding* e = task.new_task();
-                if ((*e).size() == 0)
-                {
+                if (e->get_size() == 0)
                     break;
-                }
                 computation(func, e);
             }
         }

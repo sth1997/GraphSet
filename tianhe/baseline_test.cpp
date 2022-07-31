@@ -43,12 +43,12 @@ int main(int argc,char *argv[]) {
 
 //load graph_d
     int provided;
-    MPI_Init_thread(NULL, NULL, MPI_THREAD_FUNNELED, &provided);
+    MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
 
     Graph_D* g_d;
     g_d=new Graph_D();
     g_d->init(g);
-
+/*
     int pattern_size = atoi(argv[2]);
     const char* pattern_str= argv[3];
 
@@ -66,10 +66,11 @@ int main(int argc,char *argv[]) {
         printf("pattern is invalid!\n");
         return 0;
     }
-    
+*/
     double count_t1 = get_wall_time();
     int thread_count = 24;
-    long long ans = g->pattern_matching(schedule_iep, thread_count);
+    //long long ans = g->pattern_matching(schedule_iep, thread_count);
+    long long ans=g_d->graph_mining(thread_count);
     double count_t2 = get_wall_time();
     printf("couting time= %.6lf s\n", count_t2 - count_t1);
     printf("ans=%lld\n", ans);
