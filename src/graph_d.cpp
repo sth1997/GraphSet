@@ -83,5 +83,19 @@ void Graph_D::give_neighbor()
 
 int Graph_D::get_block_index(v_index_t x)
 {
-    return x / block_size;
+    return (x / block_size) -1;
+}
+
+int Graph_D::get_machine_cnt() //返回机器数量
+{
+    int comm_sz;
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
+    return comm_sz;
+}
+
+int Graph_D::get_machine_id() //返回机器id
+{
+    int my_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    return my_rank;
 }

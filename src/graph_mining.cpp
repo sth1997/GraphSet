@@ -1,6 +1,8 @@
 #include "../include/graph.h"
 #include "../include/graph_d.h"
 #include "../include/embedding.h"
+#include "../include/task_queue.h"
+#include "../include/communicator.h"
 #include <queue>
 #include <vector>
 #include <algorithm>
@@ -90,7 +92,8 @@ void graph_mining(std::vector<Embedding> (*extend)(Embedding *e))
         int thread_count = omp_get_num_threads();
         if (my_rank == 0)
         {
-            //发送数据
+            //发送数据 
+
         }
         if (my_rank == 1)
         {
@@ -111,10 +114,8 @@ void graph_mining(std::vector<Embedding> (*extend)(Embedding *e))
             {
                 #pragma omp flush(task)
                 Embedding* e = task.new_task();
-                if ((*e).size() == 0)
-                {
+                if (e->get_size() == 0)
                     break;
-                }
                 computation(func, e);
             }
         }
