@@ -8,19 +8,22 @@
 #include <algorithm>
 #include <omp.h>
 
-void computation(std::vector<Embedding> (*extend)(Embedding *e), Embedding *e)
+long long extend_result;
+
+void computation(std::vector<Embedding> (*extend)(Embedding *e), Embedding *e, Task_Queue* task)
 {
     std::vector<Embedding> vec = (*extend)(e);
     for (int i = 0; i < (int)vec.size(); i++)
     {
         #pragma omp flush(task)
-        task.insert(vec[i]);
+        task->insert(vec[i]);
     }
     (*e).set_state(2);
 }
 
 std::vector<Embedding> triangle_extend(Embedding *e)
 {
+    extend_result = 0;
     std::vector<Embedding> vec;
     if ((*e).get_size() == 1)
     {
@@ -49,29 +52,32 @@ std::vector<Embedding> triangle_extend(Embedding *e)
             }
             if (flag)
             {
+                extend_result++; //计数
+                /*
                 Embedding ep(e, list[0]->vet[i]);
                 vec.push_back(ep);
+                */
             }
         }
     }
     return vec;
 }
 
-void graph_mining(std::vector<Embedding> (*extend)(Embedding *e))
+long long graph_mining(std::vector<Embedding> (*extend)(Embedding *e), Graph_D* graph)
 {
     Comm comm;
     Task_Queue task(graph);
-    Embedding nul;
-    for (int i = graph.range_l; i < graph.range_r; i++) //加入一个点的embedding
+    for (int i = graph->range_l; i < graph->range_r; i++) //加入一个点的embedding
     {
-        task.insert((Embedding)(nul, i), true);
+        Embedding new_e(&task.nul, i);
+        task.insert(new_e, true);
     }
     #pragma omp parallel shared(task)
     {
         int my_rank = omp_get_thread_num();
         int thread_count = omp_get_num_threads();
         if (my_rank == 0) comm.give_ans();
-        else if (my_rank == 1) comm.ask_ans(task);
+        else if (my_rank == 1) comm.ask_ans(&task);
         else if (my_rank > 1)
         {
             while (true)
@@ -80,9 +86,10 @@ void graph_mining(std::vector<Embedding> (*extend)(Embedding *e))
                 Embedding* e = task.new_task();
                 if (e->get_size() == 0)
                     break;
-                computation(func, e);
+                computation(extend, e, &task);
             }
         }
     }
     //Todo: 向其他机器发送结束信号
+    return extend_result;
 }

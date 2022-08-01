@@ -1,12 +1,12 @@
 #include "../include/graph_d.h"
-#include "../include/embeddiing.h"
+#include "../include/embedding.h"
 #include "../include/task_queue.h"
 #include <omp.h>
 
 //Todo: 多线程
-void Task_Queue::insert(Embedding new_e, bool is_root = false)
+void Task_Queue::insert(Embedding new_e, bool is_root)
 {
-    q[current_depth + 1][(*graph).get_block_index(new_e.last)].push_back(new_e);
+    q[current_depth + 1][(*graph).get_block_index(new_e.get_request())].push_back(new_e);
     size[current_depth + 1]++;
     if (is_root && size[current_depth + 1] >= Max_size)
     {
@@ -43,6 +43,5 @@ Embedding* Task_Queue::new_task()
         }
         current_depth--;
     }
-    Embedding nul;
-    return nul;
+    return &nul;
 }

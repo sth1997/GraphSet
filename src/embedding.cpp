@@ -1,3 +1,4 @@
+#include "../include/edges.h"
 #include "../include/embedding.h"
 
 inline int Embedding::get_state()
@@ -10,7 +11,7 @@ inline int Embedding::get_size()
     return size;
 }
 
-inline int Embedding::set_state(int st)
+inline void Embedding::set_state(int st)
 {
     state = st;
 }

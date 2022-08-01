@@ -41,7 +41,7 @@ public:
     }
     inline int get_state();
     inline int get_size();
-    inline int set_state(int st);
+    inline void set_state(int st);
     inline int get_request(); //若当前embedding为Pending状态，则返回需要访问的节点编号，否则返回-1
     void add_edge(Edges edge); //传入需要的边列表，将状态变为Ready
     inline Embedding* get_father();

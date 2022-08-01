@@ -5,11 +5,7 @@
 
 void Graph_D::init(Graph* graph)
 {
-<<<<<<< HEAD
     Graph* G=graph;
-=======
-    Graph G=graph;
->>>>>>> d64185d87dacf522ec9ee720a6787b45e0d58f26
     int comm_sz,my_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);

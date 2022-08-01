@@ -79,7 +79,7 @@ void Comm::ask_ans(Task_Queue* task)//线程1
                 Edges edge;
                 edge.v=vec[i].get_request();
                 int cnt=0;
-                MPI_Get_count(&status,&cnt);
+                MPI_Get_count(&status,MPI_INT,&cnt);
                 edge.e_cnt=cnt;
                 edge.vet=new v_index_t[edge.e_cnt];
                 for (int j=0;j<edge.e_cnt;++j)

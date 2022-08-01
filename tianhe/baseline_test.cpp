@@ -1,5 +1,6 @@
 #include <../include/graph.h>
 #include "../include/graph_d.h"
+#include "../include/embedding.h"
 #include <../include/labeled_graph.h>
 #include <../include/dataloader.h>
 #include "../include/pattern.h"
@@ -14,6 +15,10 @@
 #include <string>
 #include <algorithm>
 #include <chrono>
+
+std::vector<Embedding> triangle_extend(Embedding *e);
+
+long long graph_mining(std::vector<Embedding> (*extend)(Embedding *e), Graph_D* graph);
 
 int main(int argc,char *argv[]) {
     
@@ -70,7 +75,7 @@ int main(int argc,char *argv[]) {
     double count_t1 = get_wall_time();
     int thread_count = 24;
     //long long ans = g->pattern_matching(schedule_iep, thread_count);
-    long long ans=g_d->graph_mining(thread_count);
+    long long ans=graph_mining((*triangle_extend), g_d);
     double count_t2 = get_wall_time();
     printf("couting time= %.6lf s\n", count_t2 - count_t1);
     printf("ans=%lld\n", ans);
