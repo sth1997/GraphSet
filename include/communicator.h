@@ -3,7 +3,10 @@
 # include <vector>
 # include "embedding.h"
 # include "edges.h"
+<<<<<<< HEAD
 # include "task_queue.h"
+=======
+>>>>>>> d64185d87dacf522ec9ee720a6787b45e0d58f26
 
 typedef int32_t v_index_t ;
 typedef int64_t e_index_t ; 
@@ -30,8 +33,14 @@ public:
         if(buffer != nullptr) delete[] buffer;
     }
 
+<<<<<<< HEAD
     void give_ans(); //线程0
     void ask_ans(Task_Queue* task); //线程1
+=======
+    void ins_ask(v_index_t x,Embedding* e); //增加一个询问
+    void give_ans(); //线程0
+    void ask_ans(); //线程1
+>>>>>>> d64185d87dacf522ec9ee720a6787b45e0d58f26
     void computation_done();
     void set_max_degree(e_index_t s);
 };
