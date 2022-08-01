@@ -5,20 +5,20 @@
 
 void Graph_D::init(Graph* graph)
 {
-    Graph G=graph;
+    Graph* G=graph;
     int comm_sz,my_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Barrier(MPI_COMM_WORLD);
-    block_size=(G.v_cnt + comm_sz - 1) / comm_sz;
+    block_size=(G->v_cnt + comm_sz - 1) / comm_sz;
     range_l=block_size*my_rank;
-    range_r=std::min(block_size*(my_rank+1),G.v_cnt);
+    range_r=std::min(block_size*(my_rank+1),G->v_cnt);
     v_cnt=0,e_cnt=0;
     for (v_index_t i=range_l;i<=range_r;++i)
     {
-        vertex[v_cnt]=G.vertex[i];
-        for (e_index_t j=G.vertex[i];j<G.vertex[i+1];++j)
-            edge[++e_cnt]=G.edge[j];
+        vertex[v_cnt]=G->vertex[i];
+        for (e_index_t j=G->vertex[i];j<G->vertex[i+1];++j)
+            edge[++e_cnt]=G->edge[j];
         v_cnt++;
     }
 }
@@ -33,7 +33,7 @@ void Graph_D::get_neighbor(v_index_t x,Edges& E) //获取一个在此机器的�
     E.v=x;
     x=x-range_l;
     E.e_cnt=vertex[x+1]-vertex[x];
-    E.vet=edge[ vertex[x] ];
+    E.vet=&edge[ vertex[x] ];
 }
 
 void Graph_D::ask_neighbor(v_index_t x,Edges& E) //获取一个不在此机器的点的信息

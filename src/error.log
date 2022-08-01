@@ -1,0 +1,45 @@
+/usr/bin/ld: /tmp/ccFQI5Pg.o: warning: relocation against `ompi_mpi_comm_world' in read-only section `.text'
+/usr/bin/ld: /usr/lib/gcc/x86_64-linux-gnu/10/../../../x86_64-linux-gnu/Scrt1.o: in function `_start':
+(.text+0x20): undefined reference to `main'
+/usr/bin/ld: /tmp/ccFQI5Pg.o: in function `Graph_D::init(Graph*)':
+graph_d.cpp:(.text+0x22): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x27): undefined reference to `MPI_Comm_size'
+/usr/bin/ld: graph_d.cpp:(.text+0x35): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x3a): undefined reference to `MPI_Comm_rank'
+/usr/bin/ld: graph_d.cpp:(.text+0x41): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x46): undefined reference to `MPI_Barrier'
+/usr/bin/ld: /tmp/ccFQI5Pg.o: in function `Graph_D::ask_neighbor(int, Edges&)':
+graph_d.cpp:(.text+0x2b2): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x2c1): undefined reference to `ompi_mpi_int'
+/usr/bin/ld: graph_d.cpp:(.text+0x2ce): undefined reference to `MPI_Send'
+/usr/bin/ld: graph_d.cpp:(.text+0x2f2): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x301): undefined reference to `ompi_mpi_int'
+/usr/bin/ld: graph_d.cpp:(.text+0x30b): undefined reference to `MPI_Irecv'
+/usr/bin/ld: graph_d.cpp:(.text+0x326): undefined reference to `MPI_Test'
+/usr/bin/ld: graph_d.cpp:(.text+0x34f): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x35e): undefined reference to `ompi_mpi_int'
+/usr/bin/ld: graph_d.cpp:(.text+0x363): undefined reference to `MPI_Recv'
+/usr/bin/ld: /tmp/ccFQI5Pg.o: in function `Graph_D::give_neighbor()':
+graph_d.cpp:(.text+0x385): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x38a): undefined reference to `MPI_Comm_size'
+/usr/bin/ld: graph_d.cpp:(.text+0x398): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x39d): undefined reference to `MPI_Comm_rank'
+/usr/bin/ld: graph_d.cpp:(.text+0x3d3): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x3e2): undefined reference to `ompi_mpi_int'
+/usr/bin/ld: graph_d.cpp:(.text+0x3ef): undefined reference to `MPI_Irecv'
+/usr/bin/ld: graph_d.cpp:(.text+0x40a): undefined reference to `MPI_Test'
+/usr/bin/ld: graph_d.cpp:(.text+0x448): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x457): undefined reference to `ompi_mpi_int'
+/usr/bin/ld: graph_d.cpp:(.text+0x461): undefined reference to `MPI_Send'
+/usr/bin/ld: graph_d.cpp:(.text+0x475): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x484): undefined reference to `ompi_mpi_int'
+/usr/bin/ld: graph_d.cpp:(.text+0x48c): undefined reference to `MPI_Send'
+/usr/bin/ld: /tmp/ccFQI5Pg.o: in function `Graph_D::get_machine_cnt()':
+graph_d.cpp:(.text+0x4fe): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x503): undefined reference to `MPI_Comm_size'
+/usr/bin/ld: /tmp/ccFQI5Pg.o: in function `Graph_D::get_machine_id()':
+graph_d.cpp:(.text+0x522): undefined reference to `ompi_mpi_comm_world'
+/usr/bin/ld: graph_d.cpp:(.text+0x527): undefined reference to `MPI_Comm_rank'
+/usr/bin/ld: warning: creating DT_TEXTREL in a PIE
+collect2: error: ld returned 1 exit status
+srun: error: nico3: task 0: Exited with exit code 1

@@ -2,8 +2,9 @@ SET(GraphMiningSrc
 graph.cpp
 graph_d.cpp
 embedding.cpp
-task_queue.cpp
-graph_mining.cpp
+#task_queue.cpp
+#graph_mining.cpp
+communicator.cpp
 labeled_graph.cpp
 dataloader.cpp
 pattern.cpp

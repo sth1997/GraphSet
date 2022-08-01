@@ -27,4 +27,4 @@ public:
     void insert(Embedding new_e, bool is_root = false);//加入一个embedding
     Embedding* new_task();//获取一个新任务,层数与embedding的size相同
     Graph_D *graph;
-}
+};

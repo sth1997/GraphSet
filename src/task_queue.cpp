@@ -24,7 +24,7 @@ void Task_Queue::insert(Embedding new_e, bool is_root = false)
 //Todo: 多线程
 Embedding* Task_Queue::new_task()
 {
-    int N = (*graph).get_machine_cnt(); //Todo: 机器数量
+    int N = (*graph).get_machine_cnt(); 
     int K = (*graph).get_machine_id();
     while (current_depth >= 1)
     {
