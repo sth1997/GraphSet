@@ -20,9 +20,9 @@ void Comm::give_ans() //线程0-回复其他机器的询问
     for (int i=0;i<comm_sz;++i)
     {
         if(i==my_rank) continue;
-        MPI_Irecv(&ask[i],1,MPI_INT,i,MPI_ANY_TAG,MPI_COMM_WORLD,recv_r[i]);
+        MPI_Irecv(&ask[i],1,MPI_INT,i,MPI_ANY_TAG,MPI_COMM_WORLD,&recv_r[i]);
     }
-    while(!all_task_solved)
+    while(!all_solved)
     {
         for (int i=0;i<comm_sz;++i)
         {
@@ -36,19 +36,20 @@ void Comm::give_ans() //线程0-回复其他机器的询问
     }
 }
 
-void Comm::ask_ans(Task_Queue task)//线程1
+void Comm::ask_ans(Task_Queue* task)//线程1
 {
     int my_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-    while (!all_task_solved)
+    while (!all_solved)
     {
         #pragma omp flush(task)
-        int depth = task.current_depth, index = task.current_machine[task.current_depth];
+        int depth = task->current_depth;
+        int index = task->current_machine[depth];
         if (depth == 0)
         {
             break;
         }
-        std::vector<Embedding> vec=task.q[depth][index];
+        std::vector<Embedding> vec=task->q[depth][index];
         Edges edge;
         if(index==my_rank)
         {
@@ -57,18 +58,19 @@ void Comm::ask_ans(Task_Queue task)//线程1
             {
                 if(vec[i].get_state()!=0) break; //Todo:加一个表示这组是否通信完成的标识符
                 x=vec[i].get_request();
-                graph.get_neighbor(x,edge);
+                graph->get_neighbor(x,edge);
                 vec[i].add_edge(edge);
             }
         }
         else
         {
-            int none_ans_cnt=0,size=vec.size();
+            int size=vec.size();
             MPI_Status status;
             for (int i=0;i<size;++i)
             {
                 if(vec[i].get_state()!=0) break;
-                MPI_Isend(&vec[i].get_request(),1,MPI_INT,index,vec[i].get_request(),MPI_COMM_WORLD);
+                int x=vec[i].get_request();
+                MPI_Send(&x,1,MPI_INT,index,x,MPI_COMM_WORLD);
             }
             for (int i=0;i<size;++i)
             {
@@ -76,7 +78,9 @@ void Comm::ask_ans(Task_Queue task)//线程1
                 MPI_Recv(buffer,max_degree,MPI_INT,index,vec[i].get_request(),MPI_COMM_WORLD,&status);
                 Edges edge;
                 edge.v=vec[i].get_request();
-                MPI_Get_Count(&status,&edge.e_cnt);
+                int cnt=0;
+                MPI_Get_count(&status,&cnt);
+                edge.e_cnt=cnt;
                 edge.vet=new v_index_t[edge.e_cnt];
                 for (int j=0;j<edge.e_cnt;++j)
                     edge.vet[j]=buffer[j];
@@ -85,6 +89,17 @@ void Comm::ask_ans(Task_Queue task)//线程1
         }
     }
 }
+
+void Comm::computation_done()
+{
+    all_solved=true;
+}
+
+void Comm::set_max_degree(e_index_t s)
+{
+    max_degree=s;
+}
+
 /*
 void Comm::comm_recv() //线程1
 {
@@ -124,13 +139,3 @@ void Comm::comm_recv() //线程1
             }
         }
 */
-
-void Comm::computation_done()
-{
-    all_solved=true;
-}
-
-void Comm::set_max_degree(e_index_t s)
-{
-    max_degree=s;
-}

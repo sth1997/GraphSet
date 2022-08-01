@@ -41,4 +41,4 @@ public:
     int get_block_index(v_index_t x); //返回x所在的机器的编号
     int get_machine_cnt(); //返回机器数量
     int get_machine_id(); //返回机器id
-}
+};
