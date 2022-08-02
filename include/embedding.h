@@ -39,13 +39,13 @@ public:
         state = 3;
         last = 0;
     }
-    inline int get_state();
-    inline int get_size();
-    inline void set_state(int st);
-    inline int get_request(); //若当前embedding为Pending状态，则返回需要访问的节点编号，否则返回-1
+    int get_state();
+    int get_size();
+    void set_state(int st);
+    int get_request(); //若当前embedding为Pending状态，则返回需要访问的节点编号，否则返回-1
     void add_edge(Edges edge); //传入需要的边列表，将状态变为Ready
-    inline Embedding* get_father();
-    inline Edges **get_list(); //返回活动边列表的指针数组
+    Embedding* get_father();
+    Edges **get_list(); //返回活动边列表的指针数组
     Edges* get_edge(int u); //返回u节点的所有边，不存在则返回nullptr
     //Edges get_union_list(int *vet); //Todo 返回一个点集的公共邻点列表，使用Vertical computation sharing优化（是否可行未知
 private:

@@ -12,7 +12,7 @@ void Graph_D::init(Graph* graph)
     MPI_Barrier(MPI_COMM_WORLD);
     block_size=(G->v_cnt + comm_sz - 1) / comm_sz;
     range_l=block_size*my_rank;
-    range_r=std::min(block_size*(my_rank+1),G->v_cnt);
+    range_r=std::min(block_size*(my_rank+1),G->v_cnt-1);
     v_cnt=0,e_cnt=0;
     for (v_index_t i=range_l;i<=range_r;++i)
     {

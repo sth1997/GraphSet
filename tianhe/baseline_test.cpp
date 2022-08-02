@@ -21,7 +21,6 @@ std::vector<Embedding> triangle_extend(Embedding *e);
 long long graph_mining(std::vector<Embedding> (*extend)(Embedding *e), Graph_D* graph);
 
 int main(int argc,char *argv[]) {
-    
     Graph *g;
     DataLoader D;
     
@@ -40,7 +39,6 @@ int main(int argc,char *argv[]) {
     auto load_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
     printf("Load data success! time: %g seconds\n", load_time.count() / 1.0e6);
     fflush(stdout);
-
     // const char *pattern_str = "0111010011100011100001100"; // 5 house p1
     //const char *pattern_str = "011011101110110101011000110000101000"; // 6 p2
     // const char *pattern_str = "0111111101111111011101110100111100011100001100000"; // 7 p5
@@ -49,7 +47,6 @@ int main(int argc,char *argv[]) {
 //load graph_d
     int provided;
     MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
-
     Graph_D* g_d;
     g_d=new Graph_D();
     g_d->init(g);

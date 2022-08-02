@@ -14,9 +14,12 @@ void Task_Queue::insert(Embedding new_e, bool is_root)
         int N = (*graph).get_machine_cnt(); //Todo: 机器数量
         int K = (*graph).get_machine_id(); //Todo: 当前机器的编号
         current_machine[current_depth] = K;
+        commu[current_depth] = K;
+        size[current_depth] = 0;
         for (int i = 0; i < N; i++)
         {
             index[current_depth][i] = 0;
+            is_commued[current_depth][i] = 0;
         }
     }
 }
