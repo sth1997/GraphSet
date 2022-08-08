@@ -27,7 +27,7 @@ double test_pattern(Graph* g, Pattern &pattern) {
 
     for(int i = 0; i < 3; ++i) {
         t1 = get_wall_time();
-        long long ans_our = g->pattern_matching(schedule_our, thread_num, true);
+        long long ans_our = g->pattern_matching(schedule_our, thread_num);
         t2 = get_wall_time();
 
         printf("our ans: %lld time: %.6lf\n", ans_our, t2 - t1);
@@ -52,11 +52,11 @@ int main(int argc,char *argv[]) {
     }
 
     bool ok = D.fast_load(g, argv[1]);
+    // bool ok = D.load_data(g, DataType::Patents, argv[1], false);
     if(!ok) { printf("Load data failed\n"); return 0; }
 
     printf("Load data success!\n");
     fflush(stdout);
-    int size = atoi(argv[2]);
     int pattern_size = atoi(argv[2]);
     const char* pattern_str= argv[3];
 

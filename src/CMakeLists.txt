@@ -11,6 +11,7 @@ motif_generator.cpp
 graphmpi.cpp
 common.cpp
 disjoint_set_union.cpp
+set_operation.cpp
 )
 
 ADD_LIBRARY(graph_mining SHARED ${GraphMiningSrc}) 
@@ -24,8 +25,8 @@ TARGET_LINK_LIBRARIES(clique_test graph_mining)
 ADD_EXECUTABLE(motif_counting_test motif_counting_test.cpp)
 TARGET_LINK_LIBRARIES(motif_counting_test graph_mining)
 
-# ADD_EXECUTABLE(pattern_matching_test pattern_matching_test.cpp)
-# TARGET_LINK_LIBRARIES(pattern_matching_test graph_mining)
+ADD_EXECUTABLE(pm_test pm_test.cpp)
+TARGET_LINK_LIBRARIES(pm_test graph_mining)
 
 #ADD_EXECUTABLE(in_exclusion_performance_test in_exclusion_performance_test.cpp)
 #TARGET_LINK_LIBRARIES(in_exclusion_performance_test graph_mining)
