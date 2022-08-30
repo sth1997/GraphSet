@@ -40,8 +40,8 @@ TARGET_LINK_LIBRARIES(gpu_fsm_omp graph_mining)
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(gpu_fsm_omp OpenMP::OpenMP_CXX)
+    target_link_libraries(gpu_kclique OpenMP::OpenMP_CXX)
 endif()
-
 
 ADD_EXECUTABLE(mc3 mc3.cu)
 SET_PROPERTY(TARGET mc3 PROPERTY CUDA_SEPARABLE_COMPILATION ON)

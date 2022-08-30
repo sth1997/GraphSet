@@ -223,7 +223,11 @@ __device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min
     return l;
 }
 
-__device__ void GPU_pattern_matching_func(int depth, const GPUSchedule* schedule, GPUVertexSet* vertex_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
+
+constexpr int MAX_DEPTH = 10; // 非递归pattern matching支持的最大深度
+
+template<int depth>
+__device__ void GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertexSet* vertex_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
 {
 
     if (depth == schedule->get_size() - schedule->get_in_exclusion_optimize_num()) {
@@ -257,8 +261,14 @@ __device__ void GPU_pattern_matching_func(int depth, const GPUSchedule* schedule
         }
         if (is_zero)
             continue;
-        GPU_pattern_matching_func(depth + 1, schedule, vertex_set, local_ans, edge, vertex);
+        GPU_pattern_matching_func<depth + 1>(schedule, vertex_set, local_ans, edge, vertex);
     }
+}
+
+template <>
+__device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule, GPUVertexSet* vertex_set, unsigned long long& local_ans, uint32_t *edge, e_index_t *vertex)
+{
+    assert(false);
 }
 
 /**
@@ -355,7 +365,7 @@ __global__ void gpu_pattern_matching(uint32_t edge_num, uint32_t buffer_size, ui
             continue;
         
         unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
-        GPU_pattern_matching_func(2, schedule, vertex_set, local_sum, edge, vertex);
+        GPU_pattern_matching_func<2>(schedule, vertex_set, local_sum, edge, vertex);
         // GPU_pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_sum, 2, edge, vertex);
         sum += local_sum;
     }
@@ -625,9 +635,10 @@ int main(int argc,char *argv[]) {
     printf("pattern = \n");
     p.print();
     printf("max intersection size %d\n", VertexSet::max_intersection_size);
-    bool is_pattern_valid;
+    bool is_pattern_valid = true;
     bool use_in_exclusion_optimize = true;
-    Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule_IEP schedule_iep(p.get_adj_mat_ptr(), pattern_size);
+    // Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, use_in_exclusion_optimize, g->v_cnt, g->e_cnt, g->tri_cnt);
     schedule_iep.set_in_exclusion_optimize_redundancy(1);
 
     if (!is_pattern_valid) {

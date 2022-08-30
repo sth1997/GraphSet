@@ -1,5 +1,8 @@
 // k <= 6
+#define THRUST_IGNORE_CUB_VERSION_CHECK
 #include <cuda_runtime.h>
+#include <cub/cub.cuh>
+#include <omp.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -16,7 +19,7 @@
 // int* partition_num;
 int64_t* start_ptr;
 
-constexpr int THREADS_PER_BLOCK = 1024;
+constexpr int THREADS_PER_BLOCK = 64;
 
 /**
  * @note: 工作假定 k <= 6，此时使用 degree orientation 更快（？）
@@ -145,28 +148,12 @@ void degeneracy_orientation_init(Graph* original_g, Graph*& g) {
   printf("Maximum vertex degree after orientation: %d\n", max_degree);
 }
 
-constexpr int BIT_TABLE_COEF = 255;
-constexpr int BIT_TABLE_SIZE = BIT_TABLE_COEF + 1;
-
-__device__ int bit_table[BIT_TABLE_SIZE];
-
-__global__ void bit_table_init() {
-  for (int i = 1; i < BIT_TABLE_SIZE; ++i) {
-    bit_table[i] = bit_table[i - (i & -i)] + 1;
-  }
-}
-
-__device__ int popcount(unsigned int x) {
-  return bit_table[x & BIT_TABLE_COEF] + bit_table[(x >> 8) & BIT_TABLE_COEF] +
-         bit_table[(x >> 16) & BIT_TABLE_COEF] +
-         bit_table[(x >> 24) & BIT_TABLE_COEF];
-}
 
 /*
 __device__ int popcount(unsigned int* x, int* partition_num) {
   int result = 0;
   for (int i = 0; i < *partition_num; ++i) {
-    result += popcount(x[i]);
+    result += __popc(x[i]);
   }
   return result;
 }
@@ -259,7 +246,7 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
           // partition_num);
           foobar = partition_num * top;
           for (int i = 0; i < partition_num; ++i) {
-            sum += popcount(stack_binary_adj[foobar + i]);
+            sum += __popc(stack_binary_adj[foobar + i]);
           }
         }
         --top;
@@ -332,28 +319,35 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
 
 __global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
                          int64_t* start_ptr, int* k) {
-  __shared__ unsigned long long cache[THREADS_PER_BLOCK];
+
+  typedef cub::BlockReduce<unsigned long long, THREADS_PER_BLOCK> BlockReduce;
+  __shared__ typename BlockReduce::TempStorage temp_storage;
 
   int u = blockIdx.x;
-  int v = threadIdx.x;
-  cache[v] = 0;
+  int tid = threadIdx.x;
+  int size = (int)(vertex[u + 1] - vertex[u]);
+  int partition_num = (size - 1) / 32 + 1;
 
-  if (v + vertex[u] < vertex[u + 1]) {
-    int size = (int)(vertex[u + 1] - vertex[u]);
-    int partition_num = (size - 1) / 32 + 1;
+  // int* stack_vertex = new int[MAX_DEPTH];
+  // unsigned int* stack_binary_adj = new unsigned int[MAX_DEPTH * 18];
+  int stack_vertex[MAX_DEPTH];
+  unsigned int stack_binary_adj[MAX_DEPTH * 32];
 
-    // int* stack_vertex = new int[MAX_DEPTH];
-    // unsigned int* stack_binary_adj = new unsigned int[MAX_DEPTH * 18];
-    int stack_vertex[MAX_DEPTH];
-    unsigned int stack_binary_adj[MAX_DEPTH * THREADS_PER_WARP];
+  assert(partition_num < 32);
+
+  unsigned long long sum = 0;
+
+
+  for(int v = tid; v < size; v += THREADS_PER_BLOCK) {
     int top = 0;
+
     stack_vertex[top] = v;
     stack_vertex[top + 1] = -1;
     for (int i = 0; i < partition_num; ++i) {
       stack_binary_adj[i] = binary_adj[start_ptr[u] + v * partition_num + i];
     }
 
-    unsigned long long sum = 0;
+
     int partitionidx;
     int bitidx;
     bool ok;
@@ -365,7 +359,7 @@ __global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
         // partition_num);
         foobar = partition_num * top;
         for (int i = 0; i < partition_num; ++i) {
-          sum += popcount(stack_binary_adj[foobar + i]);
+          sum += __popc(stack_binary_adj[foobar + i]);
         }
         --top;
       } else {
@@ -409,33 +403,29 @@ __global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
       }
     }
 
-    cache[v] = sum;
 
-    // delete[] stack_vertex;
-    // delete[] stack_binary_adj;
   }
+
+  if(sum > 0) {
+    assert(false);
+  }
+
   __syncthreads();
+  
+  unsigned long long aggregate = BlockReduce(temp_storage).Sum(sum);
 
-  int i = THREADS_PER_BLOCK >> 1;
-  while (i) {
-    if (v < i) {
-      cache[v] += cache[v + i];
-    }
-    __syncthreads();
-    i >>= 1;
+  if(tid == 0) {
+    atomicAdd(&dev_sum, aggregate);
   }
 
-  if (!v) {
-    atomicAdd(&dev_sum, cache[0]);
-  }
+  // delete[] stack_vertex;
+  // delete[] stack_binary_adj;
 }
 
 void k_clique_counting(Graph* g, int k) {
-  bit_table_init<<<1, 1>>>();
-
   int n = g->v_cnt;
   long long m = g->e_cnt;
-  start_ptr = (int64_t*)malloc((n + 1) * sizeof(int64_t));
+  start_ptr = new int64_t[n + 1];
 
   start_ptr[0] = 0;
   for (int u = 0; u < n; ++u) {
@@ -443,12 +433,12 @@ void k_clique_counting(Graph* g, int k) {
     start_ptr[u + 1] = start_ptr[u] + size * ((size - 1) / 32 + 1);
   }
 
-  unsigned int* binary_adj =
-      (unsigned int*)malloc(start_ptr[n] * sizeof(unsigned int));
+  unsigned int* binary_adj = new unsigned int [start_ptr[n]];
   for (long long i = start_ptr[n + 1] - 1; ~i; --i) {
     binary_adj[i] = 0;
   }
 
+  #pragma omp parallel for num_threads(16)
   for (int u = 0; u < n; ++u) {
     for (int64_t i = g->vertex[u]; i < g->vertex[u + 1]; ++i) {
       int v = g->edge[i];
@@ -603,8 +593,8 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  // degree_orientation_init(original_g, g);
-  degeneracy_orientation_init(original_g, g);
+  degree_orientation_init(original_g, g);
+  // degeneracy_orientation_init(original_g, g);
 
   int k = atoi(argv[2]);
   if (k == 1) {
