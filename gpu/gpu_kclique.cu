@@ -13,13 +13,14 @@
 #include "../include/dataloader.h"
 #include "../include/graph.h"
 
-// constexpr int BITS_PER_UNSIGNED_INT = 32;
+constexpr int BITS_PER_PARTITION = 64;
+constexpr int LENGTH = 6;
+// 单个 partition_num = ceil(size / 64)，表示多少个 uint 表示一个二进制集合
 
-// 单个 partition_num = floor(size / 32)，表示多少个 uint 表示一个二进制集合
 // int* partition_num;
 int64_t* start_ptr;
 
-constexpr int THREADS_PER_BLOCK = 64;
+constexpr int THREADS_PER_BLOCK = 128;
 
 /**
  * @note: 工作假定 k <= 6，此时使用 degree orientation 更快（？）
@@ -35,10 +36,10 @@ void degree_orientation_init(Graph* original_g, Graph*& g) {
   long long m = original_g->e_cnt;
   g->v_cnt = n;
   g->e_cnt = m >> 1;
-  g->edge = (int*)malloc(g->e_cnt * sizeof(int));
-  g->vertex = (int64_t*)malloc((g->v_cnt + 1) * sizeof(int64_t));
+  g->edge = new int [g->e_cnt];
+  g->vertex = new int64_t[g->v_cnt + 1];
 
-  degree = (int*)malloc(n * sizeof(int));
+  degree = new int [n];
   for (int u = 0; u < n; ++u) {
     degree[u] = original_g->vertex[u + 1] - original_g->vertex[u];
   }
@@ -63,6 +64,8 @@ void degree_orientation_init(Graph* original_g, Graph*& g) {
   // partition_num = (max_degree - 1) / 32 + 1;
   assert(max_degree < THREADS_PER_BLOCK);
   printf("Maximum degree after orientation: %d\n", max_degree);
+
+  // delete[] degree;
 }
 
 void degeneracy_orientation_init(Graph* original_g, Graph*& g) {
@@ -79,13 +82,13 @@ void degeneracy_orientation_init(Graph* original_g, Graph*& g) {
   std::vector<std::vector<int>> node_with_degree(n, std::vector<int>());
   g->v_cnt = n;
   g->e_cnt = m >> 1;
-  g->edge = (int*)malloc(g->e_cnt * sizeof(int));
-  g->vertex = (int64_t*)malloc((g->v_cnt + 1) * sizeof(int64_t));
+  g->edge = new int [g->e_cnt] ;
+  g->vertex = new int64_t [g->v_cnt + 1];
 
-  degree = (int*)malloc(n * sizeof(int));
-  order = (int*)malloc(n * sizeof(int));
-  in_vector = (bool*)malloc(n * sizeof(bool));
-  vector_ptr = (int*)malloc(n * sizeof(int));
+  degree = new int [n];
+  order = new int [n];
+  in_vector = new bool [n];
+  vector_ptr = new int [n];
 
   for (int u = 0; u < n; ++u) {
     in_vector[u] = true;
@@ -146,6 +149,11 @@ void degeneracy_orientation_init(Graph* original_g, Graph*& g) {
   // partition_num = (max_degree - 1) / 32 + 1;
   assert(max_degree < THREADS_PER_BLOCK);
   printf("Maximum vertex degree after orientation: %d\n", max_degree);
+
+  // delete[] degree;
+  // delete[] order;
+  // delete[] in_vector;
+  // delete[] vector_ptr;
 }
 
 
@@ -173,14 +181,14 @@ __device__ unsigned long long dev_sum = 0;
  *        2. 感觉可以加启发式（类似木桶理论），而不是严格按照 vertex 编号顺序来
  */
 __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
-                                           unsigned int* binary_adj,
+                                           unsigned long long* binary_adj,
                                            int64_t* vertex, int64_t* start_ptr,
                                            int* k) {
   __shared__ unsigned long long cache[WARPS_PER_BLOCK];
   // __shared__ int stack_vertex_pool[WARPS_PER_BLOCK * MAX_DEPTH];
   // __shared__ int* stack_vertex_ptr[WARPS_PER_BLOCK];
-  __shared__ int stack_binary_adj_pool[THREADS_PER_BLOCK * MAX_DEPTH];
-  __shared__ int* stack_binary_adj_ptr[WARPS_PER_BLOCK];
+  __shared__ unsigned long long stack_binary_adj_pool[THREADS_PER_BLOCK * MAX_DEPTH];
+  __shared__ unsigned long long* stack_binary_adj_ptr[WARPS_PER_BLOCK];
   int stack_vertex[MAX_DEPTH];
   // int stack_binary_adj[MAX_DEPTH * THREADS_PER_WARP];
 
@@ -201,7 +209,7 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
   // int size = (int)(vertex[u + 1] - vertex[u]);
   bool is_main_thread = (threadIdx.x % THREADS_PER_WARP == 0);
   // int* stack_vertex = stack_vertex_ptr[warpidx];
-  int* stack_binary_adj = stack_binary_adj_ptr[warpidx];
+  unsigned long long* stack_binary_adj = stack_binary_adj_ptr[warpidx];
 
   for (int64_t o = (int64_t)blockIdx.x * WARPS_PER_BLOCK + warpidx;
        o < vertex[*n]; o += (int64_t)thread_block_num * WARPS_PER_BLOCK) {
@@ -218,8 +226,8 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
     int u = l;
     int v = (int)(o - vertex[u]);
     int size = (int)(vertex[u + 1] - vertex[u]);
-    // ceil(size / 32)
-    int partition_num = (size - 1) / 32 + 1;
+    // ceil(size / 64)
+    int partition_num = (size - 1) / BITS_PER_PARTITION + 1;
 
     int top = 0;
     stack_vertex[top] = v;
@@ -246,15 +254,15 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
           // partition_num);
           foobar = partition_num * top;
           for (int i = 0; i < partition_num; ++i) {
-            sum += __popc(stack_binary_adj[foobar + i]);
+            sum += __popcll(stack_binary_adj[foobar + i]);
           }
         }
         --top;
       } else {
         ++stack_vertex[top + 1];
 
-        partitionidx = stack_vertex[top + 1] >> 5;  // / 32
-        bitidx = stack_vertex[top + 1] & 31;        // % 32
+        partitionidx = stack_vertex[top + 1] >> LENGTH;                   // / 64
+        bitidx = stack_vertex[top + 1] & (BITS_PER_PARTITION - 1);        // % 64
         ok = false;
 
         while (stack_vertex[top + 1] < size) {
@@ -265,7 +273,7 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
           if (!(binary_adj[start_ptr[u] + stack_vertex[top] * partition_num +
                            partitionidx] >>
                 bitidx)) {
-            stack_vertex[top + 1] += 32 - bitidx;
+            stack_vertex[top + 1] += BITS_PER_PARTITION - bitidx;
             bitidx = 0;
             ++partitionidx;
             continue;
@@ -291,7 +299,7 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
             break;
           }
           ++stack_vertex[top + 1];
-          if (++bitidx == 32) {
+          if (++bitidx == BITS_PER_PARTITION) {
             bitidx = 0;
             ++partitionidx;
           }
@@ -317,7 +325,7 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
   }
 }
 
-__global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
+__global__ void traverse(unsigned long long* binary_adj, int64_t* vertex,
                          int64_t* start_ptr, int* k) {
 
   typedef cub::BlockReduce<unsigned long long, THREADS_PER_BLOCK> BlockReduce;
@@ -326,17 +334,12 @@ __global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
   int u = blockIdx.x;
   int tid = threadIdx.x;
   int size = (int)(vertex[u + 1] - vertex[u]);
-  int partition_num = (size - 1) / 32 + 1;
+  int partition_num = (size - 1) / BITS_PER_PARTITION + 1;
 
-  // int* stack_vertex = new int[MAX_DEPTH];
-  // unsigned int* stack_binary_adj = new unsigned int[MAX_DEPTH * 18];
   int stack_vertex[MAX_DEPTH];
-  unsigned int stack_binary_adj[MAX_DEPTH * 32];
-
-  assert(partition_num < 32);
+  unsigned long long stack_binary_adj[MAX_DEPTH * 10];
 
   unsigned long long sum = 0;
-
 
   for(int v = tid; v < size; v += THREADS_PER_BLOCK) {
     int top = 0;
@@ -359,20 +362,20 @@ __global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
         // partition_num);
         foobar = partition_num * top;
         for (int i = 0; i < partition_num; ++i) {
-          sum += __popc(stack_binary_adj[foobar + i]);
+          sum += __popcll(stack_binary_adj[foobar + i]);
         }
         --top;
       } else {
         ++stack_vertex[top + 1];
 
-        partitionidx = stack_vertex[top + 1] >> 5;
-        bitidx = stack_vertex[top + 1] & 31;
+        partitionidx = stack_vertex[top + 1] >> LENGTH;
+        bitidx = stack_vertex[top + 1] & (BITS_PER_PARTITION - 1);
         ok = false;
 
         while (stack_vertex[top + 1] < size) {
           if (!(stack_binary_adj[top * partition_num + partitionidx] >>
                 bitidx)) {
-            stack_vertex[top + 1] += 32 - bitidx;
+            stack_vertex[top + 1] += BITS_PER_PARTITION - bitidx;
             bitidx = 0;
             ++partitionidx;
             continue;
@@ -391,7 +394,7 @@ __global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
             break;
           }
           ++stack_vertex[top + 1];
-          if (++bitidx == 32) {
+          if (++bitidx == BITS_PER_PARTITION) {
             bitidx = 0;
             ++partitionidx;
           }
@@ -404,10 +407,6 @@ __global__ void traverse(unsigned int* binary_adj, int64_t* vertex,
     }
 
 
-  }
-
-  if(sum > 0) {
-    assert(false);
   }
 
   __syncthreads();
@@ -430,20 +429,20 @@ void k_clique_counting(Graph* g, int k) {
   start_ptr[0] = 0;
   for (int u = 0; u < n; ++u) {
     int size = g->vertex[u + 1] - g->vertex[u];
-    start_ptr[u + 1] = start_ptr[u] + size * ((size - 1) / 32 + 1);
+    start_ptr[u + 1] = start_ptr[u] + size * ((size - 1) / BITS_PER_PARTITION + 1);
   }
 
-  unsigned int* binary_adj = new unsigned int [start_ptr[n]];
+  unsigned long long* binary_adj = new unsigned long long [start_ptr[n]];
   for (long long i = start_ptr[n + 1] - 1; ~i; --i) {
     binary_adj[i] = 0;
   }
 
-  #pragma omp parallel for num_threads(16)
+  #pragma omp parallel for num_threads(64)
   for (int u = 0; u < n; ++u) {
     for (int64_t i = g->vertex[u]; i < g->vertex[u + 1]; ++i) {
       int v = g->edge[i];
-      int size = g->vertex[u + 1] - g->vertex[u];
-      int partition_num = (size - 1) / 32 + 1;
+      int size = (int)(g->vertex[u + 1] - g->vertex[u]);
+      int partition_num = (size - 1) / BITS_PER_PARTITION + 1;
 
       int64_t p = g->vertex[u];
       int64_t q = g->vertex[v];
@@ -455,10 +454,10 @@ void k_clique_counting(Graph* g, int k) {
         }
         if (q < g->vertex[v + 1] && g->edge[p] == g->edge[q]) {
           binary_adj[start_ptr[u] + partition_num * (i - g->vertex[u]) +
-                     partitionidx] |= 1 << bitidx;
+                     partitionidx] |= 1ull << bitidx;
         }
         ++p;
-        if (++bitidx == 32) {
+        if (++bitidx == BITS_PER_PARTITION) {
           bitidx = 0;
           ++partitionidx;
         }
@@ -474,7 +473,7 @@ void k_clique_counting(Graph* g, int k) {
   //   std::cerr << binary_adj[i] << " \n"[i + 1 == g->e_cnt];
   // }
 
-  unsigned int* gpu_binary_adj;
+  unsigned long long* gpu_binary_adj;
   int64_t* gpu_vertex;
   int64_t* gpu_start_ptr;
   int* gpu_k;
@@ -484,14 +483,14 @@ void k_clique_counting(Graph* g, int k) {
       (int)std::min((long long)MAX_THREAD_BLOCK,
                     (m * THREADS_PER_WARP - 1) / THREADS_PER_BLOCK + 1);
 
-  cudaMalloc((void**)&gpu_binary_adj, start_ptr[n] * sizeof(unsigned int));
+  cudaMalloc((void**)&gpu_binary_adj, start_ptr[n] * sizeof(unsigned long long));
   cudaMalloc((void**)&gpu_vertex, (n + 1) * sizeof(int64_t));
   cudaMalloc((void**)&gpu_start_ptr, (n + 1) * sizeof(int64_t));
   cudaMalloc((void**)&gpu_k, sizeof(int));
   cudaMalloc((void**)&gpu_n, sizeof(int));
   cudaMalloc((void**)&gpu_thread_block_num, sizeof(int));
 
-  cudaMemcpy(gpu_binary_adj, binary_adj, start_ptr[n] * sizeof(unsigned int),
+  cudaMemcpy(gpu_binary_adj, binary_adj, start_ptr[n] * sizeof(unsigned long long),
              cudaMemcpyHostToDevice);
   cudaMemcpy(gpu_vertex, g->vertex, (n + 1) * sizeof(int64_t),
              cudaMemcpyHostToDevice);
@@ -511,8 +510,8 @@ void k_clique_counting(Graph* g, int k) {
   traverse<<<n, THREADS_PER_BLOCK>>>(gpu_binary_adj, gpu_vertex, gpu_start_ptr,
                                      gpu_k);
   // traverse_on_warp_partition<<<thread_block_num, THREADS_PER_BLOCK>>>
-  //   (gpu_n, gpu_thread_block_num, gpu_binary_adj, gpu_vertex, gpu_start_ptr,
-  //   gpu_k);
+  //    (gpu_n, gpu_thread_block_num, gpu_binary_adj, gpu_vertex, gpu_start_ptr,
+  //    gpu_k);
   cudaDeviceSynchronize();
 
   cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(unsigned long long));
