@@ -12,6 +12,7 @@
 
 #include "../include/dataloader.h"
 #include "../include/graph.h"
+#include "utils.cuh"
 
 constexpr int BITS_PER_PARTITION = 64;
 constexpr int LENGTH = 6;
@@ -21,140 +22,6 @@ constexpr int LENGTH = 6;
 int64_t* start_ptr;
 
 constexpr int THREADS_PER_BLOCK = 128;
-
-/**
- * @note: 工作假定 k <= 6，此时使用 degree orientation 更快（？）
- *        这里 degree orientation 和 degeneracy orientation
- * 两种方法都写了，用于作比较
- * @todo:
- */
-void degree_orientation_init(Graph* original_g, Graph*& g) {
-  g = new Graph();
-
-  int* degree;
-  int n = original_g->v_cnt;
-  long long m = original_g->e_cnt;
-  g->v_cnt = n;
-  g->e_cnt = m >> 1;
-  g->edge = new int [g->e_cnt];
-  g->vertex = new int64_t[g->v_cnt + 1];
-
-  degree = new int [n];
-  for (int u = 0; u < n; ++u) {
-    degree[u] = original_g->vertex[u + 1] - original_g->vertex[u];
-  }
-
-  int64_t ptr = 0;
-  int max_degree = 0;
-  for (int u = 0; u < n; ++u) {
-    g->vertex[u] = ptr;
-    for (int64_t i = original_g->vertex[u]; i < original_g->vertex[u + 1];
-         ++i) {
-      int v = original_g->edge[i];
-      if ((degree[u] < degree[v]) || (degree[u] == degree[v] && u < v)) {
-        g->edge[ptr++] = v;
-      }
-    }
-    if (max_degree < ptr - g->vertex[u]) {
-      max_degree = ptr - g->vertex[u];
-    }
-  }
-  g->vertex[n] = ptr;
-  assert(ptr == g->e_cnt);
-  // partition_num = (max_degree - 1) / 32 + 1;
-  assert(max_degree < THREADS_PER_BLOCK);
-  printf("Maximum degree after orientation: %d\n", max_degree);
-
-  // delete[] degree;
-}
-
-void degeneracy_orientation_init(Graph* original_g, Graph*& g) {
-  g = new Graph();
-
-  // 这里用 vector<int> node_with_degree[x] 来装当前度数为 x
-  // 的所有节点，做到了线性求 k-core 序
-  int* degree;
-  int* order;
-  int* vector_ptr;
-  bool* in_vector;
-  int n = original_g->v_cnt;
-  long long m = original_g->e_cnt;
-  std::vector<std::vector<int>> node_with_degree(n, std::vector<int>());
-  g->v_cnt = n;
-  g->e_cnt = m >> 1;
-  g->edge = new int [g->e_cnt] ;
-  g->vertex = new int64_t [g->v_cnt + 1];
-
-  degree = new int [n];
-  order = new int [n];
-  in_vector = new bool [n];
-  vector_ptr = new int [n];
-
-  for (int u = 0; u < n; ++u) {
-    in_vector[u] = true;
-    degree[u] = original_g->vertex[u + 1] - original_g->vertex[u];
-    node_with_degree[degree[u]].push_back(u);
-  }
-
-  for (int i = 0; i < n; ++i) {
-    vector_ptr[i] = 0;
-  }
-
-  // 精巧的实现
-  int order_ptr = 0;
-  for (int current_min_degree = 0; current_min_degree < n;
-       ++current_min_degree) {
-    bool back = false;
-    for (int& i = vector_ptr[current_min_degree];
-         i < node_with_degree[current_min_degree].size(); ++i) {
-      int u = node_with_degree[current_min_degree][i];
-      if (in_vector[u]) {
-        order[u] = order_ptr++;
-        in_vector[u] = false;
-        for (int64_t j = original_g->vertex[u]; j < original_g->vertex[u + 1];
-             ++j) {
-          int v = original_g->edge[j];
-          if (in_vector[v]) {
-            node_with_degree[--degree[v]].push_back(v);
-            if (degree[v] == current_min_degree - 1) {
-              back = true;
-            }
-          }
-        }
-      }
-    }
-    if (back) {
-      // 由于 for 循环里还要 +1，这里实际上只减了 1
-      current_min_degree -= 2;
-    }
-  }
-
-  int64_t ptr = 0;
-  int max_degree = 0;
-  for (int u = 0; u < n; ++u) {
-    g->vertex[u] = ptr;
-    for (int64_t i = original_g->vertex[u]; i < original_g->vertex[u + 1];
-         ++i) {
-      int v = original_g->edge[i];
-      if (order[u] < order[v]) {
-        g->edge[ptr++] = v;
-      }
-    }
-    if (max_degree < ptr - g->vertex[u]) {
-      max_degree = ptr - g->vertex[u];
-    }
-  }
-  g->vertex[n] = ptr;
-  assert(ptr == g->e_cnt);
-  // partition_num = (max_degree - 1) / 32 + 1;
-  assert(max_degree < THREADS_PER_BLOCK);
-  printf("Maximum vertex degree after orientation: %d\n", max_degree);
-
-  // delete[] degree;
-  // delete[] order;
-  // delete[] in_vector;
-  // delete[] vector_ptr;
-}
 
 
 /*
@@ -325,6 +192,41 @@ __global__ void traverse_on_warp_partition(int* n, int* thread_block_num,
   }
 }
 
+
+
+
+template<int depth>
+__device__ void traverse_func(unsigned long long & sum, unsigned long long * stack_binary_adj, unsigned long long* binary_adj, int64_t * start_ptr, int k, int u, int size, int partition_num){
+  if(depth + 3 == k) {
+    int foobar = partition_num * depth;
+    for (int i = 0; i < partition_num; ++i) {
+      sum += __popcll(stack_binary_adj[foobar + i]);
+    }
+  } else {
+    for(int t = 0; t < size; t++) {
+      int partitionidx = t >> LENGTH;
+      int bitidx = t & (BITS_PER_PARTITION - 1);
+      if (!(stack_binary_adj[depth * partition_num + partitionidx] >> bitidx)) {
+        t += BITS_PER_PARTITION - bitidx - 1;
+        continue;
+      }
+      if ((stack_binary_adj[depth * partition_num + partitionidx] >> bitidx) & 1) {
+            for (int i = 0; i < partition_num; ++i) {
+              stack_binary_adj[(depth + 1) * partition_num + i] =
+                  stack_binary_adj[(depth) * partition_num + i] &
+                  binary_adj[start_ptr[u] + t * partition_num + i];
+            }
+        traverse_func<depth + 1>(sum, stack_binary_adj, binary_adj, start_ptr, k, u, size, partition_num);
+      }
+    }
+  }
+}
+
+template<>
+__device__ void traverse_func<MAX_DEPTH>(unsigned long long & sum, unsigned long long * stack_binary_adj, unsigned long long* binary_adj, int64_t * start_ptr, int k, int u, int size, int partition_num) {
+  assert(false);
+}
+
 __global__ void traverse(unsigned long long* binary_adj, int64_t* vertex,
                          int64_t* start_ptr, int* k) {
 
@@ -337,7 +239,7 @@ __global__ void traverse(unsigned long long* binary_adj, int64_t* vertex,
   int partition_num = (size - 1) / BITS_PER_PARTITION + 1;
 
   int stack_vertex[MAX_DEPTH];
-  unsigned long long stack_binary_adj[MAX_DEPTH * 10];
+  unsigned long long stack_binary_adj[MAX_DEPTH * 20];
 
   unsigned long long sum = 0;
 
@@ -421,6 +323,39 @@ __global__ void traverse(unsigned long long* binary_adj, int64_t* vertex,
   // delete[] stack_binary_adj;
 }
 
+
+__global__ void traverse_recursive(unsigned long long* binary_adj, int64_t* vertex,
+                         int64_t* start_ptr, int* k) {
+
+  typedef cub::BlockReduce<unsigned long long, THREADS_PER_BLOCK> BlockReduce;
+  __shared__ typename BlockReduce::TempStorage temp_storage;
+
+  int u = blockIdx.x;
+  int tid = threadIdx.x;
+  int size = (int)(vertex[u + 1] - vertex[u]);
+  int partition_num = (size - 1) / BITS_PER_PARTITION + 1;
+
+
+  unsigned long long stack_binary_adj[MAX_DEPTH * 20];
+
+  unsigned long long sum = 0;
+
+  for(int v = tid; v < size; v += THREADS_PER_BLOCK) {
+    for (int i = 0; i < partition_num; ++i) {
+      stack_binary_adj[i] = binary_adj[start_ptr[u] + v * partition_num + i];
+    }
+    traverse_func<0>(sum, stack_binary_adj, binary_adj, start_ptr, *k, u, size, partition_num);
+  }
+
+  __syncthreads();
+
+  unsigned long long aggregate = BlockReduce(temp_storage).Sum(sum);
+  if(tid == 0) {
+    atomicAdd(&dev_sum, aggregate);
+  }
+
+}
+
 void k_clique_counting(Graph* g, int k) {
   int n = g->v_cnt;
   long long m = g->e_cnt;
@@ -437,13 +372,12 @@ void k_clique_counting(Graph* g, int k) {
     binary_adj[i] = 0;
   }
 
-  #pragma omp parallel for num_threads(64)
+  #pragma omp parallel for num_threads(64) schedule(dynamic)
   for (int u = 0; u < n; ++u) {
+    int size = (int)(g->vertex[u + 1] - g->vertex[u]);
+    int partition_num = (size - 1) / BITS_PER_PARTITION + 1;
     for (int64_t i = g->vertex[u]; i < g->vertex[u + 1]; ++i) {
       int v = g->edge[i];
-      int size = (int)(g->vertex[u + 1] - g->vertex[u]);
-      int partition_num = (size - 1) / BITS_PER_PARTITION + 1;
-
       int64_t p = g->vertex[u];
       int64_t q = g->vertex[v];
       int partitionidx = 0;
@@ -483,23 +417,25 @@ void k_clique_counting(Graph* g, int k) {
       (int)std::min((long long)MAX_THREAD_BLOCK,
                     (m * THREADS_PER_WARP - 1) / THREADS_PER_BLOCK + 1);
 
-  cudaMalloc((void**)&gpu_binary_adj, start_ptr[n] * sizeof(unsigned long long));
-  cudaMalloc((void**)&gpu_vertex, (n + 1) * sizeof(int64_t));
-  cudaMalloc((void**)&gpu_start_ptr, (n + 1) * sizeof(int64_t));
-  cudaMalloc((void**)&gpu_k, sizeof(int));
-  cudaMalloc((void**)&gpu_n, sizeof(int));
-  cudaMalloc((void**)&gpu_thread_block_num, sizeof(int));
+  printf("start_ptr:%lld\n", start_ptr[n]);
 
-  cudaMemcpy(gpu_binary_adj, binary_adj, start_ptr[n] * sizeof(unsigned long long),
-             cudaMemcpyHostToDevice);
-  cudaMemcpy(gpu_vertex, g->vertex, (n + 1) * sizeof(int64_t),
-             cudaMemcpyHostToDevice);
-  cudaMemcpy(gpu_start_ptr, start_ptr, (n + 1) * sizeof(int64_t),
-             cudaMemcpyHostToDevice);
-  cudaMemcpy(gpu_k, &k, sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(gpu_n, &n, sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(gpu_thread_block_num, &thread_block_num, sizeof(int),
-             cudaMemcpyHostToDevice);
+  gpuErrchk( cudaMalloc((void**)&gpu_binary_adj, start_ptr[n] * sizeof(unsigned long long)) );
+  gpuErrchk( cudaMalloc((void**)&gpu_vertex, (n + 1) * sizeof(int64_t)) );
+  gpuErrchk( cudaMalloc((void**)&gpu_start_ptr, (n + 1) * sizeof(int64_t)) );
+  gpuErrchk( cudaMalloc((void**)&gpu_k, sizeof(int)) );
+  gpuErrchk( cudaMalloc((void**)&gpu_n, sizeof(int)) );
+  gpuErrchk( cudaMalloc((void**)&gpu_thread_block_num, sizeof(int)) );
+
+  gpuErrchk( cudaMemcpy(gpu_binary_adj, binary_adj, start_ptr[n] * sizeof(unsigned long long),
+             cudaMemcpyHostToDevice) );
+  gpuErrchk( cudaMemcpy(gpu_vertex, g->vertex, (n + 1) * sizeof(int64_t),
+             cudaMemcpyHostToDevice) );
+  gpuErrchk( cudaMemcpy(gpu_start_ptr, start_ptr, (n + 1) * sizeof(int64_t),
+             cudaMemcpyHostToDevice) );
+  gpuErrchk( cudaMemcpy(gpu_k, &k, sizeof(int), cudaMemcpyHostToDevice) );
+  gpuErrchk( cudaMemcpy(gpu_n, &n, sizeof(int), cudaMemcpyHostToDevice) );
+  gpuErrchk( cudaMemcpy(gpu_thread_block_num, &thread_block_num, sizeof(int),
+             cudaMemcpyHostToDevice) );
 
   clock_t start_time = clock();
   printf("Counting function is running...\n");
@@ -507,14 +443,17 @@ void k_clique_counting(Graph* g, int k) {
   unsigned long long sum = 0;
   cudaMemcpyToSymbol(dev_sum, &sum, sizeof(unsigned long long));
 
-  traverse<<<n, THREADS_PER_BLOCK>>>(gpu_binary_adj, gpu_vertex, gpu_start_ptr,
+  traverse_recursive<<<n, THREADS_PER_BLOCK>>>(gpu_binary_adj, gpu_vertex, gpu_start_ptr,
                                      gpu_k);
   // traverse_on_warp_partition<<<thread_block_num, THREADS_PER_BLOCK>>>
   //    (gpu_n, gpu_thread_block_num, gpu_binary_adj, gpu_vertex, gpu_start_ptr,
   //    gpu_k);
-  cudaDeviceSynchronize();
 
-  cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(unsigned long long));
+  gpuErrchk( cudaPeekAtLastError() );
+  gpuErrchk( cudaDeviceSynchronize() );
+  
+  gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(unsigned long long)) );
+
   printf("count %llu\n", sum);
 
   clock_t end_time = clock();

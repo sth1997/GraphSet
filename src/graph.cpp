@@ -321,8 +321,9 @@ long long Graph::pattern_matching(const Schedule_IEP& schedule, int thread_count
             //subtraction_set.insert_ans_sort(vertex);
             subtraction_set.push_back(vertex);
             //if (schedule.get_total_restrict_num() > 0 && clique == false)
-            if(true)
-                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set, local_ans, 1, ans_buffer);
+            if(true) {
+                pattern_matching_aggressive_func(schedule, vertex_set, subtraction_set, tmp_set,local_ans, 1, ans_buffer);
+            }
             else
                 pattern_matching_func(schedule, vertex_set, subtraction_set, local_ans, 1, clique);
             subtraction_set.pop_back();
@@ -618,6 +619,136 @@ void reduce_edges_for_clique(Graph &g) {
     erase_edge(g);
     printf("Finish reduce.\n");
 }
+
+
+void degree_orientation_init(Graph* original_g, Graph*& g) {
+  g = new Graph();
+
+  int* degree;
+  int n = original_g->v_cnt;
+  long long m = original_g->e_cnt;
+  g->v_cnt = n;
+  g->e_cnt = m >> 1;
+  g->edge = new int [g->e_cnt];
+  g->vertex = new int64_t[g->v_cnt + 1];
+
+  degree = new int [n];
+  for (int u = 0; u < n; ++u) {
+    degree[u] = original_g->vertex[u + 1] - original_g->vertex[u];
+  }
+
+  int64_t ptr = 0;
+  int max_degree = 0;
+  for (int u = 0; u < n; ++u) {
+    g->vertex[u] = ptr;
+    for (int64_t i = original_g->vertex[u]; i < original_g->vertex[u + 1];
+         ++i) {
+      int v = original_g->edge[i];
+      if ((degree[u] < degree[v]) || (degree[u] == degree[v] && u < v)) {
+        g->edge[ptr++] = v;
+      }
+    }
+    if (max_degree < ptr - g->vertex[u]) {
+      max_degree = ptr - g->vertex[u];
+    }
+  }
+  g->vertex[n] = ptr;
+  assert(ptr == g->e_cnt);
+  // partition_num = (max_degree - 1) / 32 + 1;
+  // assert(max_degree < THREADS_PER_BLOCK);
+  printf("Maximum degree after orientation: %d\n", max_degree);
+
+  delete[] degree;
+}
+
+
+void degeneracy_orientation_init(Graph* original_g, Graph*& g) {
+  g = new Graph();
+
+  // 这里用 vector<int> node_with_degree[x] 来装当前度数为 x
+  // 的所有节点，做到了线性求 k-core 序
+  int* degree;
+  int* order;
+  int* vector_ptr;
+  bool* in_vector;
+  int n = original_g->v_cnt;
+  long long m = original_g->e_cnt;
+  std::vector<std::vector<int>> node_with_degree(n, std::vector<int>());
+  g->v_cnt = n;
+  g->e_cnt = m >> 1;
+  g->edge = new int [g->e_cnt] ;
+  g->vertex = new int64_t [g->v_cnt + 1];
+
+  degree = new int [n];
+  order = new int [n];
+  in_vector = new bool [n];
+  vector_ptr = new int [n];
+
+  for (int u = 0; u < n; ++u) {
+    in_vector[u] = true;
+    degree[u] = original_g->vertex[u + 1] - original_g->vertex[u];
+    node_with_degree[degree[u]].push_back(u);
+  }
+
+  for (int i = 0; i < n; ++i) {
+    vector_ptr[i] = 0;
+  }
+
+  // 精巧的实现
+  int order_ptr = 0;
+  for (int current_min_degree = 0; current_min_degree < n;
+       ++current_min_degree) {
+    bool back = false;
+    for (int& i = vector_ptr[current_min_degree];
+         i < node_with_degree[current_min_degree].size(); ++i) {
+      int u = node_with_degree[current_min_degree][i];
+      if (in_vector[u]) {
+        order[u] = order_ptr++;
+        in_vector[u] = false;
+        for (int64_t j = original_g->vertex[u]; j < original_g->vertex[u + 1];
+             ++j) {
+          int v = original_g->edge[j];
+          if (in_vector[v]) {
+            node_with_degree[--degree[v]].push_back(v);
+            if (degree[v] == current_min_degree - 1) {
+              back = true;
+            }
+          }
+        }
+      }
+    }
+    if (back) {
+      // 由于 for 循环里还要 +1，这里实际上只减了 1
+      current_min_degree -= 2;
+    }
+  }
+
+  int64_t ptr = 0;
+  int max_degree = 0;
+  for (int u = 0; u < n; ++u) {
+    g->vertex[u] = ptr;
+    for (int64_t i = original_g->vertex[u]; i < original_g->vertex[u + 1];
+         ++i) {
+      int v = original_g->edge[i];
+      if (order[u] < order[v]) {
+        g->edge[ptr++] = v;
+      }
+    }
+    if (max_degree < ptr - g->vertex[u]) {
+      max_degree = ptr - g->vertex[u];
+    }
+  }
+  g->vertex[n] = ptr;
+  assert(ptr == g->e_cnt);
+  // partition_num = (max_degree - 1) / 32 + 1;
+  printf("Maximum vertex degree after orientation: %d\n", max_degree);
+
+  delete[] degree;
+  delete[] order;
+  delete[] in_vector;
+  delete[] vector_ptr;
+}
+
 
 void Graph::motif_counting(int pattern_size, int thread_count) {
 
