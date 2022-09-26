@@ -46,7 +46,8 @@ public:
     GPUBitVector& operator = (const GPUBitVector&) = delete;
     GPUBitVector(const GPUBitVector&&) = delete;
     GPUBitVector(const GPUBitVector&) = delete;
-    // 这个版本理论上可以并行插入，数数的时候需要一个 warp 的线程都参与
+    inline __device__ uint32_t & operator [] (const int index) { return data[index];}
+    
     inline __device__ long long get_non_zero_cnt() const {
         // warp reduce version
         typedef cub::WarpReduce<long long> WarpReduce;
@@ -67,9 +68,10 @@ public:
 
         return aggregate;
     }
-    __device__ void insert(uint32_t id) { 
-        atomicOr(&data[id >> 5], 1 << (id & 31));
-        __threadfence_block();
+    __device__ void insert(uint32_t id) {
+        data[id >> 5] |= 1 << (id & 31); 
+        // atomicOr(&data[id >> 5], 1 << (id & 31));
+        // __threadfence_block();
     }
     __host__ __device__ uint32_t* get_data() const {
         return data;
@@ -110,27 +112,24 @@ __device__ bool GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
     bool local_match = false;
     __shared__ bool block_match[WARPS_PER_BLOCK];
     if (depth == schedule->get_size() - 1) {
-        typedef cub::WarpReduce<int> WarpReduce;
-        __shared__ typename WarpReduce::TempStorage temp_storage[WARPS_PER_BLOCK];
         int lid = threadIdx.x % THREADS_PER_WARP;
         int wid = threadIdx.x / THREADS_PER_WARP;
         // warp 的线程一起做 insert
-        int is_final_match = 0;
         for (int vertex_block = 0; vertex_block < loop_size; vertex_block += THREADS_PER_WARP)
         {
             if(vertex_block + lid >= loop_size) break;
             int vertex = loop_data_ptr[vertex_block + lid];
             if (subtraction_set.has_data(vertex))
                 continue;
-            is_final_match = 1;
+            local_match = true;
             // for(int i = 0; i < WARPS_PER_BLOCK; i++) if(wid == i) { 
                 fsm_set[depth].insert(vertex);
             // }
             __threadfence_block();
         }
         __syncwarp();
-        int aggregate = WarpReduce(temp_storage[wid]).Sum(is_final_match);
-        if(lid == 0) block_match[wid] = (aggregate > 0);
+        
+        if(lid == 0) block_match[wid] = (__ballot_sync(__activemask(), local_match) != 0);
         return block_match[wid]; 
     }
 
@@ -208,8 +207,6 @@ __global__ void gpu_single_pattern_matching(uint32_t job_id, uint32_t v_cnt, uin
             vertex_set[i].set_data_ptr(tmp + offset); // 注意这是个指针+整数运算，自带*4
             offset += buffer_size;
         }
-
-        __threadfence_block();
         subtraction_set.init();
         size_t job_start_idx = job_id * schedule->get_size();
         for (int j = 0; j < schedule->get_size(); ++j)
@@ -219,13 +216,13 @@ __global__ void gpu_single_pattern_matching(uint32_t job_id, uint32_t v_cnt, uin
 
     if (lid < schedule->get_size())
         fsm_set[lid].clear();
-    if(global_wid == 0 && lid == 0) {
-        printf("pattern's label: ");
-        for(int i = 0; i < schedule->size; i++){
-            printf("%d ",p_label[i]);
-        }
-        printf("\n");
-    }
+    // if(global_wid == 0 && lid == 0) {
+    //     printf("pattern's label: ");
+    //     for(int i = 0; i < schedule->size; i++){
+    //         printf("%d ",p_label[i]);
+    //     }
+    //     printf("\n");
+    // }
 
     __threadfence_block();
     
@@ -281,6 +278,13 @@ __global__ void gpu_single_pattern_matching(uint32_t job_id, uint32_t v_cnt, uin
     // cudaFree(temp_sum_counter);
 }
 
+class OrOperator{
+    public:
+    __device__ uint32_t operator() (const uint32_t &a, const uint32_t &b) const {
+        return a | b;
+    }
+};
+
 __global__ void reduce_fsm_set(GPUBitVector *global_fsm_set, uint32_t bit_vector_size, uint schedule_size) {
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id within the block
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
@@ -300,7 +304,32 @@ __global__ void reduce_fsm_set(GPUBitVector *global_fsm_set, uint32_t bit_vector
     //         } 
     //     }
     // }
+    GPUBitVector *output = global_fsm_set + schedule_size * num_total_warps;
+    
+    if(lid == 0 && global_wid < schedule_size) 
+        output[global_wid].clear();
+    
+    __syncthreads();
+    __threadfence();
+
+    typedef cub::WarpReduce<uint32_t, THREADS_PER_WARP> WarpReduce;
+    __shared__ typename WarpReduce::TempStorage temp_storage[WARPS_PER_BLOCK];
+    __shared__ uint32_t answer[THREADS_PER_BLOCK];
+
+    for(int s_block = 0; s_block < schedule_size * bit_vector_size; s_block += num_total_warps) {
+        int pos = s_block + global_wid;
+        int t = pos / bit_vector_size;
+        int  p = pos % bit_vector_size;
+        if(pos >= schedule_size * bit_vector_size) break;
+        
+        uint32_t tmp_result = 0;
+        for(int i = 0; i < num_total_warps; i ++) {
+            tmp_result |= (*(global_fsm_set + i * schedule_size + t)).get_data()[p];
+        }
+        output[t].get_data()[p] = tmp_result;
+    }
 }
+
 
 long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& schedule, const std::vector<std::vector<int> >& automorphisms, unsigned int pattern_is_frequent_index, unsigned int* is_frequent, uint32_t* dev_edge, uint32_t* dev_labeled_vertex, int* dev_v_label, uint32_t* dev_tmp, int max_edge, int job_num, char* all_p_label, char* dev_all_p_label, GPUBitVector* dev_fsm_set, uint32_t* dev_label_start_idx, long long min_support) {
 
@@ -315,13 +344,8 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& sched
 
     int bitVector_size = (g->v_cnt+31)/32;
 
-    // int* host_fsm_set[schedule.get_size()];
-    // for(int i = 0; i < schedule.get_size(); i++){
-    //     host_fsm_set[i] = new int [bitVector_size];
-    // }
-
-    uint32_t* host_fsm_set[num_total_warps * schedule.get_size()];
-    for(int i = 0; i < num_total_warps * schedule.get_size(); i++){
+    uint32_t* host_fsm_set[schedule.get_size()];
+    for(int i = 0; i < schedule.get_size(); i++){
         host_fsm_set[i] = new uint32_t [bitVector_size];
     }
 
@@ -375,7 +399,7 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& sched
 
     printf("total_job_num: %d\n", job_num);
     for(int job_id = 0; job_id < job_num; job_id++){
-        if(job_id % 1 == 0)
+        if(job_id % 100 == 0)
             printf("job id: %d/%d\n",job_id, job_num);
         fflush(stdout);
 
@@ -389,49 +413,31 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& sched
         gpuErrchk( cudaPeekAtLastError() );
         gpuErrchk( cudaDeviceSynchronize() );
         
-        printf("return from kernel.\n");
-        fflush(stdout);
+        // printf("return from kernel.\n");
+        // fflush(stdout);
+
+        reduce_fsm_set<<<num_blocks, THREADS_PER_BLOCK>>>(dev_fsm_set, bitVector_size, schedule_size);
+
+        gpuErrchk( cudaPeekAtLastError() );
+        gpuErrchk( cudaDeviceSynchronize() );
 
         
-        for(int i = 0; i < num_total_warps * schedule.get_size(); i++){
-            gpuErrchk( cudaMemcpy(host_fsm_set[i], dev_fsm_set[i].get_data(), sizeof(uint32_t) * bitVector_size, cudaMemcpyDeviceToHost) );
+        for(int i = 0; i < schedule.get_size(); i++){
+            gpuErrchk( cudaMemcpy(host_fsm_set[i], dev_fsm_set[i + num_total_warps * schedule_size].get_data(), sizeof(uint32_t) * bitVector_size, cudaMemcpyDeviceToHost) );
         }
-
-        printf("finish memory copy.\n");
-        fflush(stdout);
-
-        for(int s = num_total_warps - 1; s > 0; --s) {
-            // s 或到 s - 1 上面去
-            for(int i = 0; i < schedule_size; i++) {
-                uint32_t *this_fsm_set = host_fsm_set[(s - 1) * schedule_size + i];
-                uint32_t *that_fsm_set = host_fsm_set[(s) * schedule_size + i];
-                // #pragma omp parallel for num_threads(16) schedule(dynamic)
-                for(int pos = 0; pos < bitVector_size; pos++){
-                    this_fsm_set[pos] |= that_fsm_set[pos];
-                }
-            }
-        }
-
-        // reduce_fsm_set<<<num_blocks, THREADS_PER_BLOCK>>>(dev_fsm_set, bitVector_size, schedule_size);
-
-        // gpuErrchk( cudaPeekAtLastError() );
-        // gpuErrchk( cudaDeviceSynchronize() );
-
-        // get fsm_set back on cpu
-
 
 
         long long support_answer = g->v_cnt;
         for (int i = 0; i < schedule.get_size(); ++i) {
             long long count = 0;
+            #pragma omp parallel for num_threads(8) reduction(+: count) schedule(dynamic)
             for(int j = 0; j < bitVector_size; j++){
                 count += __builtin_popcount(host_fsm_set[i][j]);
             }
-            printf("fsm_set[%d]: %lld ", i, count);
+            // printf("fsm_set[%d]: %lld ", i, count);
             if(count < support_answer) support_answer = count;
         }
-
-        printf("\nfinish job %d, support answer:%lld\n", job_id, support_answer);
+        // printf("\nfinish job %d, support answer:%lld\n", job_id, support_answer);
         fflush(stdout);
 
         if (support_answer >= min_support) {
@@ -526,8 +532,8 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     gpuErrchk( cudaMemcpy(dev_v_label, g->v_label, size_v_label, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_label_start_idx, g->label_start_idx, size_label_start_idx, cudaMemcpyHostToDevice));
 
-    gpuErrchk( cudaMallocManaged((void**)&dev_fsm_set, sizeof(GPUBitVector) * num_total_warps * (max_edge + 1)));
-    for (int i = 0; i < num_total_warps * (max_edge + 1); ++i)
+    gpuErrchk( cudaMallocManaged((void**)&dev_fsm_set, sizeof(GPUBitVector) * (num_total_warps + 1) * (max_edge + 1)));
+    for (int i = 0; i < (num_total_warps + 1) * (max_edge + 1); ++i)
         dev_fsm_set[i].construct(g->v_cnt);
 
     timeval start, end, total_time;
