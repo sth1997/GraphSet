@@ -47,6 +47,16 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid,
     restrict_next = new int[max_prefix_num];
     restrict_index = new int[max_prefix_num];
 
+    memset(father_prefix_id, -1, max_prefix_num * sizeof(int));
+    memset(prefix, -1, max_prefix_num * sizeof(Prefix));
+    memset(last, -1, size * sizeof(int));
+    memset(next, -1, max_prefix_num * sizeof(int));
+    memset(restrict_next, -1, max_prefix_num * sizeof(int));
+    memset(break_size, -1, max_prefix_num * sizeof(int));
+    memset(restrict_last, -1, size * sizeof(int));
+    memset(restrict_next, -1, max_prefix_num * sizeof(int));
+    memset(restrict_next, -1, max_prefix_num * sizeof(int));
+
     std::vector< std::pair<int,int> > best_pairs;
     best_pairs.clear();
     //Initialize adj_mat
