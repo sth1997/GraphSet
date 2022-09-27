@@ -69,9 +69,9 @@ public:
         return aggregate;
     }
     __device__ void insert(uint32_t id) {
-        data[id >> 5] |= 1 << (id & 31); 
-        // atomicOr(&data[id >> 5], 1 << (id & 31));
-        // __threadfence_block();
+        // data[id >> 5] |= 1 << (id & 31); 
+        atomicOr(&data[id >> 5], 1 << (id & 31));
+        __threadfence_block();
     }
     __host__ __device__ uint32_t* get_data() const {
         return data;
@@ -112,8 +112,8 @@ __device__ bool GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
     bool local_match = false;
     __shared__ bool block_match[WARPS_PER_BLOCK];
     if (depth == schedule->get_size() - 1) {
-        int lid = threadIdx.x % THREADS_PER_WARP;
         int wid = threadIdx.x / THREADS_PER_WARP;
+        int lid = threadIdx.x % THREADS_PER_WARP;
         // warp 的线程一起做 insert
         for (int vertex_block = 0; vertex_block < loop_size; vertex_block += THREADS_PER_WARP)
         {
@@ -122,14 +122,13 @@ __device__ bool GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
             if (subtraction_set.has_data(vertex))
                 continue;
             local_match = true;
-            // for(int i = 0; i < WARPS_PER_BLOCK; i++) if(wid == i) { 
+            for(int i = 0; i < WARPS_PER_BLOCK; i++) if(wid == i) {
                 fsm_set[depth].insert(vertex);
-            // }
+            }
             __threadfence_block();
         }
         __syncwarp();
-        
-        if(lid == 0) block_match[wid] = (__ballot_sync(__activemask(), local_match) != 0);
+        block_match[wid] = __any_sync(__activemask(), local_match);
         return block_match[wid]; 
     }
 
@@ -225,10 +224,6 @@ __global__ void gpu_single_pattern_matching(uint32_t job_id, uint32_t v_cnt, uin
     // }
 
     __threadfence_block();
-    
-    // int * temp_sum_counter;
-    // cudaMalloc((void**)&temp_sum_counter, sizeof(int));
-    // *temp_sum_counter = 0;
 
     int start_v = label_start_idx[p_label[0]], end_v = label_start_idx[p_label[0] + 1];
     for(int vertex_block = start_v; vertex_block < end_v; vertex_block += num_total_warps) {
@@ -260,12 +255,8 @@ __global__ void gpu_single_pattern_matching(uint32_t job_id, uint32_t v_cnt, uin
 
         if(GPU_pattern_matching_func<1>(schedule, vertex_set, subtraction_set, edge, labeled_vertex, p_label, fsm_set, l_cnt)) {
             if(lid == 0){
-                // int sum_counter = atomicAdd(temp_sum_counter, 1);
                 // for(int i = 0; i < num_total_warps; i++) if(i == global_wid) {
-                fsm_set[0].insert(vertex_id);
-                    
-                // if(sum_counter % 1000 == 0 && sum_counter > 0) {
-                //     printf("sum_counter: %d from vertex: %d new_size: %d\n", sum_counter, vertex_id,vertex_set[schedule->get_last(0)].get_size());
+                    fsm_set[0].insert(vertex_id);
                 // }
             }
         }
@@ -289,21 +280,6 @@ __global__ void reduce_fsm_set(GPUBitVector *global_fsm_set, uint32_t bit_vector
     int wid = threadIdx.x / THREADS_PER_WARP; // warp id within the block
     int lid = threadIdx.x % THREADS_PER_WARP; // lane id
     int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id  
-    // // 仍然有同步的问题
-    // for (int s = 1; s < num_total_warps; s *= 2) {
-    //     for(int i = 0; i < schedule_size; i++) {
-    //         GPUBitVector *this_fsm_set = global_fsm_set + (global_wid) * schedule_size + i;
-    //         GPUBitVector *that_fsm_set = global_fsm_set + (global_wid + s) * schedule_size + i;
-    //         for(int pos_block = 0; pos_block < bit_vector_size; pos_block += WARPS_PER_BLOCK) {
-    //             int pos = pos_block + lid;
-    //             if(pos >= bit_vector_size) continue; 
-    //             uint32_t v = global_wid + s < num_total_warps ? that_fsm_set->get_data()[pos] : 0;
-    //             // __threadfence_system();
-    //             this_fsm_set->get_data()[pos] |= v;
-    //             // __threadfence_system();
-    //         } 
-    //     }
-    // }
     GPUBitVector *output = global_fsm_set + schedule_size * num_total_warps;
     
     if(lid == 0 && global_wid < schedule_size) 
@@ -314,7 +290,20 @@ __global__ void reduce_fsm_set(GPUBitVector *global_fsm_set, uint32_t bit_vector
 
     typedef cub::WarpReduce<uint32_t, THREADS_PER_WARP> WarpReduce;
     __shared__ typename WarpReduce::TempStorage temp_storage[WARPS_PER_BLOCK];
-    __shared__ uint32_t answer[THREADS_PER_BLOCK];
+    // __shared__ uint32_t answer[THREADS_PER_BLOCK];
+
+    // brute force version
+    // for(int pos = 0; pos < schedule_size * bit_vector_size; pos++){
+    //     int t = pos / bit_vector_size;
+    //     int p = pos % bit_vector_size;    
+    //     uint32_t tmp_result = 0;
+    //     for(int i = 0; i < num_total_warps; i ++) {
+    //         tmp_result |= (*(global_fsm_set + i * schedule_size + t)).get_data()[p];
+    //         __syncwarp();
+    //     }
+    //     __threadfence();
+    //     output[t].get_data()[p] = tmp_result;        
+    // }
 
     for(int s_block = 0; s_block < schedule_size * bit_vector_size; s_block += num_total_warps) {
         int pos = s_block + global_wid;
@@ -323,17 +312,28 @@ __global__ void reduce_fsm_set(GPUBitVector *global_fsm_set, uint32_t bit_vector
         if(pos >= schedule_size * bit_vector_size) break;
         
         uint32_t tmp_result = 0;
-        for(int i = 0; i < num_total_warps; i ++) {
+        // for(int i = 0; i < num_total_warps; i ++) {
+        //     tmp_result |= (*(global_fsm_set + i * schedule_size + t)).get_data()[p];
+        // }
+        // output[t].get_data()[p] = tmp_result;
+        for(int i_block = 0; i_block < num_total_warps; i_block += WARPS_PER_BLOCK) {
+            int i = i_block + lid;
+            if(i >= num_total_warps) break;
             tmp_result |= (*(global_fsm_set + i * schedule_size + t)).get_data()[p];
         }
-        output[t].get_data()[p] = tmp_result;
+        __syncwarp();
+        uint32_t agg = WarpReduce(temp_storage[wid]).Reduce(tmp_result, OrOperator());
+        __syncwarp();
+        if(lid == 0) {
+            output[t].get_data()[p] = agg;
+        }
     }
 }
 
 
 long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& schedule, const std::vector<std::vector<int> >& automorphisms, unsigned int pattern_is_frequent_index, unsigned int* is_frequent, uint32_t* dev_edge, uint32_t* dev_labeled_vertex, int* dev_v_label, uint32_t* dev_tmp, int max_edge, int job_num, char* all_p_label, char* dev_all_p_label, GPUBitVector* dev_fsm_set, uint32_t* dev_label_start_idx, long long min_support) {
 
-    printf("enter pattern matching init\n");
+    // printf("enter pattern matching init\n");
     printf("total prefix %d\n", schedule.get_total_prefix_num());
     schedule.print_schedule();
     fflush(stdout);
@@ -399,8 +399,8 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& sched
 
     printf("total_job_num: %d\n", job_num);
     for(int job_id = 0; job_id < job_num; job_id++){
-        if(job_id % 100 == 0)
-            printf("job id: %d/%d\n",job_id, job_num);
+        // if(job_id % 100 == 0)
+        //     printf("job id: %d/%d\n",job_id, job_num);
         fflush(stdout);
 
         bool * break_indicater;
@@ -412,9 +412,6 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& sched
 
         gpuErrchk( cudaPeekAtLastError() );
         gpuErrchk( cudaDeviceSynchronize() );
-        
-        // printf("return from kernel.\n");
-        // fflush(stdout);
 
         reduce_fsm_set<<<num_blocks, THREADS_PER_BLOCK>>>(dev_fsm_set, bitVector_size, schedule_size);
 
@@ -434,10 +431,10 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& sched
             for(int j = 0; j < bitVector_size; j++){
                 count += __builtin_popcount(host_fsm_set[i][j]);
             }
-            // printf("fsm_set[%d]: %lld ", i, count);
+            // printf("fsm_set[%d]: %lld\n", i, count);
             if(count < support_answer) support_answer = count;
         }
-        // printf("\nfinish job %d, support answer:%lld\n", job_id, support_answer);
+        printf("finish job %d, support answer:%lld\n", job_id, support_answer);
         fflush(stdout);
 
         if (support_answer >= min_support) {
@@ -597,14 +594,14 @@ int main(int argc,char *argv[]) {
     LabeledGraph *g;
     DataLoader D;
 
-    const std::string type = argv[1];
-    const std::string path = argv[2];
-    const int max_edge = atoi(argv[3]);
-    const int min_support = atoi(argv[4]);
+    // const std::string type = argv[1];
+    const std::string path = argv[1];
+    const int max_edge = atoi(argv[2]);
+    const int min_support = atoi(argv[3]);
 
     DataType my_type;
     
-    GetDataType(my_type, type);
+    GetDataType(my_type, "Patents");
 
     if(my_type == DataType::Invalid) {
         printf("Dataset not found!\n");

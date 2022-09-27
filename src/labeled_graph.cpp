@@ -659,6 +659,76 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count, dou
     return fsm_cnt;
 }
 
+int LabeledGraph::fsm_by_vertex(int max_edge, long long min_support, int thread_count, double *time_out) {
+    std::vector<Pattern> patterns;
+    Schedule_IEP* schedules;
+    int schedules_num;
+    int* mapping_start_idx;
+    int* mappings;
+    unsigned int* pattern_is_frequent_index; //每个unlabeled pattern对应的所有labeled pattern在is_frequent中的起始位置，按照32对齐（4B）
+    unsigned int* is_frequent; //bit vector
+    get_fsm_necessary_info(patterns, max_edge, schedules, schedules_num, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent);
+
+    size_t max_labeled_patterns = 1;
+    for (int i = 0; i < max_edge + 1; ++i) //边数最大max_edge，点数最大max_edge + 1
+        max_labeled_patterns *= (size_t) l_cnt;
+    char* all_p_label = new char[max_labeled_patterns * (max_edge + 1)];
+    char* tmp_p_label = new char[max_edge + 1];
+    timeval start, end, total_time;
+    gettimeofday(&start, NULL);
+    long long global_fsm_cnt = 0;
+    //特殊处理一个点的pattern
+    for (int i = 0; i < l_cnt; ++i)
+        if (label_frequency[i] >= min_support) {
+            ++global_fsm_cnt;
+            is_frequent[i >> 5] |= (unsigned int) (1 << (i % 32));
+        }
+    if (max_edge != 0)
+        global_fsm_cnt = 0;
+    int mapping_start_idx_pos = 1;
+
+    for (int i = 1; i < schedules_num; ++i) {
+        std::vector<std::vector<int> > automorphisms;
+        automorphisms.clear();
+        schedules[i].GraphZero_get_automorphisms(automorphisms);
+        schedules[i].update_loop_invariant_for_fsm();
+        schedules[i].print_schedule();
+        size_t all_p_label_idx = 0;
+        traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
+
+        size_t job_num = all_p_label_idx / schedules[i].get_size();
+        for (size_t job_id = 0; job_id < job_num; ++job_id) {
+           global_fsm_cnt += fsm_vertex(job_id, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i] ,max_edge, min_support, thread_count);
+        }
+        mapping_start_idx_pos += schedules[i].get_size();
+        if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
+            global_fsm_cnt = 0;
+        gettimeofday(&end, NULL);
+        timersub(&end, &start, &total_time);
+        printf("time = %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
+    }
+
+    gettimeofday(&end, NULL);
+    timersub(&end, &start, &total_time);
+
+    if(time_out != nullptr) {
+        *time_out = double(total_time.tv_sec) + double(total_time.tv_usec) / 1000000;
+    }
+
+    fsm_cnt = global_fsm_cnt;
+    printf("fsm_cnt = %d\n", fsm_cnt);
+
+    free(schedules);
+    delete[] mapping_start_idx;
+    delete[] mappings;
+    delete[] pattern_is_frequent_index;
+    delete[] is_frequent;
+    delete[] all_p_label;
+    delete[] tmp_p_label;
+    
+    return fsm_cnt;
+}
+
 int LabeledGraph::fsm_vertex(int job_id, const Schedule_IEP &schedule, const char *all_p_label, std::vector<std::vector<int> > &automorphisms, unsigned int* is_frequent, unsigned int& pattern_is_frequent_index, int max_edge, int min_support, int thread_count) const {
     
     int fsm_cnt = 0;
@@ -692,7 +762,7 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule_IEP &schedule, const cha
                 if (count < support)
                     support = count;
             }
-            if (support < min_support) {
+            // if (support < min_support) {
                 get_support_pattern_matching_vertex(vertex, vertex_set, subtraction_set, schedule, p_label, local_fsm_set, min_support);
                 double t1 = get_wall_time();
                 for(int j = 0; j < max_edge + 1; ++j) {
@@ -705,7 +775,7 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule_IEP &schedule, const cha
                     local_fsm_set[j].clear();
                 }
                 double t2 = get_wall_time();
-            }
+            // }
         }
         // for(int j = 0; j < max_edge + 1; ++j) {
         //     for(auto v : local_fsm_set[j]) {
@@ -723,6 +793,7 @@ int LabeledGraph::fsm_vertex(int job_id, const Schedule_IEP &schedule, const cha
     int support = v_cnt;
     for (int i = 0; i < schedule.get_size(); ++i) {
         int count = fsm_set[i].size();
+        printf("fsm_set[%d]: %d\n",i, count);
         if (count < support)
             support = count;
     }
