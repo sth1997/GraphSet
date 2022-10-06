@@ -592,7 +592,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
             }
             // printf("%d\n", support);
             if (support >= min_support) {
-                printf("support: %lld job_id:%d\n", support, job_id);
+                printf("support: %lld job_id:%d/%d\n", support, job_id, job_num);
                 block_break_flag[wid] =true;
                 atomicAdd(&dev_sum, 1);
                 for (int aut_id = 0; aut_id < automorphisms_cnt; ++aut_id) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
@@ -1019,14 +1019,14 @@ int main(int argc,char *argv[]) {
     LabeledGraph *g;
     DataLoader D;
 
-    const std::string type = argv[1];
-    const std::string path = argv[2];
-    const int max_edge = atoi(argv[3]);
-    const int min_support = atoi(argv[4]);
+    // const std::string type = argv[1];
+    const std::string path = argv[1];
+    const int max_edge = atoi(argv[2]);
+    const int min_support = atoi(argv[3]);
 
     DataType my_type;
     
-    GetDataType(my_type, type);
+    GetDataType(my_type, "Patents");
 
     if(my_type == DataType::Invalid) {
         printf("Dataset not found!\n");
