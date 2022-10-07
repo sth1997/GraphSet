@@ -24,6 +24,7 @@ public:
     __device__ int get_size() const { return size;}
     __device__ uint32_t get_data(int i) const { return data[i];}
     __device__ void push_back(uint32_t val) { data[size++] = val;}
+    __device__ void put(uint32_t val, uint32_t depth) { data[depth] = val;}
     __device__ void pop_back() { --size;}
     __device__ uint32_t get_last() const {return data[size - 1];}
     __device__ void set_data_ptr(uint32_t* ptr) { data = ptr;}
@@ -31,6 +32,13 @@ public:
     __device__ bool has_data (uint32_t val) const // 注意：这里不用二分，调用它的是较小的无序集合
     {
         for (int i = 0; i < size; ++i)
+            if (data[i] == val)
+                return true;
+        return false;
+    }
+    __device__ bool has_data_size (uint32_t val, uint32_t n_size) const // 注意：这里不用二分，调用它的是较小的无序集合
+    {
+        for (int i = 0; i < n_size; ++i)
             if (data[i] == val)
                 return true;
         return false;
