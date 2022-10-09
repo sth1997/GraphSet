@@ -271,31 +271,10 @@ long long pattern_matching_init(const LabeledGraph *g, const Schedule_IEP& sched
     gpuErrchk( cudaMalloc((void**)&dev_automorphisms, sizeof(int) * schedule.get_size() * automorphisms.size()));
     gpuErrchk( cudaMemcpy(dev_automorphisms, host_automorphisms, sizeof(int) * schedule.get_size() * automorphisms.size(), cudaMemcpyHostToDevice));
 
-    //memcpy schedule
+    // create schedule
     GPUSchedule* dev_schedule;
     gpuErrchk( cudaMallocManaged((void**)&dev_schedule, sizeof(GPUSchedule)));
-    //dev_schedule->transform_in_exclusion_optimize_group_val(schedule);
-    int schedule_size = schedule.get_size();
-    int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->father_prefix_id, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->father_prefix_id, schedule.get_father_prefix_id_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->last, sizeof(int) * schedule_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->last, schedule.get_last_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->next, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->next, schedule.get_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->loop_set_prefix_id, sizeof(int) * schedule_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->loop_set_prefix_id, schedule.get_loop_set_prefix_id_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->prefix_target, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->prefix_target, schedule.get_prefix_target_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
-    dev_schedule->size = schedule.get_size();
-    dev_schedule->total_prefix_num = schedule.get_total_prefix_num();
-
+    dev_schedule->create_from_schedule(schedule);
     
     printf("schedule.prefix_num: %d\n", schedule.get_total_prefix_num());
     printf("shared memory for vertex set per block: %ld bytes\n", 
@@ -400,8 +379,16 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     uint32_t *dev_label_start_idx;
     GPUBitVector* dev_fsm_set;
 
+    // dev_alloc_and_copy((void **)&dev_edge, size_edge, g->edge);
+    // dev_alloc_and_copy((void **)&dev_labeled_vertex, size_labeled_vertex, g->labeled_vertex);
+    // dev_alloc_and_copy((void **)&dev_v_label, size_v_label, g->v_label);
+    // dev_alloc_and_copy((void **)&dev_tmp, size_tmp);
+    // dev_alloc_and_copy((void **)&dev_pattern_is_frequent_index, size_pattern_is_frequent_index, pattern_is_frequent_index);
+    // dev_alloc_and_copy((void **)&dev_is_frequent, size_is_frequent, is_frequent);
+    // dev_alloc_and_copy((void **)&dev_all_p_label, size_all_p_label);
+    // dev_alloc_and_copy((void **)&dev_label_start_idx, size_label_start_idx, g->label_start_idx);
+
     gpuErrchk( cudaMalloc((void**)&dev_edge, size_edge));
-    //gpuErrchk( cudaMalloc((void**)&dev_edge_from, size_edge));
     gpuErrchk( cudaMalloc((void**)&dev_labeled_vertex, size_labeled_vertex));
     gpuErrchk( cudaMalloc((void**)&dev_v_label, size_v_label));
     gpuErrchk( cudaMalloc((void**)&dev_tmp, size_tmp));
@@ -411,7 +398,6 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     gpuErrchk( cudaMalloc((void**)&dev_label_start_idx, size_label_start_idx));
 
     gpuErrchk( cudaMemcpy(dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
-    //gpuErrchk( cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_labeled_vertex, g->labeled_vertex, size_labeled_vertex, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_v_label, g->v_label, size_v_label, cudaMemcpyHostToDevice));
     gpuErrchk( cudaMemcpy(dev_pattern_is_frequent_index, pattern_is_frequent_index, size_pattern_is_frequent_index, cudaMemcpyHostToDevice));
@@ -440,7 +426,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
         int job_num = all_p_label_idx / schedules[i].get_size();
         
-        unsigned int cpu_jobs = std::min(job_num, std::max(int(job_num * 0.1), 10));
+        unsigned int cpu_jobs = std::min(job_num, std::max(int(job_num * cpu_proportion), 10));
         // cpu_jobs = 0.2;
         omp_set_nested(1);
         #pragma omp parallel num_threads(2)
@@ -508,6 +494,9 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
 }
 
 int main(int argc,char *argv[]) {
+    printf("file_name: %s\n", argv[0]);
+    print_parameter();
+
     LabeledGraph *g;
     DataLoader D;
 

@@ -45,3 +45,11 @@ struct GPUGroupDim0 {
     l = vertex[v]; \
     r = vertex[v + 1]; \
 } while(0)
+
+
+void dev_alloc_and_copy(void **dst, size_t size, const void *src = nullptr) {
+    gpuErrchk( cudaMalloc(dst, size) );
+    if(src != nullptr) {
+        gpuErrchk( cudaMemcpy(*dst, src, size, cudaMemcpyHostToDevice) );
+    }
+}
