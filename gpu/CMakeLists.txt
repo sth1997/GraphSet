@@ -19,6 +19,10 @@ ADD_EXECUTABLE(gpu_mc gpu_mc.cu)
 SET_PROPERTY(TARGET gpu_mc PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_mc graph_mining)
 
+ADD_EXECUTABLE(fsm_mixed fsm_mixed.cu)
+SET_PROPERTY(TARGET fsm_mixed PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(fsm_mixed graph_mining)
+
 
 # ADD_EXECUTABLE(gpu_graph_with_timer gpu_graph_with_timer.cu)
 # SET_PROPERTY(TARGET gpu_graph_with_timer PROPERTY CUDA_SEPARABLE_COMPILATION ON)
@@ -46,6 +50,7 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(gpu_fsm_omp OpenMP::OpenMP_CXX)
     target_link_libraries(gpu_kclique OpenMP::OpenMP_CXX)
     target_link_libraries(gpu_new_fsm OpenMP::OpenMP_CXX)
+    target_link_libraries(fsm_mixed OpenMP::OpenMP_CXX)
 endif()
 
 ADD_EXECUTABLE(mc3 mc3.cu)

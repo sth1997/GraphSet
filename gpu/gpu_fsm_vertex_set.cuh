@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include "gpu_const.cuh"
+#include "gpu_schedule.cuh"
+#include "utils.cuh"
 
 
 class GPUVertexSet;

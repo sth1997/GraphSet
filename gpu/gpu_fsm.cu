@@ -13,6 +13,10 @@
 
 #include <sys/time.h>
 
+#include <timeinterval.h>
+#include "utils.cuh"
+#include "gpu_schedule.cuh"
+
 constexpr int THREADS_PER_BLOCK = 128;
 //constexpr int THREADS_PER_BLOCK = 32;
 constexpr int THREADS_PER_WARP = 32;
@@ -25,106 +29,12 @@ constexpr int num_total_warps = num_blocks * WARPS_PER_BLOCK;
 __device__ unsigned long long dev_sum = 0;
 __device__ unsigned int dev_cur_labeled_pattern = 0;
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
 
-#define get_labeled_edge_index(v, label, l, r) do { \
-    int index = v * l_cnt + label; \
-    l = labeled_vertex[index]; \
-    r = labeled_vertex[index+ 1]; \
-} while(0)
 
-template <typename T>
-__device__ inline void swap(T& a, T& b)
-{
-    T t(std::move(a));
-    a = std::move(b);
-    b = std::move(t);
-}
-
-class TimeInterval{
-public:
-    TimeInterval(){
-        check();
-    }
-
-    void check(){
-        gettimeofday(&tp, NULL);
-    }
-
-    void print(const char* title){
-        struct timeval tp_end, tp_res;
-        gettimeofday(&tp_end, NULL);
-        timersub(&tp_end, &tp, &tp_res);
-        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
-    }
-private:
-    struct timeval tp;
-};
 
 TimeInterval allTime;
 TimeInterval tmpTime;
 
-class GPUSchedule {
-public:
-    inline __device__ int get_total_prefix_num() const { return total_prefix_num;}
-    //inline __device__ int get_basic_prefix_num() const { return basic_prefix_num;}
-    inline __device__ int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
-    inline __device__ int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
-    inline __device__ int get_size() const { return size;}
-    inline __device__ int get_last(int i) const { return last[i];}
-    inline __device__ int get_next(int i) const { return next[i];}
-    inline __device__ int get_prefix_target(int i) const {return prefix_target[i];}
-    //inline __device__ int get_break_size(int i) const { return break_size[i];}
-    //inline __device__ int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
-    // inline __device__ int get_total_restrict_num() const { return total_restrict_num;}
-    // inline __device__ int get_restrict_last(int i) const { return restrict_last[i];}
-    // inline __device__ int get_restrict_next(int i) const { return restrict_next[i];}
-    // inline __device__ int get_restrict_index(int i) const { return restrict_index[i];}
-    //inline __device__ int get_k_val() const { return k_val;} // see below (the k_val's definition line) before using this function
-
-    //int* adj_mat;
-    int* father_prefix_id;
-    int* last;
-    int* next;
-    //int* break_size;
-    int* loop_set_prefix_id;
-    int* prefix_target;
-    // int* restrict_last;
-    // int* restrict_next;
-    // int* restrict_index;
-    //bool* only_need_size;
-    //int* in_exclusion_optimize_val;
-    //GPUGroupDim0 in_exclusion_optimize_group;
-    //int in_exclusion_optimize_val_size;
-    int size;
-    int total_prefix_num;
-    //int basic_prefix_num;
-    //int total_restrict_num;
-    //int in_exclusion_optimize_num;
-    //int k_val;
-
-    // int in_exclusion_optimize_vertex_id_size;
-    // int* in_exclusion_optimize_vertex_id;
-    // bool* in_exclusion_optimize_vertex_flag;
-    // int* in_exclusion_optimize_vertex_coef;
-    
-    // int in_exclusion_optimize_array_size;
-    // int* in_exclusion_optimize_coef;
-    // bool* in_exclusion_optimize_flag;
-    // int* in_exclusion_optimize_ans_pos;
-
-    //uint32_t ans_array_offset;
-    uint32_t p_label_offset;
-    int max_edge;
-};
 
 // __device__ void intersection1(uint32_t *tmp, uint32_t *lbases, uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
 __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint32_t *rbases, uint32_t ln, uint32_t rn, uint32_t* p_tmp_size);
@@ -576,38 +486,35 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
                     if (lid == 0) //TODO: 目前insert只让0号线程执行，之后考虑32个线程同时执行，看会不会出错（好像是不会）
                     {
                         fsm_set[0].insert(vertex);
+                        long long support = v_cnt;
+                        for (int i = 0; i < schedule->get_size(); ++i) {
+                            long long count = fsm_set[i].get_non_zero_cnt();
+                            if (count < support)
+                                support = count;
+                        }
+                        // printf("%d\n", support);
+                        if (support >= min_support) {
+                            block_break_flag[wid] =true;
+                            atomicAdd(&dev_sum, 1);
+                            for (int aut_id = 0; aut_id < automorphisms_cnt; ++aut_id) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
+                                int* aut = automorphisms + aut_id * schedule->get_size();
+                                unsigned int index = pattern_is_frequent_index;
+                                unsigned int pow = 1;
+                                for (int j = 0; j < schedule->get_size(); ++j) {
+                                    index += p_label[aut[j]] * pow;
+                                    pow *= (unsigned int) l_cnt;
+                                }
+                                atomicOr(&is_frequent[index >> 5], (unsigned int) (1 << (index % 32)));
+                            }
+                        }
                     }
                 if (lid == 0)
                     subtraction_set.pop_back();
                 __threadfence_block();
                 if (block_break_flag[wid] == true)
                     break;
-        }
-        if(lid == 0) {
-            long long support = v_cnt;
-            for (int i = 0; i < schedule->get_size(); ++i) {
-                long long count = fsm_set[i].get_non_zero_cnt();
-                if (count < support)
-                    support = count;
             }
-            // printf("%d\n", support);
-            if (support >= min_support) {
-                printf("support: %lld job_id:%d/%d\n", support, job_id, job_num);
-                block_break_flag[wid] =true;
-                atomicAdd(&dev_sum, 1);
-                for (int aut_id = 0; aut_id < automorphisms_cnt; ++aut_id) { //遍历所有自同构，为自己和所有自同构的is_frequent赋值
-                    int* aut = automorphisms + aut_id * schedule->get_size();
-                    unsigned int index = pattern_is_frequent_index;
-                    unsigned int pow = 1;
-                    for (int j = 0; j < schedule->get_size(); ++j) {
-                        index += p_label[aut[j]] * pow;
-                        pow *= (unsigned int) l_cnt;
-                    }
-                    atomicOr(&is_frequent[index >> 5], (unsigned int) (1 << (index % 32)));
-                }
-            }
-        }
-
+        
         /*if (lid == 0) {
             long long support = v_cnt;
             for (int i = 0; i < schedule->get_size(); ++i) {
@@ -636,7 +543,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
         v1 = edge[i];
 
         bool is_zero = false;
-        get_edge_index(v0, l, r);
+        get_labeled_edge_index(v0, l, r);
         for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
 
@@ -645,7 +552,7 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
         if (schedule->get_restrict_last(1) != -1 && v0 <= v1)
             continue;
         
-        get_edge_index(v1, l, r);
+        get_labeled_edge_index(v1, l, r);
         for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
         {
             vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
@@ -964,14 +871,13 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
         int job_num = all_p_label_idx / schedules[i].get_size();
         int threshold = 1;
-        if(job_num > threshold) {
+        // if(job_num > threshold) {
             fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set, dev_label_start_idx, min_support);
-        }
-        else {
-            assert(false);
-            fsm_cnt += g->fsm_vertex(0, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, 16);
-        }
-        printf("temp fsm_cnt: %lld\n", fsm_cnt);
+        // }
+        // else {
+        //     assert(false);
+        //     // fsm_cnt += g->fsm_vertex(0, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, 16);
+        // }
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
             fsm_cnt = 0;
