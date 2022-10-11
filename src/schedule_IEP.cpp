@@ -36,7 +36,7 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid,
 
     // The I-th loop consists of at most the intersection of i-1 VertexSet.
     // So the max number of prefix = 0 + 1 + ... + size-1 = size * (size-1) / 2
-    int max_prefix_num = size * (size - 1) / 2;
+    int max_prefix_num = size * (size - 1) / 2 + 1;
     father_prefix_id = new int[max_prefix_num];
     last = new int[size];
     next = new int[max_prefix_num];

@@ -932,7 +932,7 @@ int main(int argc,char *argv[]) {
 
     DataType my_type;
     
-    GetDataType(my_type, "Patents");
+    GetDataType(my_type, "YouTube");
 
     if(my_type == DataType::Invalid) {
         printf("Dataset not found!\n");

@@ -1,5 +1,5 @@
 #include "../include/vertex_set.h"
-// #include "set_operation.hpp"
+#include "set_operation.hpp"
 #include <algorithm>
 
 int VertexSet::max_intersection_size = -1;
@@ -82,15 +82,15 @@ VertexSet::~VertexSet()
 
 void VertexSet::intersection(const VertexSet& set0, const VertexSet& set1, int min_vertex, bool clique)
 { 
-    /*
+    
     int size0 = set0.get_size(), size1 = set1.get_size();
     if(clique) {
         size0 = std::lower_bound(set0.get_data_ptr(), set0.get_data_ptr() + size0, min_vertex) - set0.get_data_ptr();
         size1 = std::lower_bound(set1.get_data_ptr(), set1.get_data_ptr() + size1, min_vertex) - set1.get_data_ptr();
     }
     size = intersect_simd4x(set0.get_data_ptr(), set0.get_size(), set1.get_data_ptr(), set1.get_size(), this->get_data_ptr());
-    */
-
+    /*
+    
     int i = 0;
     int j = 0;
     int size0 = set0.get_size();

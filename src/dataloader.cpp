@@ -124,7 +124,7 @@ bool DataLoader::fast_load(Graph* &g, const char* path)
 }
 
 bool DataLoader::load_data(Graph* &g, DataType type, const char* path, bool binary_input, int oriented_type) {
-    if(type == Patents || type == Orkut || type == complete8 || type == LiveJournal || type == MiCo || type == CiteSeer || type == Wiki_Vote) {
+    if(type == Patents || type == Orkut || type == complete8 || type == LiveJournal || type == MiCo || type == CiteSeer || type == Wiki_Vote || type == YouTube || type == Friendster) {
         return general_load_data(g, type, path, binary_input, oriented_type);
     }
 
@@ -136,7 +136,7 @@ bool DataLoader::load_data(Graph* &g, DataType type, const char* path, bool bina
 }
 
 bool DataLoader::load_labeled_data(LabeledGraph* &g, DataType type, const char* path) {
-    if(type == Patents || type == Orkut || type == complete8 || type == LiveJournal || type == MiCo || type == CiteSeer || type == Wiki_Vote || type == Twitter) {
+    if(type == Patents || type == Orkut || type == complete8 || type == LiveJournal || type == MiCo || type == CiteSeer || type == Wiki_Vote || type == Twitter || type == YouTube || type == Friendster) {
         return general_load_labeled_data(g, type, path);
     }
 
@@ -221,6 +221,14 @@ bool DataLoader::general_load_data(Graph* &g, DataType type, const char* path, b
         }
         case DataType::Orkut : {
             g->tri_cnt = Orkut_tri_cnt;
+            break;
+        }
+        case DataType::YouTube : {
+            g->tri_cnt = YouTube_tri_cnt;
+            break;
+        }
+        case DataType::Friendster : {
+            g->tri_cnt = Friendster_tri_cnt;
             break;
         }
         default : {
@@ -404,6 +412,14 @@ bool DataLoader::general_load_labeled_data(LabeledGraph* &g, DataType type, cons
         }
         case DataType::Orkut : {
             g->tri_cnt = Orkut_tri_cnt;
+            break;
+        }
+        case DataType::YouTube : {
+            g->tri_cnt = YouTube_tri_cnt;
+            break;
+        }
+        case DataType::Friendster : {
+            g->tri_cnt = Friendster_tri_cnt;
             break;
         }
         default : {
