@@ -14,9 +14,9 @@ lj="/home/hzx/data/livejournal.g"
 or="/home/hzx/data/orkut.g"
 
 
-for name in "pt" "mc" "wv" "lj" "or"
+for name in "pt" "mc" "lj" "or"
 do
-    for ((i=1; i<=6; i++))
+    for ((i=1; i<=9; i++))
     do
         cat before_inj.cu > ${name}_p${i}.cu
         cat ${name}_p${i}_inject.cu >> ${name}_p${i}.cu

@@ -74,7 +74,19 @@ public:
         }
         else
         {
-          intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
+            // bool only_need_size = schedule->only_need_size[prefix_id];
+            // if(only_need_size) {
+            //     if (threadIdx.x % THREADS_PER_WARP == 0)
+            //         init(input_size, input_data);
+            //     __threadfence_block();
+            //     if(input_size > vertex_set[father_id].get_size())
+            //         this->size -= unordered_subtraction_size(*this, vertex_set[father_id], -1);
+            //     else
+            //         this->size = vertex_set[father_id].get_size() - unordered_subtraction_size(vertex_set[father_id], *this, -1);
+            // }
+            // else {
+                intersection2(this->data, vertex_set[father_id].get_data_ptr(), input_data, vertex_set[father_id].get_size(), input_size, &this->size);
+            // }
         }
     }
 
@@ -87,7 +99,7 @@ public:
         __threadfence_block();
     }
 
-private:
+public:
     uint32_t size;
     uint32_t* data;
 };
@@ -181,4 +193,55 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
     if (threadIdx.x % THREADS_PER_WARP == 0)
         *p_tmp_size = intersection_size;
     __threadfence_block();
+}
+
+/**
+* @brief calculate | set0 - set1 |
+* @note set0 should be an ordered set, while set1 can be unordered
+* @todo rename 'subtraction' => 'difference'
+*/
+__device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVertexSet& set1, int size_after_restrict = -1)
+{
+    __shared__ int block_ret[WARPS_PER_BLOCK];
+
+    int size0 = set0.get_size();
+    int size1 = set1.get_size();
+    if (size_after_restrict != -1)
+        size0 = size_after_restrict;
+
+    int wid = threadIdx.x / THREADS_PER_WARP;
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    int &ret = block_ret[wid];
+    if (lid == 0)
+        ret = size0;
+    __threadfence_block();
+
+    int done1 = 0;
+    while (done1 < size1)
+    {
+        if (lid + done1 < size1)
+        {
+            int l = 0, r = size0 - 1;
+            uint32_t val = set1.get_data(lid + done1);
+            //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+            while (l <= r)
+            {
+                int mid = (l + r) >> 1;
+                if (unlikely(set0.get_data(mid) == val))
+                {
+                    atomicSub(&ret, 1);
+                    break;
+                }
+                if (set0.get_data(mid) < val)
+                    l = mid + 1;
+                else
+                    r = mid - 1;
+            }
+            //binary search
+        }
+        done1 += THREADS_PER_WARP;
+    }
+
+    __threadfence_block();
+    return ret;
 }

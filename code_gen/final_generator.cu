@@ -556,9 +556,9 @@ __global__ void gen_GPU_pattern_matching_func(const GPUSchedule* schedule)
             printf("uint32_t* loop_data_ptr_depth%d = vertex_set[%d].get_data_ptr();\n",depth, loop_set_prefix_id);
             
             bool has_min_vertex = schedule->get_restrict_last(depth) != -1;
-            if(has_min_vertex) {
+            // if(has_min_vertex) {
                 printf("uint32_t min_vertex_depth%d = 0xffffffff;\n", depth);
-            }
+            // }
 
             for (int i = schedule->get_restrict_last(depth); i != -1; i = schedule->get_restrict_next(i)) {
                 printf("if(min_vertex_depth%d > subtraction_set.get_data(%d)) min_vertex_depth%d = subtraction_set.get_data(%d);\n", depth, schedule->get_restrict_index(i), depth, schedule->get_restrict_index(i));
