@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include "utils.cuh"
+
 class GPUSchedule {
 public:
     /*
@@ -82,5 +84,28 @@ public:
     bool is_vertex_induced;
     uint32_t p_label_offset;
     int max_edge;
+
+    void create_from_schedule(const Schedule_IEP& schedule) {
+        int schedule_size = schedule.get_size();
+        int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
+
+        gpuErrchk( cudaMallocManaged((void**)&this->father_prefix_id, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(this->father_prefix_id, schedule.get_father_prefix_id_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged((void**)&this->last, sizeof(int) * schedule_size));
+        gpuErrchk( cudaMemcpy(this->last, schedule.get_last_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged((void**)&this->next, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(this->next, schedule.get_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged((void**)&this->loop_set_prefix_id, sizeof(int) * schedule_size));
+        gpuErrchk( cudaMemcpy(this->loop_set_prefix_id, schedule.get_loop_set_prefix_id_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged((void**)&this->prefix_target, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(this->prefix_target, schedule.get_prefix_target_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        this->size = schedule.get_size();
+        this->total_prefix_num = schedule.get_total_prefix_num();
+    }
 
 };

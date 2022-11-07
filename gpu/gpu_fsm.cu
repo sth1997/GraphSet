@@ -342,9 +342,9 @@ __device__ bool GPU_pattern_matching_func(const GPUSchedule* schedule, GPUVertex
 
     for (int i = 0; i < loop_size; ++i)
     {
-        if(depth == 1 && threadIdx.x % THREADS_PER_WARP == 0 && i % 100 == 0) {
-            printf("i:%d\n", i);
-        }
+        // if(depth == 1 && threadIdx.x % THREADS_PER_WARP == 0 && i % 100 == 0) {
+        //     printf("i:%d\n", i);
+        // }
         uint32_t v = loop_data_ptr[i];
         if (subtraction_set.has_data(v))
             continue;
@@ -479,9 +479,9 @@ __device__ bool GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule* schedule
                 if (lid == 0)
                     subtraction_set.push_back(vertex);
                 __threadfence_block();
-                if(lid == 0) {
-                    printf("%d\n", vertex);
-                }
+                // if(lid == 0) {
+                //     printf("%d\n", vertex);
+                // }
                 if (GPU_pattern_matching_func<1>(schedule, vertex_set, subtraction_set, edge, labeled_vertex, p_label, fsm_set, l_cnt))
                     if (lid == 0) //TODO: 目前insert只让0号线程执行，之后考虑32个线程同时执行，看会不会出错（好像是不会）
                     {
@@ -871,12 +871,13 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
         int job_num = all_p_label_idx / schedules[i].get_size();
         int threshold = 1;
-        if(job_num > threshold) {
+        // if(job_num > threshold) {
             fsm_cnt += pattern_matching_init(g, schedules[i], automorphisms, pattern_is_frequent_index[i], dev_is_frequent, dev_edge, dev_labeled_vertex, dev_v_label, dev_tmp, max_edge, job_num, dev_all_p_label, dev_fsm_set, dev_label_start_idx, min_support);
-        }
-        else {
-            fsm_cnt += g->fsm_vertex(0, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, 16);
-        }
+        // }
+        // else {
+        //     assert(false);
+        //     // fsm_cnt += g->fsm_vertex(0, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, 16);
+        // }
         mapping_start_idx_pos += schedules[i].get_size();
         if (get_pattern_edge_num(patterns[i]) != max_edge) //为了使得边数小于max_edge的pattern不被统计。正确性依赖于pattern按照边数排序
             fsm_cnt = 0;
@@ -919,19 +920,19 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
 }
 
 int main(int argc,char *argv[]) {
-    cudaSetDevice(2);
+    // cudaSetDevice(2);
 
     LabeledGraph *g;
     DataLoader D;
 
-    const std::string type = argv[1];
-    const std::string path = argv[2];
-    const int max_edge = atoi(argv[3]);
-    const int min_support = atoi(argv[4]);
+    // const std::string type = argv[1];
+    const std::string path = argv[1];
+    const int max_edge = atoi(argv[2]);
+    const int min_support = atoi(argv[3]);
 
     DataType my_type;
     
-    GetDataType(my_type, type);
+    GetDataType(my_type, "YouTube");
 
     if(my_type == DataType::Invalid) {
         printf("Dataset not found!\n");

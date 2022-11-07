@@ -80,3 +80,7 @@ private:
 };
 
 void reduce_edges_for_clique(Graph &g);
+
+void degree_orientation_init(Graph* original_g, Graph*& g);
+
+void degeneracy_orientation_init(Graph* original_g, Graph*& g);

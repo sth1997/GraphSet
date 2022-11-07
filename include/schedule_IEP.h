@@ -135,6 +135,7 @@ private:
     void remove_invalid_permutation(std::vector< std::vector<int> > &candidate_permutations);
     
     inline void set_in_exclusion_optimize_num(int num) { in_exclusion_optimize_num = num; }
+    
     void set_in_exclusion_optimize_redundancy();
 };
 
