@@ -10,6 +10,14 @@ ADD_EXECUTABLE(gpu_clique gpu_clique.cu)
 SET_PROPERTY(TARGET gpu_clique PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_clique graph_mining)
 
+ADD_EXECUTABLE(gpu_mpi gpu_graph_mpi.cu)
+SET_PROPERTY(TARGET gpu_mpi PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_mpi graph_mining mpi gomp)
+
+ADD_EXECUTABLE(gpu_graph_with_timer gpu_graph_with_timer.cu)
+SET_PROPERTY(TARGET gpu_graph_with_timer PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_graph_with_timer graph_mining)
+
 ADD_EXECUTABLE(gpu_kclique gpu_kclique.cu)
 SET_PROPERTY(TARGET gpu_kclique PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_kclique graph_mining)

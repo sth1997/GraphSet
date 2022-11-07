@@ -14,8 +14,7 @@ public:
     e_index_t e_cnt; // number of edge
     long long tri_cnt; // number of triangle
     double max_running_time = 60 * 60 * 24; // second
-
-    v_index_t *edge; // edges
+    v_index_t *edge, *edge_from; // edges
     e_index_t *vertex; // v_i's neighbor is in edge[ vertex[i], vertex[i+1]-1]
     
     Graph() {
@@ -23,16 +22,19 @@ public:
         e_cnt = 0LL;
         edge = nullptr;
         vertex = nullptr;
+        edge_from = nullptr;
     }
 
     ~Graph() {
         if(edge != nullptr) delete[] edge;
         if(vertex != nullptr) delete[] vertex;
+        if (edge_from != nullptr) delete[] edge_from;
     }
 
     int intersection_size(v_index_t v1,v_index_t v2);
     int intersection_size_mpi(v_index_t v1,v_index_t v2);
     int intersection_size_clique(v_index_t v1,v_index_t v2);
+    void build_reverse_edges();
 
 /*    long long intersection_times_low;
     long long intersection_times_high;
@@ -61,7 +63,9 @@ public:
     // hand optimized 3-motif counting
     void motif_counting_3(int thread_count);
 
-
+    // internal use only
+    long long pattern_matching_edge_task(const Schedule_IEP& schedule, int edge_id,
+        VertexSet vertex_sets[], VertexSet& partial_embedding, VertexSet& tmp_set, int ans_buffer[]);
 private:
     friend Graphmpi;
     void tc_mt(long long * global_ans);
