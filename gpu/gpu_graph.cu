@@ -22,13 +22,9 @@
 #include <chrono>
 
 #include <timeinterval.h>
-#include "utils.cuh"
-#include "gpu_schedule.cuh"
-
-
-constexpr int THREADS_PER_BLOCK = 256;
-constexpr int THREADS_PER_WARP = 32;
-constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / THREADS_PER_WARP;
+#include "component/gpu_const.cuh"
+#include "component/utils.cuh"
+#include "component/gpu_schedule.cuh"
 
 //#define PRINT_ANS_TO_FILE //用于scripts/small_graph_check.py
 

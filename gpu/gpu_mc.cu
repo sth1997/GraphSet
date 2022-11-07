@@ -22,8 +22,8 @@
 #include <chrono>
 
 #include <timeinterval.h>
-#include "utils.cuh"
-#include "gpu_schedule.cuh"
+#include "component/utils.cuh"
+#include "component/gpu_schedule.cuh"
 
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)

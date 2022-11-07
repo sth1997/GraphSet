@@ -14,12 +14,12 @@
 #include <sys/time.h>
 #include <omp.h>
 
-#include "gpu_fsm_vertex_set.cuh"
-#include "gpu_schedule.cuh"
-#include "gpu_const.cuh"
+#include "component/gpu_vertex_set.cuh"
+#include "component/gpu_schedule.cuh"
+#include "component/gpu_const.cuh"
 #include "timeinterval.h"
-#include "utils.cuh"
-#include "gpu_bitvector.cuh"
+#include "component/utils.cuh"
+#include "component/gpu_bitvector.cuh"
 
 
 __device__ unsigned long long dev_sum = 0;

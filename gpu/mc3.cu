@@ -16,7 +16,7 @@
 #include <chrono>
 
 #include <timeinterval.h>
-#include "utils.cuh"
+#include "component/utils.cuh"
 
 constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;

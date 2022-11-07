@@ -1,5 +1,5 @@
 #pragma once 
-#include "utils.cuh"
+#include "component/utils.cuh"
 
 __global__ void kernel_function(int n, int *a, int *b) {
     int pos = blockIdx.x * blockDim.x + threadIdx.x;

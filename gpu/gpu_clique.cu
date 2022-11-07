@@ -21,8 +21,8 @@
 #include <device_launch_parameters.h>
 
 #include <timeinterval.h>
-#include "utils.cuh"
-#include "gpu_schedule.cuh"
+#include "component/utils.cuh"
+#include "component/gpu_schedule.cuh"
 
 constexpr int THREADS_PER_BLOCK = 256;
 constexpr int THREADS_PER_WARP = 32;
