@@ -99,12 +99,13 @@ public:
         gpuErrchk( cudaMemcpy(this->only_need_size, only_need_size, sizeof(bool) * max_prefix_num, cudaMemcpyHostToDevice));
 
         // for in-exclusion
-        this->in_exclusion_optimize_array_size = in_exclusion_optimize_array_size;
-        this->in_exclusion_optimize_vertex_id_size = in_exclusion_optimize_vertex_id_size;
-        this->in_exclusion_optimize_num = schedule.get_in_exclusion_optimize_num();
         
         int in_exclusion_optimize_vertex_id_size = schedule.in_exclusion_optimize_vertex_id.size();
         int in_exclusion_optimize_array_size = schedule.in_exclusion_optimize_coef.size();
+
+        this->in_exclusion_optimize_vertex_id_size = in_exclusion_optimize_vertex_id_size;
+        this->in_exclusion_optimize_array_size = in_exclusion_optimize_array_size;
+        this->in_exclusion_optimize_num = schedule.get_in_exclusion_optimize_num();
 
         auto in_exclusion_optimize_vertex_id = &(schedule.in_exclusion_optimize_vertex_id[0]);
         auto in_exclusion_optimize_vertex_coef = &(schedule.in_exclusion_optimize_vertex_coef[0]);
@@ -152,9 +153,10 @@ public:
         gpuErrchk( cudaMallocManaged((void**)&this->loop_set_prefix_id, sizeof(int) * schedule_size));
         gpuErrchk( cudaMemcpy(this->loop_set_prefix_id, schedule.get_loop_set_prefix_id_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
 
-        gpuErrchk( cudaMallocManaged((void**)&this->prefix_target, sizeof(int) * max_prefix_num));
-        gpuErrchk( cudaMemcpy(this->prefix_target, schedule.get_prefix_target_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
+        if(prefix_target != nullptr) {
+            gpuErrchk( cudaMallocManaged((void**)&this->prefix_target, sizeof(int) * max_prefix_num));
+            gpuErrchk( cudaMemcpy(this->prefix_target, schedule.get_prefix_target_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+        }
 
         gpuErrchk( cudaMallocManaged((void**)&this->break_size, sizeof(int) * max_prefix_num));
         gpuErrchk( cudaMemcpy(this->break_size, schedule.get_break_size_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
@@ -177,6 +179,8 @@ public:
         this->size = schedule.get_size();
         this->total_prefix_num = schedule.get_total_prefix_num();
         this->basic_prefix_num = schedule.get_basic_prefix_num();
+        this->is_vertex_induced = schedule.is_vertex_induced;
+
 
         delete[] only_need_size;
         delete[] in_exclusion_optimize_vertex_flag;

@@ -83,21 +83,21 @@ public:
     std::vector<bool> in_exclusion_optimize_flag;
     std::vector<int> in_exclusion_optimize_ans_pos;
     
-    int* break_size;
+    int* break_size = nullptr;
 
     bool is_vertex_induced;
 
 private:
-    int* adj_mat;
-    int* father_prefix_id;
-    int* last;
-    int* next;
-    int* loop_set_prefix_id;
-    int* prefix_target; //这个是给带label时使用的，因为带label时，需要提前知道一个prefix最终是为了给哪个点作为循环集合来确定prefix中点的label，比如这个prefix经过几次求交后，得到的集合要给pattern中的第4个点作为循环集合，那么target就是4
-    Prefix* prefix;
-    int* restrict_last;
-    int* restrict_next;
-    int* restrict_index;
+    int* adj_mat = nullptr;
+    int* father_prefix_id = nullptr;
+    int* last = nullptr;
+    int* next = nullptr;
+    int* loop_set_prefix_id = nullptr;
+    int* prefix_target = nullptr; //这个是给带label时使用的，因为带label时，需要提前知道一个prefix最终是为了给哪个点作为循环集合来确定prefix中点的label，比如这个prefix经过几次求交后，得到的集合要给pattern中的第4个点作为循环集合，那么target就是4
+    Prefix* prefix = nullptr;
+    int* restrict_last = nullptr;
+    int* restrict_next = nullptr;
+    int* restrict_index = nullptr;
     int size;
     int total_prefix_num;
     int basic_prefix_num;

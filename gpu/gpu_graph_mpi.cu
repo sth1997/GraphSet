@@ -29,13 +29,7 @@ struct GPUContext {
     GPUSchedule *dev_schedule;    
 };
 
-struct PatternMatchingDeviceContext : public GraphDeviceContext {
-    uint32_t* dev_tmp;
-    GPUSchedule *dev_schedule;
-    void init() {
-        
-    }
-};
+
 
 void init_gpu_schedule(GPUContext& ctx, const Schedule_IEP& sched) {
     GPUSchedule *dev_schedule;

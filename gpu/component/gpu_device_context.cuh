@@ -10,8 +10,10 @@ struct GPUDeviceContext {
 };
 
 struct GraphDeviceContext : public GPUDeviceContext {
-    uint32_t *dev_edge, *dev_vertex, *dev_edge_from;
-    const Graph* g;
+    v_index_t *dev_edge, *dev_edge_from;
+    e_index_t *dev_vertex;
+    uint32_t *dev_tmp;
+    const Graph *g;
 };
 
 struct LabeledGraphDeviceContext : public GPUDeviceContext {
