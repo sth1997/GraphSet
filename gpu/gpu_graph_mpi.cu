@@ -1,251 +1,36 @@
-#include <schedule_IEP.h>
 #include <dataloader.h>
 #include <graph.h>
 #include <mpi.h>
 #include <omp.h>
+#include <schedule_IEP.h>
 
-#include <unistd.h>
-#include <cstdlib>
-#include <cassert>
-#include <cstdio>
 #include <atomic>
-#include <tuple>
-#include <utility>
-#include <string>
+#include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <tuple>
+#include <unistd.h>
+#include <utility>
 
-#include "component/utils.cuh"
 #include "component/gpu_const.cuh"
+#include "component/gpu_device_context.cuh"
 #include "component/gpu_schedule.cuh"
 #include "component/gpu_vertex_set.cuh"
-#include "component/gpu_device_context.cuh"
+#include "component/utils.cuh"
 
-#include "function/pattern_matching.cuh"
-
-
-// device global variables
-__device__ unsigned long long dev_sum;
-__device__ unsigned int dev_cur_task;
-
-__global__ void gpu_pattern_matching(unsigned task_end, size_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp,
-                                     const GPUSchedule *schedule) {
-    __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
-    extern __shared__ GPUVertexSet block_vertex_set[];
-
-    int num_prefixes = schedule->get_total_prefix_num();
-    int num_vertex_sets_per_warp = num_prefixes + 2;
-
-    int wid = threadIdx.x / THREADS_PER_WARP;            // warp id within the block
-    int lid = threadIdx.x % THREADS_PER_WARP;            // lane id
-    int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id
-    unsigned int &edge_idx = block_edge_idx[wid];
-    GPUVertexSet *vertex_set = block_vertex_set + wid * num_vertex_sets_per_warp;
-
-    if (lid == 0) {
-        edge_idx = 0;
-        ptrdiff_t offset = buffer_size * global_wid * num_vertex_sets_per_warp;
-        for (int i = 0; i < num_vertex_sets_per_warp; ++i) {
-            vertex_set[i].set_data_ptr(tmp + offset); // 注意这是个指针+整数运算，自带*4
-            offset += buffer_size;
-        }
-    }
-    GPUVertexSet &subtraction_set = vertex_set[num_prefixes];
-    GPUVertexSet &tmp_set = vertex_set[num_prefixes + 1];
-
-    __threadfence_block();
-
-    uint32_t v0, v1;
-    uint32_t l, r;
-
-    unsigned long long sum = 0;
-
-    while (true) {
-        if (lid == 0) {
-            edge_idx = atomicAdd(&dev_cur_task, 1);
-            unsigned int i = edge_idx;
-            if (i < task_end) {
-                subtraction_set.init();
-                subtraction_set.push_back(edge_from[i]);
-                subtraction_set.push_back(edge[i]);
-            }
-        }
-        __threadfence_block();
-
-        unsigned int i = edge_idx;
-        if (i >= task_end)
-            break;
-
-        // for edge in E
-        v0 = edge_from[i];
-        v1 = edge[i];
-
-        //目前只考虑pattern size>2的情况
-        // start v1, depth = 1
-        if (schedule->get_restrict_last(1) != -1 && v0 <= v1)
-            continue;
-
-        bool is_zero = false;
-        get_edge_index(v0, l, r);
-        for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-
-        get_edge_index(v1, l, r);
-        for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
-            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-            if (vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule->get_basic_prefix_num()) {
-                is_zero = true;
-                break;
-            }
-        }
-        if (is_zero)
-            continue;
-
-        unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
-        // GPU_pattern_matching_func<2>(schedule, vertex_set, subtraction_set, tmp_set, local_sum, edge, vertex);
-        sum += local_sum;
-    }
-
-    if (lid == 0) {
-        atomicAdd(&dev_sum, sum);
-    }
-}
-
-
-struct GPUContext {
-    int nr_blocks, nr_total_warps, block_shmem_size;
-    uint32_t *dev_edge, *dev_edge_from, *dev_vertex, *dev_tmp;
-    GPUSchedule *dev_schedule;    
-};
-
-
-
-void init_gpu_schedule(GPUContext& ctx, const Schedule_IEP& sched) {
-    GPUSchedule *dev_schedule;
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule, sizeof(GPUSchedule)) );
-
-    int n = sched.get_size();
-    int max_prefix_num = n * (n - 1) / 2;
-    
-    auto only_need_size = new bool[max_prefix_num];
-    for (int i = 0; i < max_prefix_num; ++i)
-        only_need_size[i] = sched.get_prefix_only_need_size(i);
-
-    int in_exclusion_optimize_vertex_id_size = sched.in_exclusion_optimize_vertex_id.size();
-    int in_exclusion_optimize_array_size = sched.in_exclusion_optimize_coef.size();
-
-    auto in_exclusion_optimize_vertex_id = &(sched.in_exclusion_optimize_vertex_id[0]);
-    auto in_exclusion_optimize_vertex_coef = &(sched.in_exclusion_optimize_vertex_coef[0]);
-    auto in_exclusion_optimize_vertex_flag = new bool[in_exclusion_optimize_vertex_id_size]; 
-
-    auto in_exclusion_optimize_coef = &(sched.in_exclusion_optimize_coef[0]);
-    auto in_exclusion_optimize_ans_pos = &(sched.in_exclusion_optimize_ans_pos[0]);
-    auto in_exclusion_optimize_flag = new bool[in_exclusion_optimize_array_size];
-
-    for (int i = 0; i < in_exclusion_optimize_vertex_id_size; ++i)
-        in_exclusion_optimize_vertex_flag[i] = sched.in_exclusion_optimize_vertex_flag[i];
-    
-    for (int i = 0; i < in_exclusion_optimize_array_size; ++i)
-        in_exclusion_optimize_flag[i] = sched.in_exclusion_optimize_flag[i];
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_id, in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_flag, in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_vertex_coef, in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_coef, in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_flag, in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size));
-    gpuErrchk( cudaMemcpy(dev_schedule->in_exclusion_optimize_ans_pos, in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->adj_mat, sizeof(int) * n * n));
-    gpuErrchk( cudaMemcpy(dev_schedule->adj_mat, sched.get_adj_mat_ptr(), sizeof(int) * n * n, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->father_prefix_id, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->father_prefix_id, sched.get_father_prefix_id_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->last, sizeof(int) * n));
-    gpuErrchk( cudaMemcpy(dev_schedule->last, sched.get_last_ptr(), sizeof(int) * n, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->next, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->next, sched.get_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->only_need_size, sizeof(bool) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->only_need_size, only_need_size, sizeof(bool) * max_prefix_num, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->break_size, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->break_size, sched.get_break_size_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->loop_set_prefix_id, sizeof(int) * n));
-    gpuErrchk( cudaMemcpy(dev_schedule->loop_set_prefix_id, sched.get_loop_set_prefix_id_ptr(), sizeof(int) * n, cudaMemcpyHostToDevice));
-
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->restrict_last, sizeof(int) * n));
-    gpuErrchk( cudaMemcpy(dev_schedule->restrict_last, sched.get_restrict_last_ptr(), sizeof(int) * n, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->restrict_next, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->restrict_next, sched.get_restrict_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-    
-    gpuErrchk( cudaMallocManaged((void**)&dev_schedule->restrict_index, sizeof(int) * max_prefix_num));
-    gpuErrchk( cudaMemcpy(dev_schedule->restrict_index, sched.get_restrict_index_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
-
-    dev_schedule->in_exclusion_optimize_array_size = in_exclusion_optimize_array_size;
-    dev_schedule->in_exclusion_optimize_vertex_id_size = in_exclusion_optimize_vertex_id_size;
-    dev_schedule->size = n;
-    dev_schedule->total_prefix_num = sched.get_total_prefix_num();
-    dev_schedule->basic_prefix_num = sched.get_basic_prefix_num();
-    dev_schedule->total_restrict_num = sched.get_total_restrict_num();
-    dev_schedule->in_exclusion_optimize_num = sched.get_in_exclusion_optimize_num();
-
-    uint32_t block_shmem_size = (sched.get_total_prefix_num() + 2) * WARPS_PER_BLOCK 
-        * sizeof(GPUVertexSet) + in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
-    dev_schedule->ans_array_offset = block_shmem_size - in_exclusion_optimize_vertex_id_size * WARPS_PER_BLOCK * sizeof(int);
-
-    ctx.block_shmem_size = block_shmem_size;
-    ctx.dev_schedule = dev_schedule;
-
-    delete[] only_need_size;
-    delete[] in_exclusion_optimize_vertex_flag;
-    delete[] in_exclusion_optimize_flag;
-}
-
-void init_gpu_context(GPUContext& ctx, Graph* g, const Schedule_IEP& schedule) {
-    ctx.nr_blocks = 1024;
-    ctx.nr_total_warps = ctx.nr_blocks * WARPS_PER_BLOCK;
-
-    size_t size_edge = g->e_cnt * sizeof(uint32_t);
-    size_t size_vertex = (g->v_cnt + 1) * sizeof(uint32_t);
-    size_t size_tmp = VertexSet::max_intersection_size * sizeof(uint32_t) 
-        * ctx.nr_total_warps * (schedule.get_total_prefix_num() + 2); //prefix + subtraction + tmp
-
-    gpuErrchk( cudaMalloc((void**)&ctx.dev_edge, size_edge));
-    gpuErrchk( cudaMalloc((void**)&ctx.dev_edge_from, size_edge));
-    gpuErrchk( cudaMalloc((void**)&ctx.dev_vertex, size_vertex));
-    gpuErrchk( cudaMalloc((void**)&ctx.dev_tmp, size_tmp));
-
-    gpuErrchk( cudaMemcpy(ctx.dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(ctx.dev_edge_from, g->edge_from, size_edge, cudaMemcpyHostToDevice));
-    gpuErrchk( cudaMemcpy(ctx.dev_vertex, g->vertex, size_vertex, cudaMemcpyHostToDevice));
-
-    init_gpu_schedule(ctx, schedule);
-}
-
-void free_gpu_context(GPUContext& ctx) {
-    // TODO
-}
+#include "src/gpu_pattern_matching.cuh"
 
 struct SpinLock {
     std::atomic_flag flag;
 
     SpinLock() : flag{ATOMIC_FLAG_INIT} {}
-    void lock() { while (flag.test_and_set()) asm volatile ("pause"); }
+    void lock() {
+        while (flag.test_and_set())
+            asm volatile("pause");
+    }
     void unlock() { flag.clear(); }
 };
 
@@ -256,13 +41,7 @@ struct LockGuard {
     ~LockGuard() { _lock.unlock(); }
 };
 
-__global__ void cuda_kernel(int node)
-{
-    printf("hello from cuda thread=%d block=%d got rank=%d\n", threadIdx.x, blockIdx.x, node);
-}
-
-__global__ void spin_kernel(clock_t cycles)
-{
+__global__ void spin_kernel(clock_t cycles) {
     clock_t start = clock64();
     while (clock64() - start < cycles)
         ;
@@ -298,13 +77,12 @@ enum NodeState {
 };
 
 NodeState state = WORKING; // only used by scheduler thread
-int global_cur_task; // only scheduler thread of master node will modify this var in working phase
+int global_cur_task;       // only scheduler thread of master node will modify this var in working phase
 int nr_idle_nodes = 0;
 uint64_t global_ans = 0, gpu_ans = 0;
 std::atomic<uint64_t> node_ans{0};
 
-void process_message(uint64_t recv_buf[], uint64_t send_buf[], int node, int sender)
-{
+void process_message(uint64_t recv_buf[], uint64_t send_buf[], int node, int sender) {
     MPI_Request send_req;
     switch (recv_buf[0]) {
     case MSG_REQUEST_WORK: { // me: master
@@ -339,8 +117,7 @@ void process_message(uint64_t recv_buf[], uint64_t send_buf[], int node, int sen
 }
 
 // TODO: require lock?
-bool all_workers_idle()
-{
+bool all_workers_idle() {
     int nr_threads = omp_get_max_threads();
     int idle_count = 0;
     for (int i = 0; i < nr_threads; ++i)
@@ -350,15 +127,13 @@ bool all_workers_idle()
 }
 
 // TODO: returns true when too many worker threads are idle?
-bool should_request_work()
-{
+bool should_request_work() {
     LockGuard<SpinLock> guard{task_status_lock};
     return std::get<0>(task_status) >= std::get<1>(task_status);
 }
 
 // returns whether task status is successfully updated
-bool update_task_range(std::tuple<int, int>& task_range, int max_nr_tasks)
-{
+bool update_task_range(std::tuple<int, int> &task_range, int max_nr_tasks) {
     int task_cur, task_end, new_task_cur;
     LockGuard<SpinLock> guard{task_status_lock};
     std::tie(task_cur, task_end) = task_status;
@@ -371,23 +146,21 @@ bool update_task_range(std::tuple<int, int>& task_range, int max_nr_tasks)
     return false;
 }
 
-void launch_pattern_matching_kernel(const GPUContext& ctx, const TaskStatus& task_range) {
+void launch_pattern_matching_kernel(PatternMatchingDeviceContext *context, const TaskStatus &task_range) {
     int task_cur = std::get<0>(task_range);
     int task_end = std::get<1>(task_range);
     unsigned long long sum = 0;
-    gpuErrchk( cudaMemcpyToSymbol(dev_sum, &sum, sizeof(sum)) );
-    gpuErrchk( cudaMemcpyToSymbol(dev_cur_task, &task_cur, sizeof(task_cur)) );
-    gpu_pattern_matching<<<ctx.nr_blocks, THREADS_PER_BLOCK, ctx.block_shmem_size>>>(
-        task_end, VertexSet::max_intersection_size, ctx.dev_edge_from,
-        ctx.dev_edge, ctx.dev_vertex, ctx.dev_tmp, ctx.dev_schedule
-    );
+    gpuErrchk(cudaMemcpy(context->dev_sum, &sum, sizeof(sum), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(context->dev_cur_edge, &task_cur, sizeof(task_cur), cudaMemcpyHostToDevice));
+    gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, context->block_shmem_size>>>(task_end, VertexSet::max_intersection_size, context);
 }
 
 // thread 0 is scheduler
-void scheduler_loop(Graph* g, const Schedule_IEP& sched, int node, int comm_sz)
-{
-    GPUContext ctx;
-    init_gpu_context(ctx, g, sched);
+void scheduler_loop(Graph *g, const Schedule_IEP &sched, int node, int comm_sz) {
+    PatternMatchingDeviceContext *context;
+    gpuErrchk(cudaMallocManaged((void **)&context, sizeof(PatternMatchingDeviceContext)));
+
+    context->init(g, sched);
 
     cudaEvent_t event;
     cudaEventCreate(&event);
@@ -409,7 +182,7 @@ void scheduler_loop(Graph* g, const Schedule_IEP& sched, int node, int comm_sz)
                 MPI_Irecv(recv_buf, MSG_BUF_LEN, MPI_UINT64_T, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &recv_req);
             }
         }
-        
+
         switch (state) {
         case NodeState::WORKING: {
             if (should_request_work()) {
@@ -456,7 +229,7 @@ void scheduler_loop(Graph* g, const Schedule_IEP& sched, int node, int comm_sz)
             if (update_task_range(gpu_task_range, GPU_WORKER_TASK_GRANULARITY)) {
                 gpu_working = true;
                 workers_idle[0] = false;
-                launch_pattern_matching_kernel(ctx, gpu_task_range);
+                launch_pattern_matching_kernel(context, gpu_task_range);
                 cudaEventRecord(event);
                 log("node %d gpu kernel launched. [%d, %d)\n", node, std::get<0>(gpu_task_range), std::get<1>(gpu_task_range));
             }
@@ -464,25 +237,24 @@ void scheduler_loop(Graph* g, const Schedule_IEP& sched, int node, int comm_sz)
             auto result = cudaEventQuery(event);
             if (cudaErrorNotReady == result)
                 continue;
-            
+
             assert(cudaSuccess == result);
             cudaDeviceSynchronize();
 
             unsigned long long sum;
-            gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(sum)) );
+            gpuErrchk(cudaMemcpy(&sum, context->dev_sum, sizeof(sum), cudaMemcpyDeviceToHost));
             node_ans += sum;
-            gpu_ans  += sum;
+            gpu_ans += sum;
             gpu_working = false;
             workers_idle[0] = true;
         }
     }
 
-    free_gpu_context(ctx);
+    context->destroy();
 }
 
 // other threads are workers
-void worker_loop(Graph* g, const Schedule_IEP& sched, int node)
-{
+void worker_loop(Graph *g, const Schedule_IEP &sched, int node) {
     // prepare data structures for pattern matching
     auto ans_buffer = new int[sched.in_exclusion_optimize_vertex_id.size()];
     auto vertex_sets = new VertexSet[sched.get_total_prefix_num()];
@@ -498,7 +270,7 @@ void worker_loop(Graph* g, const Schedule_IEP& sched, int node)
             continue;
         }
         workers_idle[thread_id] = false;
-        
+
         int task_begin, task_end;
         std::tie(task_begin, task_end) = task_range;
         log("node %d thread %d do work [%d, %d)\n", node, thread_id, task_begin, task_end);
@@ -514,28 +286,27 @@ void worker_loop(Graph* g, const Schedule_IEP& sched, int node)
     delete[] vertex_sets;
 }
 
-void test_cuda_event()
-{
-    cudaEvent_t event;
-    cudaEventCreate(&event);
-    spin_kernel<<<1, 32>>>(1000000000); // ~ 1s, 1e9
-    cudaEventRecord(event);
-    while (true) {
-        auto result = cudaEventQuery(event);
-        if (cudaSuccess == result)
-            break;
-        if (cudaErrorNotReady == result) {
-            printf("waiting for device...\n");
-            usleep(100000);
-        } else {
-            printf("oops.. %s\n", cudaGetErrorString(result));
-            break;
-        }
-    }
-}
+// void test_cuda_event()
+// {
+//     cudaEvent_t event;
+//     cudaEventCreate(&event);
+//     spin_kernel<<<1, 32>>>(1000000000); // ~ 1s, 1e9
+//     cudaEventRecord(event);
+//     while (true) {
+//         auto result = cudaEventQuery(event);
+//         if (cudaSuccess == result)
+//             break;
+//         if (cudaErrorNotReady == result) {
+//             printf("waiting for device...\n");
+//             usleep(100000);
+//         } else {
+//             printf("oops.. %s\n", cudaGetErrorString(result));
+//             break;
+//         }
+//     }
+// }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char *argv[]) {
     // load graph & build schedule
     if (argc < 4) {
         fprintf(stderr, "Usage: %s graph_file [ignored] pattern_string\n", argv[0]);
@@ -570,7 +341,7 @@ int main(int argc, char* argv[])
     // initialize global work states
     nr_tasks = g->e_cnt;
     int nr_threads = omp_get_max_threads();
-    workers_idle = new bool[nr_threads] {true};
+    workers_idle = new bool[nr_threads]{true};
     // init task_status, global_cur_task
     // warn: make sure nr_tasks >= comm_sz * INITIAL_NODE_TASKS
     int initial_task = node * INITIAL_NODE_TASKS;
@@ -579,7 +350,7 @@ int main(int argc, char* argv[])
 
     using std::chrono::system_clock;
     auto t1 = system_clock::now();
-    #pragma omp parallel
+#pragma omp parallel
     {
         int thread_id = omp_get_thread_num();
         if (thread_id == 0) {
@@ -591,7 +362,7 @@ int main(int argc, char* argv[])
     }
     auto t2 = system_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    
+
     if (node == 0) {
         auto final_ans = (global_ans + node_ans) / schedule.get_in_exclusion_optimize_redundancy();
         printf("final answer = %ld\n", final_ans);

@@ -4,6 +4,7 @@
 #include "prefix.h"
 #include "disjoint_set_union.h"
 
+#include <cstdint>
 #include <vector>
 
 class Schedule_IEP
@@ -12,7 +13,7 @@ public:
     //TODO : more kinds of constructors to construct different Schedules from one Pattern
     Schedule_IEP(const Pattern& pattern, bool& is_pattern_valid, 
         int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize,
-        int v_cnt, unsigned int e_cnt, long long tri_cnt = 0,
+        int v_cnt, int64_t e_cnt, long long tri_cnt = 0,
         bool vertex_induced = false);
     // performance_modeling type = 0 : not use modeling
     //                      type = 1 : use our modeling

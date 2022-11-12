@@ -40,9 +40,7 @@ TEST(gpu_pattern_matching_test, gpu_pattern_matching_test_patents) {
         uint32_t buffer_size = VertexSet::max_intersection_size;
         int max_active_blocks_per_sm;
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, context->block_shmem_size);
-        printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
-
-        printf("iep: %lld\n", schedule_iep.get_in_exclusion_optimize_redundancy());
+        printf("Max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
 
         unsigned long long sum = 0;
 

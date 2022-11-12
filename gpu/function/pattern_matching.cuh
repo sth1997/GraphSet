@@ -1,10 +1,84 @@
 #pragma once
 
+#include "../component/gpu_device_context.cuh"
 #include "../component/gpu_schedule.cuh"
 #include "../component/gpu_vertex_set.cuh"
 
 constexpr int MAX_DEPTH = 5; // 非递归pattern matching支持的最大深度
 
+struct PatternMatchingDeviceContext : public GraphDeviceContext {
+    GPUSchedule *dev_schedule;
+    unsigned long long *dev_sum;
+    unsigned int *dev_cur_edge;
+    size_t block_shmem_size;
+    void init(const Graph *_g, const Schedule_IEP &schedule) {
+        g = _g;
+        // prefix + subtraction + tmp + extra (n-2)
+        int num_vertex_sets_per_warp = schedule.get_total_prefix_num() + schedule.get_size();
+
+        size_t size_edge = g->e_cnt * sizeof(uint32_t);
+        size_t size_vertex = (g->v_cnt + 1) * sizeof(e_index_t);
+        size_t size_tmp = VertexSet::max_intersection_size * num_total_warps * (schedule.get_total_prefix_num() + 2) *
+                          sizeof(uint32_t); // prefix + subtraction + tmp
+        uint32_t *edge_from = new uint32_t[g->e_cnt];
+        for (uint32_t i = 0; i < g->v_cnt; ++i) {
+            for (uint32_t j = g->vertex[i]; j < g->vertex[i + 1]; ++j)
+                edge_from[j] = i;
+        }
+
+        gpuErrchk(cudaMalloc((void **)&dev_edge, size_edge));
+        gpuErrchk(cudaMalloc((void **)&dev_edge_from, size_edge));
+        gpuErrchk(cudaMalloc((void **)&dev_vertex, size_vertex));
+        gpuErrchk(cudaMalloc((void **)&dev_tmp, size_tmp));
+
+        gpuErrchk(cudaMemcpy(dev_edge, g->edge, size_edge, cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(dev_edge_from, edge_from, size_edge, cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(dev_vertex, g->vertex, size_vertex, cudaMemcpyHostToDevice));
+
+        unsigned long long sum = 0;
+        gpuErrchk(cudaMalloc((void **)&dev_sum, sizeof(sum)));
+        gpuErrchk(cudaMemcpy(dev_sum, &sum, sizeof(sum), cudaMemcpyHostToDevice));
+        unsigned int cur_edge = 0;
+        gpuErrchk(cudaMalloc((void **)&dev_cur_edge, sizeof(cur_edge)));
+        gpuErrchk(cudaMemcpy(dev_cur_edge, &cur_edge, sizeof(cur_edge), cudaMemcpyHostToDevice));
+
+        gpuErrchk(cudaMallocManaged((void **)&dev_schedule, sizeof(GPUSchedule)));
+        dev_schedule->create_from_schedule(schedule);
+
+        printf("Memory Usage:\n");
+        printf("  Global memory usage (GB): %.3lf \n", (size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
+        printf("  Shared memory for vertex set per block: %ld bytes\n",
+               num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
+                   schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int));
+
+        block_shmem_size = num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
+                           schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
+        dev_schedule->ans_array_offset = block_shmem_size - schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
+
+        delete[] edge_from;
+    }
+    void destroy() {
+        gpuErrchk(cudaFree(dev_edge));
+        gpuErrchk(cudaFree(dev_edge_from));
+        gpuErrchk(cudaFree(dev_vertex));
+        gpuErrchk(cudaFree(dev_tmp));
+
+        gpuErrchk(cudaFree(dev_schedule->adj_mat));
+        gpuErrchk(cudaFree(dev_schedule->father_prefix_id));
+        gpuErrchk(cudaFree(dev_schedule->last));
+        gpuErrchk(cudaFree(dev_schedule->next));
+        gpuErrchk(cudaFree(dev_schedule->loop_set_prefix_id));
+        gpuErrchk(cudaFree(dev_schedule->restrict_last));
+        gpuErrchk(cudaFree(dev_schedule->restrict_next));
+        gpuErrchk(cudaFree(dev_schedule->restrict_index));
+
+        gpuErrchk(cudaFree(dev_schedule->in_exclusion_optimize_vertex_id));
+        gpuErrchk(cudaFree(dev_schedule->in_exclusion_optimize_coef));
+        gpuErrchk(cudaFree(dev_schedule->in_exclusion_optimize_flag));
+
+        gpuErrchk(cudaFree(dev_schedule));
+    }
+};
 
 /**
  * @brief 最终层的容斥原理优化计算。
@@ -42,7 +116,7 @@ __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule *sched
 
 /**
  * @brief 用于 vertex_induced 的计算（好像没怎么测过）
- * 
+ *
  */
 __device__ void remove_anti_edge_vertices(GPUVertexSet &out_buf, const GPUVertexSet &in_buf, const GPUSchedule &sched,
                                           const GPUVertexSet &partial_embedding, int vp, const uint32_t *edge, const e_index_t *vertex) {
@@ -109,7 +183,7 @@ __device__ void remove_anti_edge_vertices(GPUVertexSet &out_buf, const GPUVertex
 
 /**
  * @brief 以模板形式伪递归的计算函数
- * 
+ *
  */
 template <int depth>
 __device__ void GPU_pattern_matching_func(const GPUSchedule *schedule, GPUVertexSet *vertex_set, GPUVertexSet &subtraction_set, GPUVertexSet &tmp_set,
@@ -191,7 +265,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule *schedule, GPUVertex
 
 /**
  * @brief 模板递归的边界
- * 
+ *
  */
 template <>
 __device__ void GPU_pattern_matching_func<MAX_DEPTH>(const GPUSchedule *schedule, GPUVertexSet *vertex_set, GPUVertexSet &subtraction_set,
