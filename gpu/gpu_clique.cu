@@ -209,20 +209,6 @@ __device__ void intersection2(uint32_t *tmp, const uint32_t *lbases, const uint3
 }
 
 
-__device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min_vertex)
-{
-    int l = 0, r = loop_size - 1;
-    while (l <= r)
-    {
-        int mid = r - ((r - l) >> 1);
-        if (loop_data_ptr[mid] < min_vertex)
-            l = mid + 1;
-        else
-            r = mid - 1;
-    }
-    return l;
-}
-
 
 constexpr int MAX_DEPTH = 10; // 非递归pattern matching支持的最大深度
 

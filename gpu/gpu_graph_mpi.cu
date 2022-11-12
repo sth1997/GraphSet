@@ -21,7 +21,96 @@
 #include "component/gpu_vertex_set.cuh"
 #include "component/gpu_device_context.cuh"
 
-#include "pattern_matching.cuh"
+#include "function/pattern_matching.cuh"
+
+
+// device global variables
+__device__ unsigned long long dev_sum;
+__device__ unsigned int dev_cur_task;
+
+__global__ void gpu_pattern_matching(unsigned task_end, size_t buffer_size, uint32_t *edge_from, uint32_t *edge, uint32_t *vertex, uint32_t *tmp,
+                                     const GPUSchedule *schedule) {
+    __shared__ unsigned int block_edge_idx[WARPS_PER_BLOCK];
+    extern __shared__ GPUVertexSet block_vertex_set[];
+
+    int num_prefixes = schedule->get_total_prefix_num();
+    int num_vertex_sets_per_warp = num_prefixes + 2;
+
+    int wid = threadIdx.x / THREADS_PER_WARP;            // warp id within the block
+    int lid = threadIdx.x % THREADS_PER_WARP;            // lane id
+    int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id
+    unsigned int &edge_idx = block_edge_idx[wid];
+    GPUVertexSet *vertex_set = block_vertex_set + wid * num_vertex_sets_per_warp;
+
+    if (lid == 0) {
+        edge_idx = 0;
+        ptrdiff_t offset = buffer_size * global_wid * num_vertex_sets_per_warp;
+        for (int i = 0; i < num_vertex_sets_per_warp; ++i) {
+            vertex_set[i].set_data_ptr(tmp + offset); // 注意这是个指针+整数运算，自带*4
+            offset += buffer_size;
+        }
+    }
+    GPUVertexSet &subtraction_set = vertex_set[num_prefixes];
+    GPUVertexSet &tmp_set = vertex_set[num_prefixes + 1];
+
+    __threadfence_block();
+
+    uint32_t v0, v1;
+    uint32_t l, r;
+
+    unsigned long long sum = 0;
+
+    while (true) {
+        if (lid == 0) {
+            edge_idx = atomicAdd(&dev_cur_task, 1);
+            unsigned int i = edge_idx;
+            if (i < task_end) {
+                subtraction_set.init();
+                subtraction_set.push_back(edge_from[i]);
+                subtraction_set.push_back(edge[i]);
+            }
+        }
+        __threadfence_block();
+
+        unsigned int i = edge_idx;
+        if (i >= task_end)
+            break;
+
+        // for edge in E
+        v0 = edge_from[i];
+        v1 = edge[i];
+
+        //目前只考虑pattern size>2的情况
+        // start v1, depth = 1
+        if (schedule->get_restrict_last(1) != -1 && v0 <= v1)
+            continue;
+
+        bool is_zero = false;
+        get_edge_index(v0, l, r);
+        for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+
+        get_edge_index(v1, l, r);
+        for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            if (vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule->get_basic_prefix_num()) {
+                is_zero = true;
+                break;
+            }
+        }
+        if (is_zero)
+            continue;
+
+        unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
+        // GPU_pattern_matching_func<2>(schedule, vertex_set, subtraction_set, tmp_set, local_sum, edge, vertex);
+        sum += local_sum;
+    }
+
+    if (lid == 0) {
+        atomicAdd(&dev_sum, sum);
+    }
+}
+
 
 struct GPUContext {
     int nr_blocks, nr_total_warps, block_shmem_size;
