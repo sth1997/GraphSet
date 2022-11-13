@@ -9,7 +9,7 @@ constexpr int MAX_DEPTH = 5; // 非递归pattern matching支持的最大深度
 struct PatternMatchingDeviceContext : public GraphDeviceContext {
     GPUSchedule *dev_schedule;
     unsigned long long *dev_sum;
-    unsigned int *dev_cur_edge;
+    unsigned long long *dev_cur_edge;
     size_t block_shmem_size;
     void init(const Graph *_g, const Schedule_IEP &schedule) {
         g = _g;
@@ -38,16 +38,16 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
         unsigned long long sum = 0;
         gpuErrchk(cudaMalloc((void **)&dev_sum, sizeof(sum)));
         gpuErrchk(cudaMemcpy(dev_sum, &sum, sizeof(sum), cudaMemcpyHostToDevice));
-        unsigned int cur_edge = 0;
+        int64_t cur_edge = 0;
         gpuErrchk(cudaMalloc((void **)&dev_cur_edge, sizeof(cur_edge)));
         gpuErrchk(cudaMemcpy(dev_cur_edge, &cur_edge, sizeof(cur_edge), cudaMemcpyHostToDevice));
 
         gpuErrchk(cudaMallocManaged((void **)&dev_schedule, sizeof(GPUSchedule)));
         dev_schedule->create_from_schedule(schedule);
 
-        printf("Memory Usage:\n");
-        printf("  Global memory usage (GB): %.3lf \n", (size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
-        printf("  Shared memory for vertex set per block: %ld bytes\n",
+        log("Memory Usage:\n");
+        log("  Global memory usage (GB): %.3lf \n", (size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
+        log("  Shared memory for vertex set per block: %ld bytes\n",
                num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
                    schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int));
 

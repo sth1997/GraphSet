@@ -181,11 +181,11 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid,
 
         copy_adj_mat_from(best_order, pattern_adj_mat);
 
-        printf("best order:\n");
-        for(auto i: best_order) {
-            printf("%d ",i);
-        }
-        printf("\n");
+        // printf("best order:\n");
+        // for(auto i: best_order) {
+        //     printf("%d ",i);
+        // }
+        // printf("\n");
     }
     else {
         // std::vector< int > I;
