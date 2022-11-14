@@ -58,7 +58,9 @@ __global__ void spin_kernel(clock_t cycles) {
 using TaskStatus = std::tuple<int64_t, int64_t, int64_t>;
 
 constexpr int DEVICE_PER_NODE = 8; // "max" devices per node
-constexpr int NODE_TASK_GRANULARUTY = 500000 * DEVICE_PER_NODE;// single card
+constexpr int NODE_TASK_GRANULARUTY = 100000;// single card
+constexpr int MSG_BUF_LEN = 10;
+
 
 TaskStatus task_status[DEVICE_PER_NODE];
 bool is_working[DEVICE_PER_NODE], task_ready[DEVICE_PER_NODE];
@@ -74,21 +76,22 @@ uint64_t global_cur_task; // only scheduler thread of master node will modify th
 uint64_t global_ans = 0, gpu_ans = 0;
 int finished_number = 0;
 
-void process_message(uint64_t recv_buf[], uint64_t send_buf[], int node, int sender) {
+void process_message(uint64_t recv_buf[], uint64_t send_buf[][MSG_BUF_LEN], int node, int sender) {
     MPI_Request send_req;
     switch (recv_buf[0]) {
     case MSG_REQUEST_WORK: { // me: master
-        auto send_base = send_buf + 4 * DEVICE_PER_NODE; 
-        send_base[0] = MSG_DISPATCH_WORK;
-        send_base[1] = recv_buf[1];
-        send_base[2] = global_cur_task;
-        send_base[3] = global_cur_task = std::min(global_cur_task + recv_buf[2], nr_tasks);
-        MPI_Isend(send_base, 4, MPI_UINT64_T, sender, 0, MPI_COMM_WORLD, &send_req);
-        log("master got work request from node %d (worker %lld), replying [%ld, %ld)\n", sender, recv_buf[1], send_buf[1], send_buf[2]);
+        // try to avoid colliding with other worker
+        // though this isn't guanrtee correctness 
+        send_buf[DEVICE_PER_NODE + recv_buf[1]][0] = MSG_DISPATCH_WORK;
+        send_buf[DEVICE_PER_NODE + recv_buf[1]][1] = recv_buf[1];
+        send_buf[DEVICE_PER_NODE + recv_buf[1]][2] = global_cur_task;
+        send_buf[DEVICE_PER_NODE + recv_buf[1]][3] = global_cur_task = std::min(global_cur_task + recv_buf[2], nr_tasks);
+        MPI_Isend(send_buf[DEVICE_PER_NODE + recv_buf[1]], 4, MPI_UINT64_T, sender, 0, MPI_COMM_WORLD, &send_req);
+        log("master got work request from node %d (worker %lld), replying [%ld, %ld)\n", sender, recv_buf[1], send_buf[DEVICE_PER_NODE + recv_buf[1]][2], send_buf[DEVICE_PER_NODE + recv_buf[1]][3]);
         break;
     }
     case MSG_DISPATCH_WORK: { // me: slave
-        int worker = recv_buf[1];
+        int worker = int(recv_buf[1]);
         uint64_t new_task_cur = recv_buf[2];
         uint64_t new_task_end = recv_buf[3];
         task_status[worker] = std::make_tuple(worker, new_task_cur, new_task_end);
@@ -115,20 +118,12 @@ void launch_pattern_matching_kernel(PatternMatchingDeviceContext *context, const
     gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, context->block_shmem_size>>>(task_end, VertexSet::max_intersection_size, context);
 }
 
-void ask_for_task(uint64_t *send_base, int worker, MPI_Request &send_req, int node = -1) {
-    log("node %d worker %d ask for task.\n", node, worker);
-    send_base[0] = MSG_REQUEST_WORK;
-    send_base[1] = worker;
-    send_base[2] = NODE_TASK_GRANULARUTY;
-    MPI_Isend(&send_base, 3, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req);
-}
 
 
 // thread 0 is scheduler, communicate with master node
 void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int node_devices, int comm_sz) {
 
-    constexpr int MSG_BUF_LEN = 256;
-    static uint64_t recv_buf[MSG_BUF_LEN], send_buf[MSG_BUF_LEN];
+    static uint64_t recv_buf[MSG_BUF_LEN], send_buf[DEVICE_PER_NODE * 2][MSG_BUF_LEN];
 
     MPI_Request send_req[node_devices], recv_req;
     MPI_Status mpi_status;
@@ -137,16 +132,22 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
 
     // every worker is ask for task independently
 
-    // #pragma omp parallel for
+    #pragma omp parallel for
     ForallDevice(i, node_devices,
         cudaEventCreate(&event[i]);
     )
 
+    #pragma omp parallel for
     for(int i = 0; i < node_devices; i++) { 
         finished[i] = false;
         is_working[i] = false;
         // ask for every first task 
-        ask_for_task(send_buf + 4 * i, i, send_req[i], node);
+        // auto send_base = send_buf + 4 * i;
+        send_buf[i][0] = MSG_REQUEST_WORK;
+        send_buf[i][1] = i;
+        send_buf[i][2] = NODE_TASK_GRANULARUTY;
+        MPI_Isend(send_buf[i], 3, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[i]);
+        log("node %d worker %d ask for task.\n", node, i);
     }
 
     // receive for first message
@@ -170,7 +171,11 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
                 if(result == cudaErrorNotReady) continue;
                 // Case 2: result is already available, ask for another job
                 // use workers' own send buffer[]
-                ask_for_task(send_buf + 4 * i, i, send_req[i]);
+                send_buf[i][0] = MSG_REQUEST_WORK;
+                send_buf[i][1] = i;
+                send_buf[i][2] = NODE_TASK_GRANULARUTY;
+                MPI_Isend(send_buf[i], 3, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[i]);
+                // log("node %d worker %d ask for task.\n", node, i);
                 is_working[i] = false;
                 task_ready[i] = false;
             } else {
@@ -200,8 +205,8 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
     }
     // send "I finished!" to root 
     if(node != 0) {
-        send_buf[0] = MSG_REPORT_ANS;
-        MPI_Isend(send_buf, 1, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[0]);
+        send_buf[node_devices][0] = MSG_REPORT_ANS;
+        MPI_Isend(send_buf[node_devices], 1, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[0]);
     }
     // reduce answer
     // Step 1: from multi-devices
@@ -261,11 +266,13 @@ int main(int argc, char *argv[]) {
 
     PatternMatchingDeviceContext *context[node_devices];
 
-#pragma omp parallel for
-    ForallDevice(i, node_devices, gpuErrchk(cudaMallocManaged((void **)&context[i], sizeof(PatternMatchingDeviceContext)));
-                 context[i]->init(g, schedule);)
+    #pragma omp parallel for
+    ForallDevice(i, node_devices, 
+        gpuErrchk(cudaMallocManaged((void **)&context[i], sizeof(PatternMatchingDeviceContext)));
+        context[i]->init(g, schedule);
+    )
 
-        using std::chrono::system_clock;
+    using std::chrono::system_clock;
     auto t1 = system_clock::now();
 
     pattern_matching_mpi(context, node, node_devices, comm_sz);
