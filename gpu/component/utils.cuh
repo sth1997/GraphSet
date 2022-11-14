@@ -2,7 +2,7 @@
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
-#define gpuErrchk(ans)                                                                             \
+#define gpuErrchk(ans)                                                                                                                               \
     { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true) {
     if (code != cudaSuccess) {
@@ -34,17 +34,17 @@ struct GPUGroupDim0 {
     int size;
 };
 
-#define get_labeled_edge_index(v, label, l, r)                                                     \
-    do {                                                                                           \
-        int index = v * l_cnt + label;                                                             \
-        l = labeled_vertex[index];                                                                 \
-        r = labeled_vertex[index + 1];                                                             \
+#define get_labeled_edge_index(v, label, l, r)                                                                                                       \
+    do {                                                                                                                                             \
+        int index = v * l_cnt + label;                                                                                                               \
+        l = labeled_vertex[index];                                                                                                                   \
+        r = labeled_vertex[index + 1];                                                                                                               \
     } while (0)
 
-#define get_edge_index(v, l, r)                                                                    \
-    do {                                                                                           \
-        l = vertex[v];                                                                             \
-        r = vertex[v + 1];                                                                         \
+#define get_edge_index(v, l, r)                                                                                                                      \
+    do {                                                                                                                                             \
+        l = vertex[v];                                                                                                                               \
+        r = vertex[v + 1];                                                                                                                           \
     } while (0)
 
 void dev_alloc_and_copy(void **dst, size_t size, const void *src = nullptr) {
@@ -82,5 +82,6 @@ __device__ bool binary_search(const T data[], int n, const T &target) {
     return false;
 }
 
-// #define log(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);fflush(stderr)
-#define log(fmt, ...) (void)(fmt)
+#define log(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);fflush(stderr)
+// #define log(fmt, ...) (void)(fmt)
+
