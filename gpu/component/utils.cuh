@@ -82,6 +82,6 @@ __device__ bool binary_search(const T data[], int n, const T &target) {
     return false;
 }
 
-#define log(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);fflush(stderr)
-// #define log(fmt, ...) (void)(fmt)
+// #define log(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);fflush(stderr)
+#define log(fmt, ...) (void)(fmt)
 

@@ -58,7 +58,7 @@ __global__ void spin_kernel(clock_t cycles) {
 using TaskStatus = std::tuple<int64_t, int64_t, int64_t>;
 
 constexpr int DEVICE_PER_NODE = 8; // "max" devices per node
-constexpr int NODE_TASK_GRANULARUTY = 100000;// single card
+constexpr int NODE_TASK_GRANULARUTY = 10000000;// single card
 constexpr int MSG_BUF_LEN = 10;
 
 
@@ -82,12 +82,13 @@ void process_message(uint64_t recv_buf[], uint64_t send_buf[][MSG_BUF_LEN], int 
     case MSG_REQUEST_WORK: { // me: master
         // try to avoid colliding with other worker
         // though this isn't guanrtee correctness 
-        send_buf[DEVICE_PER_NODE + recv_buf[1]][0] = MSG_DISPATCH_WORK;
-        send_buf[DEVICE_PER_NODE + recv_buf[1]][1] = recv_buf[1];
-        send_buf[DEVICE_PER_NODE + recv_buf[1]][2] = global_cur_task;
-        send_buf[DEVICE_PER_NODE + recv_buf[1]][3] = global_cur_task = std::min(global_cur_task + recv_buf[2], nr_tasks);
-        MPI_Isend(send_buf[DEVICE_PER_NODE + recv_buf[1]], 4, MPI_UINT64_T, sender, 0, MPI_COMM_WORLD, &send_req);
-        log("master got work request from node %d (worker %lld), replying [%ld, %ld)\n", sender, recv_buf[1], send_buf[DEVICE_PER_NODE + recv_buf[1]][2], send_buf[DEVICE_PER_NODE + recv_buf[1]][3]);
+        int worker = recv_buf[1];
+        send_buf[DEVICE_PER_NODE + worker][0] = MSG_DISPATCH_WORK;
+        send_buf[DEVICE_PER_NODE + worker][1] = worker;
+        send_buf[DEVICE_PER_NODE + worker][2] = global_cur_task;
+        send_buf[DEVICE_PER_NODE + worker][3] = global_cur_task = std::min(global_cur_task + recv_buf[2], nr_tasks);
+        MPI_Isend(&send_buf[DEVICE_PER_NODE + worker][0], 4, MPI_UINT64_T, sender, 0, MPI_COMM_WORLD, &send_req);
+        log("master got work request from node %d (worker %lld), replying [%ld, %ld)\n", sender, worker, send_buf[DEVICE_PER_NODE + recv_buf[1]][2], send_buf[DEVICE_PER_NODE + recv_buf[1]][3]);
         break;
     }
     case MSG_DISPATCH_WORK: { // me: slave
@@ -130,14 +131,16 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
     cudaEvent_t event[node_devices];
     bool finished[node_devices];
 
+    using std::chrono::system_clock;
+    auto u1 = system_clock::now();
     // every worker is ask for task independently
 
     #pragma omp parallel for
     ForallDevice(i, node_devices,
-        cudaEventCreate(&event[i]);
+        gpuErrchk(cudaEventCreate(&event[i]));
     )
 
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for(int i = 0; i < node_devices; i++) { 
         finished[i] = false;
         is_working[i] = false;
@@ -146,7 +149,7 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
         send_buf[i][0] = MSG_REQUEST_WORK;
         send_buf[i][1] = i;
         send_buf[i][2] = NODE_TASK_GRANULARUTY;
-        MPI_Isend(send_buf[i], 3, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[i]);
+        MPI_Isend(&send_buf[i][0], 3, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[i]);
         log("node %d worker %d ask for task.\n", node, i);
     }
 
@@ -157,12 +160,13 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
         MPI_Test(&recv_req, &msg_received, &mpi_status);
         while (msg_received) {
             process_message(recv_buf, send_buf, node, mpi_status.MPI_SOURCE);
+            msg_received = 0;
             MPI_Irecv(recv_buf, MSG_BUF_LEN, MPI_UINT64_T, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &recv_req);
             MPI_Test(&recv_req, &msg_received, &mpi_status);
         }
 
         // for all worker
-        #pragma omp parallel for
+        // #pragma omp parallel for
         ForallDevice(i, node_devices,
             if(is_working[i]) {
                 // working
@@ -174,8 +178,8 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
                 send_buf[i][0] = MSG_REQUEST_WORK;
                 send_buf[i][1] = i;
                 send_buf[i][2] = NODE_TASK_GRANULARUTY;
-                MPI_Isend(send_buf[i], 3, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[i]);
-                // log("node %d worker %d ask for task.\n", node, i);
+                MPI_Isend(&send_buf[i][0], 3, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req[i]);
+                log("node %d worker %d ask for task.\n", node, i);
                 is_working[i] = false;
                 task_ready[i] = false;
             } else {
@@ -185,6 +189,11 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
                 // Case 2: task is ready, launch kernel
                 // Case 2.1: start at final part, there won't be any other task
                 if(std::get<1>(task_status[i]) == nr_tasks) {
+                    if(finished[i] == false){
+                        auto u2 = system_clock::now();
+                        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(u2 - u1);
+                        fprintf(stderr, "node %d worker %d, time = %.6g seconds, done.\n", node, i, elapsed.count() / 1e6);
+                    }
                     finished[i] = true;
                     continue;
                 }
@@ -214,13 +223,13 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
     unsigned long long sum[node_devices];
     #pragma omp parallel for
     ForallDevice(i, node_devices, 
-        cudaDeviceSynchronize(); 
+        gpuErrchk(cudaDeviceSynchronize()); 
         gpuErrchk(cudaMemcpy(&sum[i], context[i]->dev_sum, sizeof(sum[i]), cudaMemcpyDeviceToHost));
     )
     for(int i = 0; i < node_devices; i++){
         gpu_ans += sum[i];
     }
-    log("node %d receive answer: %lld\n", node, gpu_ans);
+    fprintf(stderr, "node %d receive answer: %lld\n", node, gpu_ans);
     // Step2: reuduce to root 0
     MPI_Reduce(&gpu_ans, &global_ans, 1, MPI_UINT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
 
@@ -261,7 +270,7 @@ int main(int argc, char *argv[]) {
     nr_tasks = g->e_cnt;
 
     int node_devices;
-    cudaGetDeviceCount(&node_devices);
+    gpuErrchk( cudaGetDeviceCount(&node_devices));
     node_devices = std::min(node_devices, DEVICE_PER_NODE);
 
     PatternMatchingDeviceContext *context[node_devices];
@@ -281,9 +290,12 @@ int main(int argc, char *argv[]) {
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
 
 #pragma omp parallel for
-    ForallDevice(i, node_devices, context[i]->destroy(); gpuErrchk(cudaFree(context[i]));)
+    ForallDevice(i, node_devices, 
+        context[i]->destroy(); 
+        gpuErrchk(cudaFree(context[i]));
+    )
 
-        printf("node %d gpu_ans = %ld\n", node, gpu_ans);
+    printf("node %d gpu_ans = %ld\n", node, gpu_ans);
     if (node == 0) {
         auto final_ans = (global_ans) / schedule.get_in_exclusion_optimize_redundancy();
         printf("final answer = %ld\n", final_ans);
