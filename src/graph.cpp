@@ -733,6 +733,48 @@ void reduce_edges_for_clique(Graph &g) {
     printf("Finish reduce.\n");
 }
 
+void Graph::reorder_edge_third_layer(const Schedule_IEP& schedule, e_index_t * new_order) const {
+    const int thread_count = 64;
+    //    intersection_times_low = intersection_times_high = 0;
+    //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
+    uint32_t *edge_from = new uint32_t[e_cnt];
+    for (uint32_t i = 0; i < v_cnt; ++i)
+        for (e_index_t j = vertex[i]; j < vertex[i + 1]; ++j)
+            edge_from[j] = i;
+
+    int *tmp_count = new int[e_cnt];
+#pragma omp parallel num_threads(thread_count)
+    {
+        VertexSet *vertex_set = new VertexSet[schedule.get_total_prefix_num()];
+        #pragma omp for schedule(dynamic) nowait
+        for (int e = 0; e < e_cnt; ++e) {
+            tmp_count[e] = 0;
+
+            int v0 = edge[e];
+            int v1 = edge_from[e];
+            e_index_t l, r;
+            get_edge_index(v0, l, r);
+
+            for (int prefix_id = schedule.get_last(0); prefix_id != -1; prefix_id = schedule.get_next(prefix_id)) {
+                vertex_set[prefix_id].build_vertex_set(
+                    schedule, vertex_set, &edge[l], (int)(r - l), prefix_id);
+            }
+            get_edge_index(v1, l, r);
+            for (int prefix_id = schedule.get_last(1); prefix_id != -1; prefix_id = schedule.get_next(prefix_id)) {
+                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+                tmp_count[e] += vertex_set[prefix_id].get_size();
+            }
+        }
+        
+        delete[] vertex_set;
+    }
+    
+    for(int e = 0; e < e_cnt; e++) new_order[e] = e;
+    std::sort(new_order, new_order + e_cnt, [tmp_count](int i, int j){
+        return tmp_count[i] > tmp_count[j];
+    });
+}
+
 void degree_orientation_init(Graph *original_g, Graph *&g) {
     g = new Graph();
 

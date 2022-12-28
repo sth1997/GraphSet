@@ -66,6 +66,8 @@ public:
     // internal use only
     long long pattern_matching_edge_task(const Schedule_IEP& schedule, int edge_id,
         VertexSet vertex_sets[], VertexSet& partial_embedding, VertexSet& tmp_set, int ans_buffer[]);
+    
+    void reorder_edge_third_layer(const Schedule_IEP& schedule, e_index_t * new_order) const;
 private:
     friend Graphmpi;
     void tc_mt(long long * global_ans);
@@ -81,6 +83,7 @@ private:
     void pattern_matching_aggressive_func(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet& tmp_set, long long& local_ans, int depth, int* ans_buffer);
 
     void pattern_matching_aggressive_func_mpi(const Schedule_IEP& schedule, VertexSet* vertex_set, VertexSet& subtraction_set, VertexSet &tmp_set, long long& local_ans, int depth);
+    
 };
 
 void reduce_edges_for_clique(Graph &g);

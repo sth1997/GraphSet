@@ -22,6 +22,10 @@ ADD_EXECUTABLE(fsm_mixed fsm_mixed.cu)
 SET_PROPERTY(TARGET fsm_mixed PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(fsm_mixed graph_mining)
 
+ADD_EXECUTABLE(gpu_new_str gpu_new_str.cu)
+SET_PROPERTY(TARGET gpu_new_str PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_new_str graph_mining mpi gomp)
+
 ADD_EXECUTABLE(gpu_fsm gpu_fsm.cu)
 SET_PROPERTY(TARGET gpu_fsm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_fsm graph_mining)
@@ -36,6 +40,7 @@ TARGET_LINK_LIBRARIES(gpu_fsm_omp graph_mining)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
+    target_link_libraries(gpu_new_str OpenMP::OpenMP_CXX)
     target_link_libraries(gpu_fsm_omp OpenMP::OpenMP_CXX)
     target_link_libraries(gpu_kclique OpenMP::OpenMP_CXX)
     target_link_libraries(gpu_graph_mpi OpenMP::OpenMP_CXX)

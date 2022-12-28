@@ -4,13 +4,14 @@
 #include "../component/gpu_schedule.cuh"
 #include "../component/gpu_vertex_set.cuh"
 
-constexpr int MAX_DEPTH = 5; // 非递归pattern matching支持的最大深度
+constexpr int MAX_DEPTH = 7; // 非递归pattern matching支持的最大深度
 
 struct PatternMatchingDeviceContext : public GraphDeviceContext {
     GPUSchedule *dev_schedule;
     unsigned long long *dev_sum;
     unsigned long long *dev_cur_edge;
     size_t block_shmem_size;
+    e_index_t *dev_new_order;
     void init(const Graph *_g, const Schedule_IEP &schedule) {
         g = _g;
         // prefix + subtraction + tmp + extra (n-2)
@@ -25,6 +26,14 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
             for (uint32_t j = g->vertex[i]; j < g->vertex[i + 1]; ++j)
                 edge_from[j] = i;
         }
+
+        e_index_t *new_order = new e_index_t[g->e_cnt];
+        
+        g->reorder_edge_third_layer(schedule, new_order);
+        size_t size_new_order = sizeof(e_index_t) * g->e_cnt;
+        gpuErrchk(cudaMalloc((void **)&dev_new_order, size_new_order));
+        gpuErrchk(cudaMemcpy(dev_new_order, new_order, size_new_order, cudaMemcpyHostToDevice));
+
 
         gpuErrchk(cudaMalloc((void **)&dev_edge, size_edge));
         gpuErrchk(cudaMalloc((void **)&dev_edge_from, size_edge));
@@ -56,12 +65,15 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
         dev_schedule->ans_array_offset = block_shmem_size - schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
 
         delete[] edge_from;
+        delete[] new_order;
     }
     void destroy() {
         gpuErrchk(cudaFree(dev_edge));
         gpuErrchk(cudaFree(dev_edge_from));
         gpuErrchk(cudaFree(dev_vertex));
         gpuErrchk(cudaFree(dev_tmp));
+
+        gpuErrchk(cudaFree(dev_new_order));
 
         gpuErrchk(cudaFree(dev_schedule->adj_mat));
         gpuErrchk(cudaFree(dev_schedule->father_prefix_id));
