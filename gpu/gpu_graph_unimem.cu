@@ -32,14 +32,14 @@
 using TaskStatus = std::tuple<int64_t, int64_t>;
 
 constexpr int DEVICE_PER_NODE = 8; // "max" devices per node
-constexpr int NODE_TASK_GRANULARUTY = 1000000;
-constexpr int INNER_GRANULARUTY = 100000;
+constexpr int NODE_TASK_GRANULARUTY = 640000;
+constexpr int INNER_GRANULARUTY = 160000;
 
-constexpr int MSG_BUF_LEN = 10;
+constexpr int MSG_BUF_LEN = 5;
 
 
 TaskStatus task_status;
-bool is_working[DEVICE_PER_NODE], task_ready;
+bool task_ready;
 
 enum MessageType {
     MSG_REQUEST_WORK,  // slave -> master
@@ -105,10 +105,6 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
     MPI_Isend(&send_buf[0][0], 2, MPI_UINT64_T, 0, 0, MPI_COMM_WORLD, &send_req);
     log("node %d ask for task.\n", node);
 
-    // #pragma omp parallel for
-    for(int i = 0; i < node_devices; i++) { 
-        is_working[i] = false; 
-    }
 
     // create taskItem
     TaskItem *task[node_devices];

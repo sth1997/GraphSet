@@ -9,7 +9,7 @@
 struct TaskItem {
     volatile uint32_t *task_fetched;
     volatile unsigned long long *new_task_start, *new_task_end;
-    unsigned long long *task_start, *task_end;
+    volatile unsigned long long *task_start, *task_end;
     void init() {
         gpuErrchk( cudaMallocManaged((void**)&task_fetched, sizeof(uint32_t)));
         gpuErrchk( cudaMallocManaged((void**)&new_task_start, sizeof(unsigned long long)));
@@ -68,9 +68,6 @@ __global__ void gpu_pattern_matching_multidevices(TaskItem* task, uint32_t buffe
     int global_wid = blockIdx.x * WARPS_PER_BLOCK + wid; // global warp id
     e_index_t &edge_idx = block_edge_idx[wid];
     GPUVertexSet *vertex_set = block_vertex_set + wid * num_vertex_sets_per_warp;
-    if(global_wid == 0 && lid == 0) {
-        printf("kernel launched\n\n");
-    }
 
     if (lid == 0) {
         edge_idx = 0;
@@ -90,84 +87,69 @@ __global__ void gpu_pattern_matching_multidevices(TaskItem* task, uint32_t buffe
 
     unsigned long long sum = 0;
 
-    uint64_t last_task_end = -1;    
 
-    while(true){
-        __syncwarp();        
-        // if(lid == 0 && (int)*(task->task_fetched) == 0) {
-        //     printf("fetched: %d\n", (int)*(task->task_fetched));
-        // }
-        if(*task->new_task_end == 0) {
-            if(global_wid == 0 && lid == 0) {
-                printf("break\n");
-            }   
-            break;
-        }
-        if((int)(*(task->task_fetched)) == 1) continue;
-        if(global_wid == 0 && lid == 0) {
-            printf("task: %llu %llu\n", *task->new_task_start, *task->new_task_end);
-        }
-        // if(*task->new_task_end == last_task_end) continue;
-        *task->task_start = *(task->new_task_start);
-        *task->task_end = *(task->new_task_end);
-        unsigned long long &dev_cur_edge = *(task->task_start);
-        unsigned long long &edge_num = *(task->task_end);
-        last_task_end = edge_num;
-        *(task->task_fetched) = 1;
+    volatile unsigned long long &dev_cur_edge = *(task->task_start);
+    volatile unsigned long long &edge_num = *(task->task_end);
         
 
-        // if(global_wid == 0 && lid == 0) {
-        //     printf("task: %d %d\n", (int)dev_cur_edge, (int)edge_num);
-        // }
-
-        __threadfence_system();
-
-        while (true) {
-            if (lid == 0) {
-                edge_idx = atomicAdd(&dev_cur_edge, 1);
-                e_index_t i = edge_idx;
-                if (i < edge_num) {
-                    subtraction_set.init();
-                    subtraction_set.push_back(edge_from[i]);
-                    subtraction_set.push_back(edge[i]);
-                }
-            }
-
-            __threadfence_block();
-
-            e_index_t i = edge_idx;
-            if (i >= edge_num)
-                break;
-
-            // for edge in E
-            v0 = edge_from[i];
-            v1 = edge[i];
-
-            //目前只考虑pattern size>2的情况
-            // start v1, depth = 1
-            if (schedule->get_restrict_last(1) != -1 && v0 <= v1)
-                continue;
-
-            bool is_zero = false;
-            get_edge_index(v0, l, r);
-            for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
-                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-
-            get_edge_index(v1, l, r);
-            for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
-                vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-                if (vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule->get_basic_prefix_num()) {
-                    is_zero = true;
-                    break;
-                }
-            }
-            if (is_zero)
-                continue;
-
-            unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
-            GPU_pattern_matching_func<2>(schedule, vertex_set, subtraction_set, tmp_set, local_sum, edge, vertex);
-            sum += local_sum;
+    while (true) {
+        if(edge_num == 0) {
+            break;
         }
+        if(global_wid == 0 && lid == 0 && dev_cur_edge >= edge_num) {
+            if((int)(*(task->task_fetched)) == 1) continue;
+            // printf("new task: %d %d\n", (int)*(task->new_task_start), (int)*(task->new_task_end));
+            atomicExch(const_cast<unsigned long long *>(task->task_start), *(task->new_task_start));// change the start point first
+            atomicExch(const_cast<unsigned long long *>(task->task_end), *(task->new_task_end));// to avoid the gap between these two atomic operation
+            *(task->task_fetched) = 1;
+        }
+        if(dev_cur_edge >= edge_num) {
+            continue;
+        }
+        if (lid == 0) {
+            edge_idx = atomicAdd(const_cast<unsigned long long *>(&dev_cur_edge), 1);
+            e_index_t i = edge_idx;
+            if (i < edge_num) {
+                subtraction_set.init();
+                subtraction_set.push_back(edge_from[i]);
+                subtraction_set.push_back(edge[i]);
+            }
+        }
+
+        __threadfence_block();
+
+        e_index_t i = edge_idx;
+        if (i >= edge_num)
+            continue;
+
+        // for edge in E
+        v0 = edge_from[i];
+        v1 = edge[i];
+
+        //目前只考虑pattern size>2的情况
+        // start v1, depth = 1
+        if (schedule->get_restrict_last(1) != -1 && v0 <= v1)
+            continue;
+
+        bool is_zero = false;
+        get_edge_index(v0, l, r);
+        for (int prefix_id = schedule->get_last(0); prefix_id != -1; prefix_id = schedule->get_next(prefix_id))
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+
+        get_edge_index(v1, l, r);
+        for (int prefix_id = schedule->get_last(1); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {
+            vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
+            if (vertex_set[prefix_id].get_size() == 0 && prefix_id < schedule->get_basic_prefix_num()) {
+                is_zero = true;
+                break;
+            }
+        }
+        if (is_zero)
+            continue;
+
+        unsigned long long local_sum = 0; // local sum (corresponding to an edge index)
+        GPU_pattern_matching_func<2>(schedule, vertex_set, subtraction_set, tmp_set, local_sum, edge, vertex);
+        sum += local_sum;
     }
 
     if (lid == 0) {
