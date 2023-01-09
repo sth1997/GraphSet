@@ -153,7 +153,7 @@ __global__ void spin_kernel(clock_t cycles) {
 using TaskStatus = std::tuple<int64_t, int64_t, int64_t>;
 
 constexpr int DEVICE_PER_NODE = 8; // "max" devices per node
-constexpr int NODE_TASK_GRANULARUTY = 2000;// single card
+constexpr int NODE_TASK_GRANULARUTY = 100000;// single card
 constexpr int MSG_BUF_LEN = 10;
 
 

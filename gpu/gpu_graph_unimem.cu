@@ -32,14 +32,14 @@
 using TaskStatus = std::tuple<int64_t, int64_t>;
 
 constexpr int DEVICE_PER_NODE = 8; // "max" devices per node
-constexpr int NODE_TASK_GRANULARUTY = 640000;
-constexpr int INNER_GRANULARUTY = 160000;
+constexpr int NODE_TASK_GRANULARUTY = 10000000;
+constexpr int INNER_GRANULARUTY = 1000000;
 
 constexpr int MSG_BUF_LEN = 5;
 
 
 TaskStatus task_status;
-bool task_ready;
+bool task_ready, is_finished;
 
 enum MessageType {
     MSG_REQUEST_WORK,  // slave -> master
@@ -122,6 +122,8 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
         cudaEventRecord(event[i]);
     }
 
+    is_finished = false;
+
     // receive for first message
     MPI_Irecv(recv_buf, MSG_BUF_LEN, MPI_UINT64_T, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &recv_req);
     while (true) {
@@ -134,10 +136,16 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
             MPI_Test(&recv_req, &msg_received, &mpi_status);
         }
 
+        // for master
+        if(is_finished && finished_number == comm_sz - 1) {
+            break;
+        }
+
         // get new work?
         if(!task_ready) continue;
         unsigned long long start = std::get<0>(task_status), end = std::get<1>(task_status);
         task_ready = false;
+
         
         // last task?
         if(start == nr_tasks) {
@@ -147,7 +155,7 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
                     all_fetched &= (bool)(*(task[i]->task_fetched));
                 )
                 if(all_fetched) break;
-            }
+            } 
 
             log("all_fetched.\n");
 
@@ -168,23 +176,27 @@ void pattern_matching_mpi(PatternMatchingDeviceContext **context, int node, int 
                 if(all_finished) break;
             }
             log("node %d finished.\n", node);
-            break;
+            if(node != 0 || (node == 0 && finished_number == comm_sz - 1))
+                break;
+            else {
+                is_finished = true;
+                continue;
+            }
         }
 
         // polling and assigning new work
 
         while(start < end) {
-            ForallDevice(i, node_devices,
+            for(int i = 0; i < node_devices; i++) {
                 // we can give it new task
+                if(start >= end) break;
                 if(*task[i]->task_fetched) {
                     log("assign task to devices %d %llu %llu\n", i, start, min(start + INNER_GRANULARUTY, end));
                     *task[i]->new_task_start = start;
                     *task[i]->new_task_end = start = min(start + INNER_GRANULARUTY, end);
                     __sync_fetch_and_and(task[i]->task_fetched, 0);
-
-                //     log("task[%d]->fetched:%d\n",i,(int)*task[i]->task_fetched);
                 }
-            )
+            }
         }
 
         // node ask for a new job
