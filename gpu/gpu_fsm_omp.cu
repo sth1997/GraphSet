@@ -22,7 +22,7 @@
 
 // 设备数和任务数
 constexpr int devices_use = 3;
-constexpr int chunk_size = 64;
+constexpr int task_chunk_size = 64;
 
 constexpr int THREADS_PER_BLOCK = 512;
 // constexpr int THREADS_PER_BLOCK = 32;
@@ -420,7 +420,7 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
 
             // edgeEnd = min(edge_num, edgeI + 1); //这里不需要原子读吗
             //  unsigned int job_id = pattern_idx;
-            unsigned int job_id = (pattern_idx / chunk_size) * (chunk_size * devices_use) + device_id * chunk_size + pattern_idx % chunk_size;
+            unsigned int job_id = (pattern_idx / task_chunk_size) * (task_chunk_size * devices_use) + device_id * task_chunk_size + pattern_idx % task_chunk_size;
             if (job_id < job_num) {
 
                 printf("wid: %d job_id:%d job_num:%d\n", global_wid, job_id, job_num);
@@ -439,7 +439,7 @@ __global__ void gpu_pattern_matching(int device_id, uint32_t job_num, uint32_t v
         // unsigned int job_id = pattern_idx;
 
         unsigned int job_id =
-            (pattern_idx / chunk_size) * (chunk_size * devices_use) + device_id * chunk_size + pattern_idx % chunk_size; //考虑到 chunk size 了
+            (pattern_idx / task_chunk_size) * (task_chunk_size * devices_use) + device_id * task_chunk_size + pattern_idx % task_chunk_size; //考虑到 chunk size 了
 
         if (job_id >= job_num)
             break;

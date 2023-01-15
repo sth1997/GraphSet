@@ -733,7 +733,7 @@ void reduce_edges_for_clique(Graph &g) {
     printf("Finish reduce.\n");
 }
 
-void Graph::reorder_edge_third_layer(const Schedule_IEP& schedule, e_index_t * new_order) const {
+void Graph::get_third_layer_size(const Schedule_IEP& schedule, int *count) const {
     const int thread_count = 64;
     //    intersection_times_low = intersection_times_high = 0;
     //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
@@ -741,14 +741,12 @@ void Graph::reorder_edge_third_layer(const Schedule_IEP& schedule, e_index_t * n
     for (uint32_t i = 0; i < v_cnt; ++i)
         for (e_index_t j = vertex[i]; j < vertex[i + 1]; ++j)
             edge_from[j] = i;
-
-    int *tmp_count = new int[e_cnt];
-#pragma omp parallel num_threads(thread_count)
+    #pragma omp parallel num_threads(thread_count)
     {
         VertexSet *vertex_set = new VertexSet[schedule.get_total_prefix_num()];
         #pragma omp for schedule(dynamic) nowait
         for (int e = 0; e < e_cnt; ++e) {
-            tmp_count[e] = 0;
+            count[e] = 0;
 
             int v0 = edge[e];
             int v1 = edge_from[e];
@@ -762,17 +760,58 @@ void Graph::reorder_edge_third_layer(const Schedule_IEP& schedule, e_index_t * n
             get_edge_index(v1, l, r);
             for (int prefix_id = schedule.get_last(1); prefix_id != -1; prefix_id = schedule.get_next(prefix_id)) {
                 vertex_set[prefix_id].build_vertex_set(schedule, vertex_set, &edge[l], r - l, prefix_id);
-                tmp_count[e] += vertex_set[prefix_id].get_size();
+                count[e] += vertex_set[prefix_id].get_size();
             }
         }
         
         delete[] vertex_set;
     }
     
-    for(int e = 0; e < e_cnt; e++) new_order[e] = e;
-    std::sort(new_order, new_order + e_cnt, [tmp_count](int i, int j){
-        return tmp_count[i] > tmp_count[j];
+}
+
+// direct reorder, which doesn't take the cache into account
+void Graph::reorder_edge(const Schedule_IEP& schedule, e_index_t * new_order, e_index_t *task_start, int total_devices) const {
+    int *third_layer_count = new int[e_cnt];
+    get_third_layer_size(schedule, third_layer_count);
+
+    int total_chunks = (e_cnt - 1) / chunk_size + 1;
+
+    int *chunk_size_sum = new int[total_chunks];
+    for(int i = 0; i < total_chunks; i++) chunk_size_sum[i] = 0;
+    for(int i = 0; i < e_cnt; i++) chunk_size_sum[i / chunk_size] += third_layer_count[i];
+
+    int *chunk_order = new int[total_chunks];
+    for(int i = 0; i < total_chunks; i++) chunk_order[i] = i;
+    std::sort(chunk_order, chunk_order + total_chunks, [chunk_size_sum](int i, int j){
+        return chunk_size_sum[i] > chunk_size_sum[j] || (chunk_size_sum[i] == chunk_size_sum[j] && i < j);
     });
+
+    int *new_chunk_order = new int[total_chunks];
+    for(int i = 0; i < total_chunks; i++) {
+        new_chunk_order[chunk_order[i]] = i;
+    }
+    
+    for(int i = 0; i <= total_devices; i++) {
+        task_start[i] = 0;
+    }
+    for(int i = 0; i < total_chunks; i++) {
+        task_start[new_chunk_order[i] % total_devices + 1] += 
+            (i == total_chunks - 1 ? ((e_cnt - 1) % chunk_size + 1) : chunk_size);
+    }
+    for(int i = 1; i <= total_devices; i++) {
+        task_start[i] += task_start[i - 1];
+    }
+
+    for(int e = 0; e < e_cnt; e++) new_order[e] = e;
+    std::sort(new_order, new_order + e_cnt, [total_devices, new_chunk_order](int i, int j){
+        int i_chunk = new_chunk_order[i / chunk_size], j_chunk = new_chunk_order[j / chunk_size];
+        int i_devices = i_chunk % total_devices, j_devices = j_chunk % total_devices;
+        return i_devices < j_devices || (i_devices == j_devices && i < j);
+    });
+    delete[] third_layer_count;
+    delete[] chunk_size_sum;
+    delete[] chunk_order;
+    delete[] new_chunk_order;
 }
 
 void degree_orientation_init(Graph *original_g, Graph *&g) {

@@ -7,6 +7,8 @@
 typedef int32_t v_index_t;
 typedef int64_t e_index_t;
 
+constexpr int chunk_size = 1000;
+
 class Graphmpi;
 class Graph {
 public:
@@ -67,7 +69,10 @@ public:
     long long pattern_matching_edge_task(const Schedule_IEP& schedule, int edge_id,
         VertexSet vertex_sets[], VertexSet& partial_embedding, VertexSet& tmp_set, int ans_buffer[]);
     
-    void reorder_edge_third_layer(const Schedule_IEP& schedule, e_index_t * new_order) const;
+    void get_third_layer_size(const Schedule_IEP& schedule, int *count) const;
+
+    void reorder_edge(const Schedule_IEP& schedule, e_index_t * new_order, e_index_t * task_start, int total_devices) const;
+
 private:
     friend Graphmpi;
     void tc_mt(long long * global_ans);

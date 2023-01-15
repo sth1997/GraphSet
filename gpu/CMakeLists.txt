@@ -42,6 +42,10 @@ ADD_EXECUTABLE(gpu_fsm_omp gpu_fsm_omp.cu)
 SET_PROPERTY(TARGET gpu_fsm_omp PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 TARGET_LINK_LIBRARIES(gpu_fsm_omp graph_mining)
 
+ADD_EXECUTABLE(gpu_graph_static_task gpu_graph_static_task.cu)
+SET_PROPERTY(TARGET gpu_graph_static_task PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_graph_static_task graph_mining mpi gomp)
+
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(gpu_new_str OpenMP::OpenMP_CXX)

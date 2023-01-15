@@ -11,8 +11,9 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
     unsigned long long *dev_sum;
     unsigned long long *dev_cur_edge;
     size_t block_shmem_size;
+    e_index_t *task_start;
     e_index_t *dev_new_order;
-    void init(const Graph *_g, const Schedule_IEP &schedule) {
+    void init(const Graph *_g, const Schedule_IEP &schedule, int total_devices = 1) {
         g = _g;
         // prefix + subtraction + tmp + extra (n-2)
         int num_vertex_sets_per_warp = schedule.get_total_prefix_num() + schedule.get_size();
@@ -26,14 +27,13 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
             for (uint32_t j = g->vertex[i]; j < g->vertex[i + 1]; ++j)
                 edge_from[j] = i;
         }
+        task_start = new e_index_t[total_devices + 1];
+        e_index_t *new_order = new e_index_t[g->e_cnt];        
 
-        e_index_t *new_order = new e_index_t[g->e_cnt];
-        
-        g->reorder_edge_third_layer(schedule, new_order);
+        g->reorder_edge(schedule, new_order, task_start, total_devices);
         size_t size_new_order = sizeof(e_index_t) * g->e_cnt;
         gpuErrchk(cudaMalloc((void **)&dev_new_order, size_new_order));
         gpuErrchk(cudaMemcpy(dev_new_order, new_order, size_new_order, cudaMemcpyHostToDevice));
-
 
         gpuErrchk(cudaMalloc((void **)&dev_edge, size_edge));
         gpuErrchk(cudaMalloc((void **)&dev_edge_from, size_edge));
