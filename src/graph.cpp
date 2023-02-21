@@ -804,7 +804,10 @@ void Graph::reorder_edge(const Schedule_IEP& schedule, e_index_t * new_order, e_
 
     for(int e = 0; e < e_cnt; e++) new_order[e] = e;
     std::sort(new_order, new_order + e_cnt, [total_devices, new_chunk_order](int i, int j){
-        int i_chunk = new_chunk_order[i / chunk_size], j_chunk = new_chunk_order[j / chunk_size];
+        // with third layer consideration
+        // int i_chunk = new_chunk_order[i / chunk_size], j_chunk = new_chunk_order[j / chunk_size];
+        // without third layer consideration
+        int i_chunk = i / chunk_size, j_chunk = j / chunk_size;
         int i_devices = i_chunk % total_devices, j_devices = j_chunk % total_devices;
         return i_devices < j_devices || (i_devices == j_devices && i < j);
     });

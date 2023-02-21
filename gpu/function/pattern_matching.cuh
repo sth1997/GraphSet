@@ -24,7 +24,7 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
                           sizeof(uint32_t); // prefix + subtraction + tmp
         uint32_t *edge_from = new uint32_t[g->e_cnt];
         for (uint32_t i = 0; i < g->v_cnt; ++i) {
-            for (uint32_t j = g->vertex[i]; j < g->vertex[i + 1]; ++j)
+            for (e_index_t j = g->vertex[i]; j < g->vertex[i + 1]; ++j)
                 edge_from[j] = i;
         }
         task_start = new e_index_t[total_devices + 1];
@@ -32,6 +32,13 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
 
         g->reorder_edge(schedule, new_order, task_start, total_devices);
         size_t size_new_order = sizeof(e_index_t) * g->e_cnt;
+
+        log("Memory Usage:\n");
+        log("  Global memory usage (GB): %.3lf \n", (size_new_order + size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
+        log("  Shared memory for vertex set per block: %ld bytes\n",
+               num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
+                   schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int));
+
         gpuErrchk(cudaMalloc((void **)&dev_new_order, size_new_order));
         gpuErrchk(cudaMemcpy(dev_new_order, new_order, size_new_order, cudaMemcpyHostToDevice));
 
@@ -47,18 +54,14 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
         unsigned long long sum = 0;
         gpuErrchk(cudaMalloc((void **)&dev_sum, sizeof(sum)));
         gpuErrchk(cudaMemcpy(dev_sum, &sum, sizeof(sum), cudaMemcpyHostToDevice));
-        int64_t cur_edge = 0;
+        unsigned long long cur_edge = 0;
         gpuErrchk(cudaMalloc((void **)&dev_cur_edge, sizeof(cur_edge)));
         gpuErrchk(cudaMemcpy(dev_cur_edge, &cur_edge, sizeof(cur_edge), cudaMemcpyHostToDevice));
 
         gpuErrchk(cudaMallocManaged((void **)&dev_schedule, sizeof(GPUSchedule)));
         dev_schedule->create_from_schedule(schedule);
 
-        log("Memory Usage:\n");
-        log("  Global memory usage (GB): %.3lf \n", (size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
-        log("  Shared memory for vertex set per block: %ld bytes\n",
-               num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
-                   schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int));
+
 
         block_shmem_size = num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
                            schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int);
@@ -249,7 +252,7 @@ __device__ void GPU_pattern_matching_func(const GPUSchedule *schedule, GPUVertex
             break;
         if (subtraction_set.has_data(v))
             continue;
-        unsigned int l, r;
+        e_index_t l, r;
         get_edge_index(v, l, r);
         bool is_zero = false;
         for (int prefix_id = schedule->get_last(depth); prefix_id != -1; prefix_id = schedule->get_next(prefix_id)) {

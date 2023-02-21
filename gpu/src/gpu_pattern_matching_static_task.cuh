@@ -6,28 +6,6 @@
 
 #include "../function/pattern_matching.cuh"
 
-// [0, total_edge)
-e_index_t get_task_count(int total_edge, int no_device, int total_devices) {
-    e_index_t base = (total_edge / (total_devices * chunk_size)) * chunk_size;
-    e_index_t left = (total_edge % (total_devices * chunk_size));
-    if(left <= no_device * chunk_size) {
-        return base;
-    } else if(left >= (no_device + 1) * chunk_size) {
-        return base + chunk_size;
-    } else {
-        return base + (left - no_device * chunk_size); 
-    }
-}
-
-// [0, total_edge)
-std::pair<e_index_t, e_index_t> get_device_task_range(int total_edge, int no_device, int total_devices) {
-    e_index_t presum = 0;
-    for(int i = 0; i < no_device; i++){
-        presum += get_task_count(total_edge, i, total_devices);
-    }
-    return std::make_pair(presum, presum + get_task_count(total_edge, no_device, total_devices));
-}
-
 /**
  * @note `buffer_size`实际上是每个节点的最大邻居数量，而非所用空间大小
  *
