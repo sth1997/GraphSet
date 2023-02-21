@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cstdint>
 #include "utils.cuh"
 
@@ -87,7 +88,56 @@ public:
 
     void create_from_schedule(const Schedule_IEP& schedule) {
         int schedule_size = schedule.get_size();
-        int max_prefix_num = schedule_size * (schedule_size - 1) / 2;
+        int max_prefix_num = schedule_size * (schedule_size - 1) / 2 + 1;
+
+        // for only_need_size
+        auto only_need_size = new bool[max_prefix_num];
+        for (int i = 0; i < max_prefix_num; ++i)
+            only_need_size[i] = schedule.get_prefix_only_need_size(i);
+        
+        gpuErrchk( cudaMallocManaged((void**)&this->only_need_size, sizeof(bool) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(this->only_need_size, only_need_size, sizeof(bool) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        // for in-exclusion
+        this->in_exclusion_optimize_vertex_id_size = schedule.in_exclusion_optimize_vertex_id.size();
+        this->in_exclusion_optimize_array_size = schedule.in_exclusion_optimize_coef.size();
+        this->in_exclusion_optimize_num = schedule.get_in_exclusion_optimize_num();
+
+        auto in_exclusion_optimize_vertex_id = &(schedule.in_exclusion_optimize_vertex_id[0]);
+        auto in_exclusion_optimize_vertex_coef = &(schedule.in_exclusion_optimize_vertex_coef[0]);
+        auto in_exclusion_optimize_vertex_flag = new bool[in_exclusion_optimize_vertex_id_size]; 
+
+        auto in_exclusion_optimize_coef = &(schedule.in_exclusion_optimize_coef[0]);
+        auto in_exclusion_optimize_ans_pos = &(schedule.in_exclusion_optimize_ans_pos[0]);
+        auto in_exclusion_optimize_flag = new bool[in_exclusion_optimize_array_size];
+
+        for (int i = 0; i < in_exclusion_optimize_vertex_id_size; ++i)
+            in_exclusion_optimize_vertex_flag[i] = schedule.in_exclusion_optimize_vertex_flag[i];
+        
+        for (int i = 0; i < in_exclusion_optimize_array_size; ++i)
+            in_exclusion_optimize_flag[i] = schedule.in_exclusion_optimize_flag[i];
+
+        gpuErrchk( cudaMallocManaged((void**)&this->in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size));
+        gpuErrchk( cudaMemcpy(this->in_exclusion_optimize_vertex_id, in_exclusion_optimize_vertex_id, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&this->in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size));
+        gpuErrchk( cudaMemcpy(this->in_exclusion_optimize_vertex_flag, in_exclusion_optimize_vertex_flag, sizeof(bool) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&this->in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size));
+        gpuErrchk( cudaMemcpy(this->in_exclusion_optimize_vertex_coef, in_exclusion_optimize_vertex_coef, sizeof(int) * in_exclusion_optimize_vertex_id_size, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged((void**)&this->in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size));
+        gpuErrchk( cudaMemcpy(this->in_exclusion_optimize_coef, in_exclusion_optimize_coef, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
+
+        gpuErrchk( cudaMallocManaged((void**)&this->in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size));
+        gpuErrchk( cudaMemcpy(this->in_exclusion_optimize_flag, in_exclusion_optimize_flag, sizeof(bool) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&this->in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size));
+        gpuErrchk( cudaMemcpy(this->in_exclusion_optimize_ans_pos, in_exclusion_optimize_ans_pos, sizeof(int) * in_exclusion_optimize_array_size, cudaMemcpyHostToDevice));
+
+            
+        gpuErrchk( cudaMallocManaged((void**)&this->adj_mat, sizeof(int) * schedule_size * schedule_size));
+        gpuErrchk( cudaMemcpy(this->adj_mat, schedule.get_adj_mat_ptr(), sizeof(int) * schedule_size * schedule_size, cudaMemcpyHostToDevice));
 
         gpuErrchk( cudaMallocManaged((void**)&this->father_prefix_id, sizeof(int) * max_prefix_num));
         gpuErrchk( cudaMemcpy(this->father_prefix_id, schedule.get_father_prefix_id_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
@@ -101,11 +151,37 @@ public:
         gpuErrchk( cudaMallocManaged((void**)&this->loop_set_prefix_id, sizeof(int) * schedule_size));
         gpuErrchk( cudaMemcpy(this->loop_set_prefix_id, schedule.get_loop_set_prefix_id_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
 
-        gpuErrchk( cudaMallocManaged((void**)&this->prefix_target, sizeof(int) * max_prefix_num));
-        gpuErrchk( cudaMemcpy(this->prefix_target, schedule.get_prefix_target_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+        if(schedule.get_prefix_target_ptr() != nullptr) {
+            gpuErrchk( cudaMallocManaged((void**)&this->prefix_target, sizeof(int) * max_prefix_num));
+            gpuErrchk( cudaMemcpy(this->prefix_target, schedule.get_prefix_target_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+        }
+
+        gpuErrchk( cudaMallocManaged((void**)&this->break_size, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(this->break_size, schedule.get_break_size_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
+        // for restriction
+        this->total_restrict_num = schedule.get_total_restrict_num();
+
+        gpuErrchk( cudaMallocManaged((void**)&this->restrict_last, sizeof(int) * schedule_size));
+        gpuErrchk( cudaMemcpy(this->restrict_last, schedule.get_restrict_last_ptr(), sizeof(int) * schedule_size, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&this->restrict_next, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(this->restrict_next, schedule.get_restrict_next_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+        
+        gpuErrchk( cudaMallocManaged((void**)&this->restrict_index, sizeof(int) * max_prefix_num));
+        gpuErrchk( cudaMemcpy(this->restrict_index, schedule.get_restrict_index_ptr(), sizeof(int) * max_prefix_num, cudaMemcpyHostToDevice));
+
 
         this->size = schedule.get_size();
         this->total_prefix_num = schedule.get_total_prefix_num();
+        this->basic_prefix_num = schedule.get_basic_prefix_num();
+        this->is_vertex_induced = schedule.is_vertex_induced;
+
+
+        delete[] only_need_size;
+        delete[] in_exclusion_optimize_vertex_flag;
+        delete[] in_exclusion_optimize_flag;
+    
     }
 
 };

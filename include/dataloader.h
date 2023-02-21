@@ -9,8 +9,6 @@
 #include <cassert>
 #include <cstring>
 
-
-
 enum DataType {
     Patents,
     Orkut,

@@ -22,8 +22,8 @@
 #include <chrono>
 
 #include <timeinterval.h>
-#include "utils.cuh"
-#include "gpu_schedule.cuh"
+#include "component/utils.cuh"
+#include "component/gpu_schedule.cuh"
 
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -571,35 +571,7 @@ __device__ void GPU_pattern_matching_final_in_exclusion(const GPUSchedule* sched
 
 }
 
-__device__ int lower_bound(const uint32_t* loop_data_ptr, int loop_size, int min_vertex)
-{
-    int l = 0, r = loop_size - 1;
-    while (l <= r)
-    {
-        int mid = r - ((r - l) >> 1);
-        if (loop_data_ptr[mid] < min_vertex)
-            l = mid + 1;
-        else
-            r = mid - 1;
-    }
-    return l;
-}
 
-template <typename T>
-__device__ bool binary_search(const T data[], int n, const T& target) {
-    int mid, l = 0, r = n - 1;
-    while (l <= r) {
-        mid = (l + r) >> 1;
-        if (data[mid] < target) {
-            l = mid + 1;
-        } else if (data[mid] > target) {
-            r = mid - 1;
-        } else {
-            return true;
-        }
-    }
-    return false;
-}
 
 __device__ void remove_anti_edge_vertices(GPUVertexSet& out_buf, const GPUVertexSet& in_buf,
     const GPUSchedule& sched, const GPUVertexSet& partial_embedding, int vp,

@@ -12,7 +12,7 @@
 
 #include "../include/dataloader.h"
 #include "../include/graph.h"
-#include "utils.cuh"
+#include "component/utils.cuh"
 
 constexpr int BITS_PER_PARTITION = 64;
 constexpr int LENGTH = 6;

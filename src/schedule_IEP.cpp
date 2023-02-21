@@ -11,7 +11,7 @@
 
 Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, 
     int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize ,
-    int v_cnt, unsigned int e_cnt, long long tri_cnt,
+    int v_cnt, int64_t e_cnt, long long tri_cnt,
     bool vertex_induced)
 {
     // if (!use_in_exclusion_optimize) {
@@ -181,11 +181,11 @@ Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid,
 
         copy_adj_mat_from(best_order, pattern_adj_mat);
 
-        printf("best order:\n");
-        for(auto i: best_order) {
-            printf("%d ",i);
-        }
-        printf("\n");
+        // printf("best order:\n");
+        // for(auto i: best_order) {
+        //     printf("%d ",i);
+        // }
+        // printf("\n");
     }
     else {
         // std::vector< int > I;

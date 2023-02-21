@@ -25,6 +25,17 @@ TARGET_LINK_LIBRARIES(gpu_sample_test
   
 gtest_discover_tests(gpu_sample_test)
 
+
+ADD_EXECUTABLE(gpu_pattern_matching_test gpu_pattern_matching_test.cu)
+SET_PROPERTY(TARGET gpu_pattern_matching_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+TARGET_LINK_LIBRARIES(gpu_pattern_matching_test
+                    ${GTEST_LIB}
+                    graph_mining
+                    pthread
+                    gomp)
+  
+gtest_discover_tests(gpu_pattern_matching_test)
+
 # ADD_EXECUTABLE(performance_modeling_test performance_modeling_test.cpp)
 # TARGET_LINK_LIBRARIES(performance_modeling_test
 #                     ${GTEST_LIB}
