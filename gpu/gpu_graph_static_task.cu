@@ -39,20 +39,24 @@ unsigned long long node_time = 0; // clocks, need to divided by 1e6
 int64_t global_time = 0;
 int64_t nr_tasks = 0;
 
-void launch_pattern_matching_kernel(PatternMatchingDeviceContext *context, e_index_t total_edge, int no_device, int total_devices, unsigned long long &sum) {
-    using std::chrono::system_clock;
-    auto k1 = system_clock::now();
+cudaEvent_t event[DEVICE_PER_NODE];
+
+
+void launch_pattern_matching_kernel(PatternMatchingDeviceContext *context, e_index_t total_edge, int no_device, int total_devices, unsigned long long &sum, cudaEvent_t &event) {
+    // using std::chrono::system_clock;
+    // auto k1 = system_clock::now();
     uint64_t start_edge = 0;
     gpuErrchk(cudaMemcpy(context->dev_cur_edge, &start_edge, sizeof(unsigned long long), cudaMemcpyHostToDevice));
     // gpuErrchk(cudaMemcpy(context->dev_cur_edge, &context->task_start[no_device], sizeof(unsigned long long), cudaMemcpyHostToDevice));
     // log("no_devices %d, task: %d %d\n", no_device, (int)context->task_start[no_device], (int)context->task_start[no_device+1]);
     gpu_pattern_matching_static<<<num_blocks, THREADS_PER_BLOCK, context->block_shmem_size>>>(total_edge, VertexSet::max_intersection_size, chunk_size, context);
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaDeviceSynchronize()); 
-    gpuErrchk(cudaMemcpy(&sum, context->dev_sum, sizeof(sum), cudaMemcpyDeviceToHost));
-    auto k2 = system_clock::now();
-    auto kernel_elapsed = std::chrono::duration_cast<std::chrono::microseconds>(k2 - k1);
-    log("Device No. %d, kernel time: %g s\n", no_device, kernel_elapsed.count() / 1e6);
+    cudaEventRecord(event);
+    // gpuErrchk(cudaPeekAtLastError());
+    // gpuErrchk(cudaDeviceSynchronize()); 
+    // gpuErrchk(cudaMemcpy(&sum, context->dev_sum, sizeof(sum), cudaMemcpyDeviceToHost));
+    // auto k2 = system_clock::now();
+    // auto kernel_elapsed = std::chrono::duration_cast<std::chrono::microseconds>(k2 - k1);
+    // log("Device No. %d, kernel time: %g s\n", no_device, kernel_elapsed.count() / 1e6);
 }
 
 
@@ -108,6 +112,12 @@ int main(int argc, char *argv[]) {
     gpuErrchk(cudaGetDeviceCount(&node_devices));
     node_devices = std::min(node_devices, DEVICE_PER_NODE);
 
+    #pragma omp parallel for
+    ForallDevice(i, node_devices,
+        gpuErrchk(cudaEventCreate(&event[i]));
+    )
+
+
     PatternMatchingDeviceContext *context[node_devices];
 
     unsigned long long sum[node_devices];
@@ -126,14 +136,33 @@ int main(int argc, char *argv[]) {
     //     int i = omp_get_thread_num();
     //     // printf("hello from thread %d\n", i);
     //     cudaSetDevice(i);
-    //     launch_pattern_matching_kernel(context[i], g->e_cnt, base_device_number + i, total_devices_number, sum[i]);      
+    //     launch_pattern_matching_kernel(context[i], g->e_cnt, base_device_number + i, total_devices_number, sum[i], event[i]);      
     // }
 
     // for 能跑满八个线程吗？是个问题的。
-    #pragma omp parallel for
+    // #pragma omp parallel for
     ForallDevice(i, node_devices,
-        launch_pattern_matching_kernel(context[i], g->e_cnt, base_device_number + i, total_devices_number, sum[i]);
+        launch_pattern_matching_kernel(context[i], g->e_cnt, base_device_number + i, total_devices_number, sum[i], event[i]);
     )
+
+    // 轮询
+    while(true) {
+        bool all_finished = 1;
+        #pragma unroll
+        for(int i = 0; i < node_devices; i++) {
+            auto result = cudaEventQuery(event[i]);
+            all_finished &= (result != cudaErrorNotReady);
+        }
+        if(all_finished) break;
+    }
+
+    // 填答案
+    // #pragma omp parallel for
+    ForallDevice(i, node_devices,
+        gpuErrchk(cudaDeviceSynchronize());
+        gpuErrchk(cudaMemcpy(&sum[i], context[i]->dev_sum, sizeof(sum[i]), cudaMemcpyDeviceToHost));
+    )
+
     auto t2 = system_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
     node_time = elapsed.count();

@@ -39,12 +39,13 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
         // g->reorder_edge(schedule, new_order, task_start, total_devices);
         size_t size_new_order = sizeof(e_index_t) * g->e_cnt;
         
-        log("Memory Usage:\n");
-        log("  Global memory usage (GB): %.3lf \n", (size_new_order + size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
-        log("  Shared memory for vertex set per block: %ld bytes\n",
-               num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
-                   schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int));
-
+        if(no_devices == 0) {
+            log("Memory Usage:\n");
+            log("  Global memory usage (GB): %.3lf \n", (size_new_order + size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
+            log("  Shared memory for vertex set per block: %ld bytes\n",
+                num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
+                    schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int));
+        }
         gpuErrchk(cudaMalloc((void **)&dev_new_order, size_new_order));
         gpuErrchk(cudaMemcpy(dev_new_order, new_order, size_new_order, cudaMemcpyHostToDevice));
 

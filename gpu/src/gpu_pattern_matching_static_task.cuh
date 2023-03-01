@@ -58,8 +58,6 @@ __global__ void gpu_pattern_matching_static(e_index_t edge_num, uint32_t buffer_
             edge_idx = atomicAdd(context->dev_cur_edge, 1);
         }
         __threadfence_block();
-        if (edge_idx >= edge_num)
-            break;
         
         // for e in E
         e_index_t i = ((edge_idx / chunk_size) * total_devices + no_devices) * chunk_size + edge_idx % chunk_size;
