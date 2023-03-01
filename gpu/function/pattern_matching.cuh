@@ -13,7 +13,9 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
     size_t block_shmem_size;
     e_index_t *task_start;
     e_index_t *dev_new_order;
-    void init(const Graph *_g, const Schedule_IEP &schedule, int total_devices = 1) {
+    int devices_num;
+    int devices_no;
+    void init(const Graph *_g, const Schedule_IEP &schedule, int total_devices = 1, int no_devices = 0) {
         g = _g;
         // prefix + subtraction + tmp + extra (n-2)
         int num_vertex_sets_per_warp = schedule.get_total_prefix_num() + schedule.get_size();
@@ -28,11 +30,15 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
                 edge_from[j] = i;
         }
         task_start = new e_index_t[total_devices + 1];
+        
+        devices_num = total_devices;
+        devices_no = no_devices; 
+
         e_index_t *new_order = new e_index_t[g->e_cnt];        
 
-        g->reorder_edge(schedule, new_order, task_start, total_devices);
+        // g->reorder_edge(schedule, new_order, task_start, total_devices);
         size_t size_new_order = sizeof(e_index_t) * g->e_cnt;
-
+        
         log("Memory Usage:\n");
         log("  Global memory usage (GB): %.3lf \n", (size_new_order + size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
         log("  Shared memory for vertex set per block: %ld bytes\n",

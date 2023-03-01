@@ -7,7 +7,7 @@
 typedef int32_t v_index_t;
 typedef int64_t e_index_t;
 
-constexpr int chunk_size = 1000;
+constexpr int chunk_size = 2000;
 
 class Graphmpi;
 class Graph {

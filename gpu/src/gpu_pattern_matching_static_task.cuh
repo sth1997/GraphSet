@@ -11,7 +11,7 @@
  *
  * 当用作 MPI 的时候，edge_num 指的是结束的边的编号，此时 dev_cur_edge 初始值并不为 0.
  */
-__global__ void gpu_pattern_matching_static(e_index_t edge_num, uint32_t buffer_size, PatternMatchingDeviceContext *context) {
+__global__ void gpu_pattern_matching_static(e_index_t edge_num, uint32_t buffer_size, uint32_t chunk_size, PatternMatchingDeviceContext *context) {
     __shared__ e_index_t block_edge_idx[WARPS_PER_BLOCK];
     //之后考虑把tmp buffer都放到shared里来（如果放得下）
     extern __shared__ GPUVertexSet block_vertex_set[];
@@ -22,6 +22,9 @@ __global__ void gpu_pattern_matching_static(e_index_t edge_num, uint32_t buffer_
     e_index_t *vertex = context->dev_vertex;
     uint32_t *edge_from = (uint32_t *)context->dev_edge_from;
     e_index_t *new_order = (e_index_t *)context->dev_new_order;
+
+    int32_t no_devices = context->devices_no;
+    int32_t total_devices = context->devices_num;
 
     int num_prefixes = schedule->get_total_prefix_num();
     int num_vertex_sets_per_warp = num_prefixes + 2;
@@ -59,7 +62,10 @@ __global__ void gpu_pattern_matching_static(e_index_t edge_num, uint32_t buffer_
             break;
         
         // for e in E
-        e_index_t i = new_order[edge_idx];
+        e_index_t i = ((edge_idx / chunk_size) * total_devices + no_devices) * chunk_size + edge_idx % chunk_size;
+        if(i >= edge_num) {
+            break;
+        }
         v0 = edge_from[i];
         v1 = edge[i];
 
