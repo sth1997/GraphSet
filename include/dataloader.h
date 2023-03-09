@@ -1,6 +1,8 @@
 #pragma once
+#include "types.h"
 #include "graph.h"
 #include "labeled_graph.h"
+
 #include <unordered_map>
 #include <algorithm>
 #include <vector>

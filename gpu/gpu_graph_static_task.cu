@@ -112,6 +112,8 @@ int main(int argc, char *argv[]) {
     gpuErrchk(cudaGetDeviceCount(&node_devices));
     node_devices = std::min(node_devices, DEVICE_PER_NODE);
 
+    log("Devices count got.\n");
+
     #pragma omp parallel for
     ForallDevice(i, node_devices,
         gpuErrchk(cudaEventCreate(&event[i]));
@@ -127,6 +129,8 @@ int main(int argc, char *argv[]) {
         gpuErrchk(cudaMallocManaged((void **)&context[i], sizeof(PatternMatchingDeviceContext)));
         context[i]->init(g, schedule, total_devices_number, base_device_number + i);
     )
+
+    log("Context generated.\n");
 
     using std::chrono::system_clock;
     auto t1 = system_clock::now();
@@ -145,6 +149,8 @@ int main(int argc, char *argv[]) {
         launch_pattern_matching_kernel(context[i], g->e_cnt, base_device_number + i, total_devices_number, sum[i], event[i]);
     )
 
+    log("Kernels launched.\n");
+
     // 轮询
     while(true) {
         bool all_finished = 1;
@@ -155,6 +161,8 @@ int main(int argc, char *argv[]) {
         }
         if(all_finished) break;
     }
+
+    log("All kernel finished.\n");
 
     // 填答案
     // #pragma omp parallel for
