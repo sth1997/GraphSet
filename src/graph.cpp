@@ -771,10 +771,11 @@ void Graph::get_third_layer_size(const Schedule_IEP& schedule, int *count) const
 
 // direct reorder, which doesn't take the cache into account
 void Graph::reorder_edge(const Schedule_IEP& schedule, e_index_t * new_order, e_index_t *task_start, int total_devices) const {
-    int *third_layer_count = new int[e_cnt];
-    get_third_layer_size(schedule, third_layer_count);
-
     int total_chunks = (e_cnt - 1) / chunk_size + 1;
+    
+    int *third_layer_count = new int[e_cnt];
+    // get_third_layer_size(schedule, third_layer_count);
+
 
     int *chunk_size_sum = new int[total_chunks];
     for(int i = 0; i < total_chunks; i++) chunk_size_sum[i] = 0;
@@ -782,9 +783,9 @@ void Graph::reorder_edge(const Schedule_IEP& schedule, e_index_t * new_order, e_
 
     int *chunk_order = new int[total_chunks];
     for(int i = 0; i < total_chunks; i++) chunk_order[i] = i;
-    std::sort(chunk_order, chunk_order + total_chunks, [chunk_size_sum](int i, int j){
-        return chunk_size_sum[i] > chunk_size_sum[j] || (chunk_size_sum[i] == chunk_size_sum[j] && i < j);
-    });
+    // std::sort(chunk_order, chunk_order + total_chunks, [chunk_size_sum](int i, int j){
+    //     return chunk_size_sum[i] > chunk_size_sum[j] || (chunk_size_sum[i] == chunk_size_sum[j] && i < j);
+    // });
 
     int *new_chunk_order = new int[total_chunks];
     for(int i = 0; i < total_chunks; i++) {
@@ -803,14 +804,14 @@ void Graph::reorder_edge(const Schedule_IEP& schedule, e_index_t * new_order, e_
     }
 
     for(int e = 0; e < e_cnt; e++) new_order[e] = e;
-    std::sort(new_order, new_order + e_cnt, [total_devices, new_chunk_order](int i, int j){
-        // with third layer consideration
-        // int i_chunk = new_chunk_order[i / chunk_size], j_chunk = new_chunk_order[j / chunk_size];
-        // without third layer consideration
-        int i_chunk = i / chunk_size, j_chunk = j / chunk_size;
-        int i_devices = i_chunk % total_devices, j_devices = j_chunk % total_devices;
-        return i_devices < j_devices || (i_devices == j_devices && i < j);
-    });
+    // std::sort(new_order, new_order + e_cnt, [total_devices, new_chunk_order](int i, int j){
+    //     // with third layer consideration
+    //     // int i_chunk = new_chunk_order[i / chunk_size], j_chunk = new_chunk_order[j / chunk_size];
+    //     // without third layer consideration
+    //     int i_chunk = i / chunk_size, j_chunk = j / chunk_size;
+    //     int i_devices = i_chunk % total_devices, j_devices = j_chunk % total_devices;
+    //     return i_devices < j_devices || (i_devices == j_devices && i < j);
+    // });
     delete[] third_layer_count;
     delete[] chunk_size_sum;
     delete[] chunk_order;

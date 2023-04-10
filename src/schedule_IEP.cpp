@@ -11,7 +11,7 @@
 
 Schedule_IEP::Schedule_IEP(const Pattern& pattern, bool &is_pattern_valid, 
     int performance_modeling_type, int restricts_type, bool use_in_exclusion_optimize ,
-    int v_cnt, int64_t e_cnt, long long tri_cnt,
+    int v_cnt, e_index_t e_cnt, long long tri_cnt,
     bool vertex_induced)
 {
     // if (!use_in_exclusion_optimize) {
@@ -304,7 +304,7 @@ Schedule_IEP::~Schedule_IEP()
 }
 
 // note: this function no longer takes `order` as a parameter, instead, it uses `this->adj_mat` directly
-double Schedule_IEP::new_estimate_schedule_restrict(const std::vector<std::pair<int, int>>& pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt)
+double Schedule_IEP::new_estimate_schedule_restrict(const std::vector<std::pair<int, int>>& pairs, int v_cnt, e_index_t e_cnt, long long tri_cnt)
 {
     int max_degree = get_max_degree();
 
@@ -1039,7 +1039,7 @@ std::vector< std::vector<int> > Schedule_IEP::calc_permutation_group(const std::
     return res;
 }
 
-void Schedule_IEP::performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt) {
+void Schedule_IEP::performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, e_index_t e_cnt) {
     int* order;
     int* rank;
 
@@ -1154,7 +1154,7 @@ void Schedule_IEP::performance_modeling(int* best_order, std::vector< std::vecto
     delete[] p_size;
 }
 
-void Schedule_IEP::bug_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt) {
+void Schedule_IEP::bug_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, e_index_t e_cnt) {
     int* order;
     int* rank;
 
@@ -1271,7 +1271,7 @@ void Schedule_IEP::bug_performance_modeling(int* best_order, std::vector< std::v
     delete[] p_size;
 }
 
-void Schedule_IEP::new_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt, long long tri_cnt) {
+void Schedule_IEP::new_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, e_index_t e_cnt, long long tri_cnt) {
     int* order;
     int* rank;
 
@@ -1421,7 +1421,7 @@ void Schedule_IEP::init_in_exclusion_optimize() {
         }
 
         std::pair<int,int> edge[m];
-        int e_cnt = 0;
+        e_index_t e_cnt = 0;
         for(int i = 0; i < n; ++i)
             for(int j = 0; j < i; ++j)
                 edge[e_cnt++] = std::make_pair(i,j);
@@ -1523,7 +1523,7 @@ void Schedule_IEP::print_schedule() const{
     printf("\n");
 }
 
-void Schedule_IEP::GraphZero_performance_modeling(int* best_order, int v_cnt, unsigned int e_cnt) {
+void Schedule_IEP::GraphZero_performance_modeling(int* best_order, int v_cnt, e_index_t e_cnt) {
     int* order;
     int* rank;
 
@@ -1636,7 +1636,7 @@ void Schedule_IEP::GraphZero_performance_modeling(int* best_order, int v_cnt, un
     delete[] anti_p;
 }
 
-void Schedule_IEP::restrict_selection(int v_cnt, unsigned int e_cnt, long long tri_cnt, std::vector< std::vector< std::pair<int,int> > > ordered_pairs_vector, std::vector< std::pair<int,int> > &best_restricts) const{
+void Schedule_IEP::restrict_selection(int v_cnt, e_index_t e_cnt, long long tri_cnt, std::vector< std::vector< std::pair<int,int> > > ordered_pairs_vector, std::vector< std::pair<int,int> > &best_restricts) const{
     
     double* p_size;
     double* pp_size;
@@ -1788,7 +1788,7 @@ int Schedule_IEP::get_vec_optimize_num(const std::vector<int> &vec) {
     return size - 2;
 }
 
-double Schedule_IEP::our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt) {
+double Schedule_IEP::our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, e_index_t e_cnt, long long tri_cnt) {
     int max_degree = get_max_degree();
 
     double p_size[max_degree];
@@ -1877,7 +1877,7 @@ double Schedule_IEP::our_estimate_schedule_restrict(const std::vector<int> &orde
     return val;
 }
 
-double Schedule_IEP::GraphZero_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt) {
+double Schedule_IEP::GraphZero_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, e_index_t e_cnt) {
     int max_degree = get_max_degree();
     
     double p_size[max_degree];
@@ -1956,7 +1956,7 @@ double Schedule_IEP::GraphZero_estimate_schedule_restrict(const std::vector<int>
     return val;
 }
 
-double Schedule_IEP::Naive_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt) {
+double Schedule_IEP::Naive_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, e_index_t e_cnt) {
 
     double p = e_cnt * 2.0 / v_cnt / v_cnt;
 

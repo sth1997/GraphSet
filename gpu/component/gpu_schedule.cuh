@@ -94,7 +94,12 @@ public:
         auto only_need_size = new bool[max_prefix_num];
         for (int i = 0; i < max_prefix_num; ++i)
             only_need_size[i] = schedule.get_prefix_only_need_size(i);
-        
+
+        // print schedule_size, actually it's very small       
+        // int64_t size = max_prefix_num + in_exclusion_optimize_vertex_id_size * 3 * sizeof(int) + in_exclusion_optimize_array_size * 3 * sizeof(int) + max_prefix_num * 6 * sizeof(int) + schedule_size * 3 * sizeof(int) + schedule_size * schedule_size * 3 * sizeof(int);
+
+        // fprintf(stderr, "GPU schedule memory usage: %.3lf GB\n", size / (1024.0 * 1024 * 1024));
+
         gpuErrchk( cudaMallocManaged((void**)&this->only_need_size, sizeof(bool) * max_prefix_num));
         gpuErrchk( cudaMemcpy(this->only_need_size, only_need_size, sizeof(bool) * max_prefix_num, cudaMemcpyHostToDevice));
 

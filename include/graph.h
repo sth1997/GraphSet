@@ -1,13 +1,12 @@
 #pragma once
+#include "types.h"
 #include "schedule_IEP.h"
 #include "vertex_set.h"
+
 #include <cassert>
 #include <cstdint>
 
-typedef int32_t v_index_t;
-typedef int64_t e_index_t;
-
-constexpr int chunk_size = 1000;
+constexpr int chunk_size = 100;
 
 class Graphmpi;
 class Graph {

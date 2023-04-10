@@ -2,6 +2,7 @@
 
 #include "pattern.h"
 #include "prefix.h"
+#include "types.h"
 #include "disjoint_set_union.h"
 
 #include <cstdint>
@@ -57,7 +58,7 @@ public:
     void aggressive_optimize(std::vector< std::pair<int,int> >& ordered_pairs) const;
     void aggressive_optimize_get_all_pairs(std::vector< std::vector< std::pair<int,int> > >& ordered_pairs_vector);
     void aggressive_optimize_dfs(Pattern base_dag, std::vector< std::vector<int> > isomorphism_vec, std::vector< std::vector< std::vector<int> > > permutation_groups, std::vector< std::pair<int,int> > ordered_pairs, std::vector< std::vector< std::pair<int,int> > >& ordered_pairs_vector);
-    void restrict_selection(int v_cnt, unsigned int e_cnt, long long tri_cnt, std::vector< std::vector< std::pair<int,int> > > ordered_pairs_vector, std::vector< std::pair<int,int> >& best_restricts) const;
+    void restrict_selection(int v_cnt, e_index_t e_cnt, long long tri_cnt, std::vector< std::vector< std::pair<int,int> > > ordered_pairs_vector, std::vector< std::pair<int,int> >& best_restricts) const;
     void restricts_generate(const int* cur_adj_mat, std::vector< std::vector< std::pair<int,int> > > &restricts);
 
     void GraphZero_aggressive_optimize(std::vector< std::pair<int,int> >& ordered_pairs) const;
@@ -117,15 +118,15 @@ private:
     void build_loop_invariant(int in_exclusion_optimize_num = 0);
     int find_father_prefix(int data_size, const int* data);
     void get_full_permutation(std::vector< std::vector<int> >& vec, bool use[], std::vector<int> tmp_vec, int depth) const;
-    void performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt);
-    void bug_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt);
-    void new_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, unsigned int e_cnt, long long tri_cnt);
-    void GraphZero_performance_modeling(int* best_order, int v_cnt, unsigned int e_cnt);
+    void performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, e_index_t e_cnt);
+    void bug_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, e_index_t e_cnt);
+    void new_performance_modeling(int* best_order, std::vector< std::vector<int> > &candidates, int v_cnt, e_index_t e_cnt, long long tri_cnt);
+    void GraphZero_performance_modeling(int* best_order, int v_cnt, e_index_t e_cnt);
 
-    double new_estimate_schedule_restrict(const std::vector<std::pair<int, int>>& restrictions, int v_cnt, unsigned int e_cnt, long long tri_cnt);
-    double our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt, long long tri_cnt);
-    double GraphZero_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, unsigned int e_cnt);
-    double Naive_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &paris, int v_cnt, unsigned int e_cnt);
+    double new_estimate_schedule_restrict(const std::vector<std::pair<int, int>>& restrictions, int v_cnt, e_index_t e_cnt, long long tri_cnt);
+    double our_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, e_index_t e_cnt, long long tri_cnt);
+    double GraphZero_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &pairs, int v_cnt, e_index_t e_cnt);
+    double Naive_estimate_schedule_restrict(const std::vector<int> &order, const std::vector< std::pair<int,int> > &paris, int v_cnt, e_index_t e_cnt);
 
     void get_in_exclusion_optimize_group(int depth, int* id, int id_cnt, int* in_exclusion_val); 
     //use principle of inclusion-exclusion to optimize

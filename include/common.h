@@ -1,9 +1,10 @@
 #pragma once
+#include "pattern.h"
+#include "dataloader.h"
+
 #include <sys/time.h>
 #include <cstdlib>
 #include <string>
-#include "pattern.h"
-#include "dataloader.h"
 
 double get_wall_time(); 
 
