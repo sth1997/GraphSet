@@ -1,23 +1,31 @@
-#include <common.h>
-#include <dataloader.h>
 #include <graph.h>
-#include <motif_generator.h>
-#include <schedule_IEP.h>
+#include <dataloader.h>
 #include <vertex_set.h>
+#include <common.h>
+#include <schedule_IEP.h>
+#include <motif_generator.h>
 
-#include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <cstring>
+#include <cstdint>
 #include <string>
+#include <algorithm>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
+#include <sys/time.h>
+#include <chrono>
+
+#include "component/utils.cuh"
+#include "component/gpu_device_context.cuh"
 #include "component/gpu_device_detect.cuh"
 #include "src/gpu_pattern_matching.cuh"
+#include "timeinterval.h"
 
-#include <timeinterval.h>
+
+__global__ void gpu_pattern_matching_generated(e_index_t edge_num, uint32_t buffer_size, PatternMatchingDeviceContext *context);
+
 
 TimeInterval allTime;
 TimeInterval tmpTime;
@@ -38,7 +46,7 @@ void pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
 
     unsigned long long sum = 0;
 
-    gpu_pattern_matching<<<num_blocks, THREADS_PER_BLOCK, context->block_shmem_size>>>(g->e_cnt, buffer_size, context);
+    gpu_pattern_matching_generated<<<num_blocks, THREADS_PER_BLOCK, context->block_shmem_size>>>(g->e_cnt, buffer_size, context);
 
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());

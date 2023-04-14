@@ -25,19 +25,20 @@ double test_pattern(Graph* g, Pattern &pattern) {
     double t1,t2;
     double total_time = 0;
 
-    for(int i = 0; i < 3; ++i) {
+    int times = 1;
+    for(int i = 0; i < times; ++i) {
         t1 = get_wall_time();
         long long ans_our = g->pattern_matching(schedule_our, thread_num);
         t2 = get_wall_time();
 
         printf("our ans: %lld time: %.6lf\n", ans_our, t2 - t1);
         total_time += (t2 - t1);
-        if(i == 2) {
+        if(i == times - 1) {
             schedule_our.print_schedule();
         }
         fflush(stdout);
     }
-    total_time /= 3;
+    total_time /= 1;
     printf("%.6lf\n",total_time);
     return total_time;
 }

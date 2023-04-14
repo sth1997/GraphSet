@@ -16,7 +16,7 @@ public:
         struct timeval tp_end, tp_res;
         gettimeofday(&tp_end, NULL);
         timersub(&tp_end, &tp, &tp_res);
-        printf("%s: %ld s %06ld us.\n", title, tp_res.tv_sec, tp_res.tv_usec);
+        printf("%s: %ld.%06ld s.\n", title, tp_res.tv_sec, tp_res.tv_usec);
     }
 private:
     struct timeval tp;
