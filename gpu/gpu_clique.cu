@@ -3,12 +3,7 @@
  * 而且计时的方式与zms版本略有区别。
 */
 #define THRUST_IGNORE_CUB_VERSION_CHECK
-#include <graph.h>
-#include <dataloader.h>
-#include <vertex_set.h>
-#include <common.h>
-#include <schedule_IEP.h>
-#include <cub/cub.cuh>
+
 
 #include <cassert>
 #include <cstring>
@@ -17,10 +12,15 @@
 #include <algorithm>
 #include <unordered_set>
 
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
+#include <cub/cub.cuh>
 
-#include <timeinterval.h>
+#include "graph.h"
+#include "dataloader.h"
+#include "vertex_set.h"
+#include "common.h"
+#include "schedule_IEP.h"
+#include "timeinterval.h"
+
 #include "component/utils.cuh"
 #include "component/gpu_schedule.cuh"
 

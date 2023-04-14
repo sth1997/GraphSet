@@ -2,13 +2,19 @@
  * 这个版本里面没有细粒度计时。有计时的在gpu_graph_with_timer.cu里面。
  * 而且计时的方式与zms版本略有区别。
  */
-#include <graph.h>
-#include <dataloader.h>
-#include <vertex_set.h>
-#include <common.h>
-#include <schedule_IEP.h>
-#include <motif_generator.h>
-#include <timeinterval.h>
+#include <cassert>
+#include <cstring>
+#include <cstdint>
+#include <string>
+#include <algorithm>
+
+#include "graph.h"
+#include "dataloader.h"
+#include "vertex_set.h"
+#include "common.h"
+#include "schedule_IEP.h"
+#include "motif_generator.h"
+#include "timeinterval.h"
 
 #include "component/utils.cuh"
 #include "component/gpu_schedule.cuh"
@@ -16,21 +22,11 @@
 #include "function/pattern_matching.cuh"
 #include "src/gpu_pattern_matching.cuh"
 
-#include <cassert>
-#include <cstring>
-#include <cstdint>
-#include <string>
-#include <algorithm>
-
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
-
-
 TimeInterval allTime;
 TimeInterval tmpTime;
 
 // same as gpu_graph
-void pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
+double pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
     tmpTime.check();
     PatternMatchingDeviceContext *context;
     gpuErrchk(cudaMallocManaged((void **)&context, sizeof(PatternMatchingDeviceContext)));
@@ -55,10 +51,11 @@ void pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
     sum /= schedule_iep.get_in_exclusion_optimize_redundancy();
 
     printf("Pattern count: %llu\n", sum);
-    tmpTime.print("Counting time cost");
+    double counting_time = tmpTime.print("Counting time cost");
 
     context->destroy();
     gpuErrchk(cudaFree(context));
+    return counting_time;
 }
 
 
@@ -91,6 +88,8 @@ int main(int argc,char *argv[]) {
 
     printf("motif_size: %d\n", pattern_size);
 
+    double total_counting_time = 0.0;
+
     MotifGenerator mg(pattern_size);
     std::vector<Pattern> motifs = mg.generate();
     printf("Motifs number = %d\n", motifs.size());
@@ -104,17 +103,17 @@ int main(int argc,char *argv[]) {
         
         bool is_pattern_valid;
         bool use_in_exclusion_optimize = true;
-        Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt, true);
+        Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
 
         if (!is_pattern_valid) {
             fprintf(stderr, "pattern is invalid!\n");
             return 1;
         }
 
-        pattern_matching(g, schedule_iep);
+        total_counting_time += pattern_matching(g, schedule_iep);
 
-        allTime.print("Time cost");
     }
-    // allTime.print("Total time cost");
+    printf("Total *COUNTING* time: %.6lf\n", total_counting_time);
+    allTime.print("Total time cost");
     return 0;
 }

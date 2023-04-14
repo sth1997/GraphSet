@@ -1,21 +1,18 @@
-#include <graph.h>
-#include <dataloader.h>
-#include <vertex_set.h>
-#include <common.h>
+#include <sys/time.h>
 
 #include <cassert>
 #include <cstring>
 #include <cstdint>
 #include <string>
 #include <algorithm>
-
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
-
-#include <sys/time.h>
 #include <chrono>
 
-#include <timeinterval.h>
+#include "graph.h"
+#include "dataloader.h"
+#include "vertex_set.h"
+#include "common.h"
+#include "timeinterval.h"
+
 #include "component/utils.cuh"
 
 constexpr int THREADS_PER_BLOCK = 256;

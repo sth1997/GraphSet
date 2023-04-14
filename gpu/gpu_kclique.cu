@@ -1,8 +1,5 @@
 // k <= 6
 #define THRUST_IGNORE_CUB_VERSION_CHECK
-#include <cuda_runtime.h>
-#include <cub/cub.cuh>
-#include <omp.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -10,8 +7,11 @@
 #include <iostream>
 #include <vector>
 
-#include "../include/dataloader.h"
-#include "../include/graph.h"
+#include <cub/cub.cuh>
+#include <omp.h>
+
+#include "dataloader.h"
+#include "graph.h"
 #include "component/utils.cuh"
 
 constexpr int BITS_PER_PARTITION = 64;

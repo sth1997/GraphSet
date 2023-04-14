@@ -20,7 +20,31 @@ graphs.append("livejournal")
 graphs.append("orkut")
 
 
-motif_sizes = [4, 5]
+motif_sizes = [4]
+
+clique_sizes = [4, 5]
+
+
+fsm_pairs = [
+    (
+        "mico", [
+            (2, [100, 300, 500]),
+            (3, [10000, 13000, 15000]),
+        ]
+    ),
+    (
+        "patents", [
+            (2, [5000, 10000, 15000]),
+            (3, [10000, 15000, 20000])    
+        ]
+    ),
+    (
+        "youtube", [
+            (2, [1000, 3000, 5000]),
+            (3, [1000, 3000, 5000])
+        ]
+    )
+]
 
 
 def pattern_matching_reproduce(is_gpu : bool = False, is_generated_code : bool = False, log_path : str = "/../reproduce_log/pattern_matching"):
@@ -80,8 +104,67 @@ def motif_counting(is_gpu : bool = False, log_path : str = "/../reproduce_log/mo
     return 0
 
 
+def clique_counting(is_gpu : bool = False, log_path : str = "/../reproduce_log/clique_counting"):
+    log_path = file_dir + log_path
+    if is_gpu:
+        log_path += "_gpu"
+    else:
+        log_path += "_cpu"
+
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+
+    if is_gpu:
+        execute_name = "gpu_kclique"
+    else:
+        execute_name = "clique_test"
+
+    for size in clique_sizes:
+        for graph in graphs:
+            log_name = f"{log_path}/{graph}_cc{size}.log"
+            command = f"{file_dir}/../build/bin/{execute_name} {data_path}/{graph}.g {size} 1>{log_name}"
+            print(command, flush=True)
+            result = os.system(command)
+            if result != 0:
+                return 1
+    return 0
+
+def frequent_subgraph_mining(is_gpu : bool = False, log_path : str = "/../reproduce_log/frequent_subgraph_mining"):
+    log_path = file_dir + log_path
+    if is_gpu:
+        log_path += "_gpu"
+    else:
+        log_path += "_cpu"
+    
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+
+    if is_gpu:
+        execute_name = "gpu_fsm"
+    else:
+        execute_name = "fsm_test"
+    
+    for graph_data in fsm_pairs:
+        graph = graph_data[0]
+        for fsm_data in graph_data[1]:
+            size = fsm_data[0]
+            for suppport in fsm_data[1]:
+                tmp_execute_name = execute_name 
+                if graph == "mico" and size == 3 and is_gpu:
+                    tmp_execute_name = "gpu_new_fsm"
+                log_name = f"{log_path}/{graph}_fsm{size}+{suppport}.log"
+                command = f"{file_dir}/../build/bin/{tmp_execute_name} {data_path}/{graph}.adj {size} {suppport}  1>{log_name}"
+                print(command, flush=True)
+                result = os.system(command)
+                if result != 0:
+                    return 1
+    return 0
+
 
 if __name__ == "__main__":
     # pattern_matching_reproduce(False)
     # pattern_matching_reproduce(True, True)
-    motif_counting(True)
+    # motif_counting(True)
+    # clique_counting(False)
+    frequent_subgraph_mining(True)
+    pass

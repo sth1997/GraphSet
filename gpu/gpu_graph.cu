@@ -1,23 +1,20 @@
-#include <common.h>
-#include <dataloader.h>
-#include <graph.h>
-#include <motif_generator.h>
-#include <schedule_IEP.h>
-#include <vertex_set.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <string>
 
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
+#include "common.h"
+#include "dataloader.h"
+#include "graph.h"
+#include "motif_generator.h"
+#include "schedule_IEP.h"
+#include "vertex_set.h"
+#include "timeinterval.h"
 
 #include "component/gpu_device_detect.cuh"
 #include "src/gpu_pattern_matching.cuh"
 
-#include <timeinterval.h>
 
 TimeInterval allTime;
 TimeInterval tmpTime;

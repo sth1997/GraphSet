@@ -1,9 +1,6 @@
 #undef NDEBUG
-#include <common.h>
-#include <dataloader.h>
-#include <graph.h>
-#include <schedule_IEP.h>
-#include <vertex_set.h>
+
+#include <sys/time.h>
 
 #include <algorithm>
 #include <cassert>
@@ -14,11 +11,16 @@
 #include <vector>
 
 #include <omp.h>
-#include <sys/time.h>
+
+#include "common.h"
+#include "dataloader.h"
+#include "graph.h"
+#include "schedule_IEP.h"
+#include "vertex_set.h"
+#include "timeinterval.h"
 
 #include "component/gpu_schedule.cuh"
 #include "component/utils.cuh"
-#include <timeinterval.h>
 
 // 设备数和任务数
 constexpr int devices_use = 3;

@@ -1,5 +1,4 @@
 #pragma once
-
 #include <cstdint>
 
 #include "gpu_const.cuh"

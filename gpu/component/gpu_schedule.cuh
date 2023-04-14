@@ -1,6 +1,6 @@
 #pragma once
-
 #include <cstdint>
+
 #include "utils.cuh"
 
 class GPUSchedule {

@@ -1,9 +1,6 @@
 #undef NDEBUG
-#include <graph.h>
-#include <dataloader.h>
-#include <vertex_set.h>
-#include <common.h>
-#include <schedule_IEP.h>
+
+#include <sys/time.h>
 
 #include <cassert>
 #include <cstring>
@@ -11,9 +8,13 @@
 #include <string>
 #include <algorithm>
 
-#include <sys/time.h>
+#include "graph.h"
+#include "dataloader.h"
+#include "vertex_set.h"
+#include "common.h"
+#include "schedule_IEP.h"
+#include "timeinterval.h"
 
-#include <timeinterval.h>
 #include "component/utils.cuh"
 #include "component/gpu_schedule.cuh"
 
