@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
     Graph *g;
     DataLoader D;
 
-    if (argc < 2) {
+    if (argc < 4) {
         fprintf(stderr, "Usage: %s graph_file pattern_size pattern_string\n", argv[0]);
         return 1;
     }

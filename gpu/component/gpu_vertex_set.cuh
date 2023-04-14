@@ -247,3 +247,60 @@ __device__ int unordered_subtraction_size(const GPUVertexSet& set0, const GPUVer
     __threadfence_block();
     return ret;
 }
+
+__device__ void triple_unordered_subtraction_size(int &ans0, int&ans1, int&ans2, const GPUVertexSet& set00, const GPUVertexSet& set01, const GPUVertexSet& set02, const GPUVertexSet& set1)
+{
+    __shared__ int block_ret[WARPS_PER_BLOCK * 3];
+
+    int size00 = set00.get_size();
+    int size01 = set01.get_size();
+    int size02 = set02.get_size();
+    int size1 = set1.get_size();
+
+    int wid = threadIdx.x / THREADS_PER_WARP;
+    int lid = threadIdx.x % THREADS_PER_WARP;
+    int &ret0 = block_ret[wid * 3 + 0];
+    int &ret1 = block_ret[wid * 3 + 1];
+    int &ret2 = block_ret[wid * 3 + 2];
+    if (lid == 0) {
+        ret0 = size00;
+        ret1 = size01;
+        ret2 = size02;
+    }
+    __threadfence_block();
+
+    
+    int done1 = 0;
+    while (done1 < size1 * 3)
+    {
+        if (lid + done1 < size1 * 3)
+        {
+            int l = 0, r ;//= (lid + done1 < size1) ? size00 - 1 : (lid + done1 < size1 * 2 ? size01 - 1 : size02 - 1);
+            uint32_t val ;//= set1.get_data((lid + done1 < size1) ? lid + done1 : (lid +done1 < size1 * 2 ? lid + done1 - size1 : lid + done1 - size1 * 2)); 
+            //考虑之后换一下二分查找的写法，比如改为l < r，然后把mid的判断从循环里去掉，放到循环外(即最后l==r的时候)
+        
+            const GPUVertexSet& set0 = (lid + done1 < size1) ? (r=size00-1,val=set1.get_data(lid+done1),set00) : (lid + done1 < size1 * 2 ? (r=size01-1,val=set1.get_data(lid+done1-size1),set01) : (r=size02-1,val=set1.get_data(lid+done1-size1*2),set02));
+            int &ret = (lid + done1 < size1) ? ret0 : (lid + done1 < size1 * 2 ? ret1 : ret2);
+
+            while (l <= r)
+            {
+                int mid = (l + r) >> 1;
+                if (set0.get_data(mid) == val)
+                {
+                    atomicSub(&ret, 1);
+                    break;
+                }
+                if (set0.get_data(mid) < val)
+                    l = mid + 1;
+                else
+                    r = mid - 1;
+            }
+            //binary search
+        }
+        done1 += THREADS_PER_WARP;
+    }
+    __threadfence_block();
+    ans0 = ret0;
+    ans1 = ret1;
+    ans2 = ret2;
+}
