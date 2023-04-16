@@ -800,7 +800,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
     size_t max_labeled_patterns = 1;
     for (int i = 0; i < max_edge + 1; ++i) //边数最大max_edge，点数最大max_edge + 1
         max_labeled_patterns *= (size_t) g->l_cnt;
-    printf("max_labeled_patterns:%d\n", max_labeled_patterns);
+    printf("max_labeled_patterns: %d\n", max_labeled_patterns);
     char* all_p_label = new char[max_labeled_patterns * (max_edge + 1) * 100];
     char* tmp_p_label = new char[(max_edge + 1) * 100];
 
@@ -868,7 +868,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         //schedules[i].update_loop_invariant_for_fsm();
         size_t all_p_label_idx = 0;
         g->traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
-        printf("all_p_label_idx: %u\n", all_p_label_idx);
+        // printf("all_p_label_idx: %u\n", all_p_label_idx);
         gpuErrchk( cudaMemcpy(dev_all_p_label, all_p_label, all_p_label_idx * sizeof(char), cudaMemcpyHostToDevice));
         int job_num = all_p_label_idx / schedules[i].get_size();
         int threshold = 1;
@@ -894,6 +894,9 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         timersub(&end, &start, &total_time);
         printf("time = %ld s %06ld us.\n", total_time.tv_sec, total_time.tv_usec);
     }
+
+    printf("Counting time cost: %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
+
 
     gpuErrchk(cudaFree(dev_edge));
     //gpuErrchk(cudaFree(dev_edge_from));

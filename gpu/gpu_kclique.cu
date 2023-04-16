@@ -417,7 +417,7 @@ void k_clique_counting(Graph* g, int k) {
       (int)std::min((long long)MAX_THREAD_BLOCK,
                     (m * THREADS_PER_WARP - 1) / THREADS_PER_BLOCK + 1);
 
-  printf("start_ptr:%lld\n", start_ptr[n]);
+  // printf("start_ptr:%lld\n", start_ptr[n]);
 
   gpuErrchk( cudaMalloc((void**)&gpu_binary_adj, start_ptr[n] * sizeof(unsigned long long)) );
   gpuErrchk( cudaMalloc((void**)&gpu_vertex, (n + 1) * sizeof(int64_t)) );
@@ -454,11 +454,11 @@ void k_clique_counting(Graph* g, int k) {
   
   gpuErrchk( cudaMemcpyFromSymbol(&sum, dev_sum, sizeof(unsigned long long)) );
 
-  printf("count %llu\n", sum);
+  printf("Answer: %llu\n", sum);
 
   clock_t end_time = clock();
-  printf("Time: %.3lfms.\n",
-         (double)(end_time - start_time) / CLOCKS_PER_SEC * 1000.0);
+  printf("Counting time cost: %.6lf s.\n",
+         (double)(end_time - start_time) / CLOCKS_PER_SEC);
 
   cudaFree(gpu_binary_adj);
   cudaFree(gpu_vertex);

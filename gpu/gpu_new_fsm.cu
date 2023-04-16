@@ -472,6 +472,8 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         printf("time = %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
     }
 
+    printf("Counting time cost: %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
+
     gpuErrchk(cudaFree(dev_edge));
     //gpuErrchk(cudaFree(dev_edge_from));
     gpuErrchk(cudaFree(dev_labeled_vertex));

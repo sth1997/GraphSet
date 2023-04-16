@@ -31,7 +31,7 @@ double test_pattern(Graph* g, Pattern &pattern) {
         long long ans_our = g->pattern_matching(schedule_our, thread_num);
         t2 = get_wall_time();
 
-        printf("our ans: %lld time: %.6lf\n", ans_our, t2 - t1);
+        printf("Ans: %lld time: %.6lf\n", ans_our, t2 - t1);
         total_time += (t2 - t1);
         if(i == times - 1) {
             schedule_our.print_schedule();
@@ -39,7 +39,7 @@ double test_pattern(Graph* g, Pattern &pattern) {
         fflush(stdout);
     }
     total_time /= 1;
-    printf("%.6lf\n",total_time);
+    printf("Counting time cost: %.6lf s\n",total_time);
     return total_time;
 }
 
@@ -48,7 +48,7 @@ int main(int argc,char *argv[]) {
     DataLoader D;
 
     if(argc != 4) {
-        printf("usage: %s graph_file pattern_size pattern_matrix_string\n", argv[0]);
+        printf("usage: %s graph_file pattern_size pattern_adj_string\n", argv[0]);
         return 0;
     }
 

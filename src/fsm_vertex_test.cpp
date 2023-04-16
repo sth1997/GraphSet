@@ -39,7 +39,7 @@ int main(int argc,char *argv[]) {
     double total_time = 0; int times = 1;
     for(int i = 0; i < times; i++){
         double this_time = 0.0;
-        g->fsm(max_edge, min_support, 16, &this_time);
+        g->fsm_vertex(max_edge, min_support, 16, &this_time);
         total_time += this_time;
     }
     total_time /= times;

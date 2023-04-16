@@ -51,7 +51,7 @@ double pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
     sum /= schedule_iep.get_in_exclusion_optimize_redundancy();
 
     printf("Pattern count: %llu\n", sum);
-    double counting_time = tmpTime.print("Counting time cost");
+    double counting_time = tmpTime.print("Single pattern counting time cost");
 
     context->destroy();
     gpuErrchk(cudaFree(context));
@@ -113,7 +113,7 @@ int main(int argc,char *argv[]) {
         total_counting_time += pattern_matching(g, schedule_iep);
 
     }
-    printf("Total *COUNTING* time: %.6lf\n", total_counting_time);
+    printf("Counting time cost: %.6lf s\n", total_counting_time);
     allTime.print("Total time cost");
     return 0;
 }
