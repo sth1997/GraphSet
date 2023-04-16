@@ -19,6 +19,9 @@ ADD_LIBRARY(graph_mining SHARED ${GraphMiningSrc})
 ADD_EXECUTABLE(fsm_test fsm_test.cpp)
 TARGET_LINK_LIBRARIES(fsm_test graph_mining)
 
+ADD_EXECUTABLE(fsm_vertex_test fsm_vertex_test.cpp)
+TARGET_LINK_LIBRARIES(fsm_vertex_test graph_mining)
+
 ADD_EXECUTABLE(clique_test clique_test.cpp)
 TARGET_LINK_LIBRARIES(clique_test graph_mining)
 

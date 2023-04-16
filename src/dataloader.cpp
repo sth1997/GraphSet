@@ -482,10 +482,10 @@ bool DataLoader::general_load_labeled_data(LabeledGraph* &g, DataType type, cons
             e->push_back(std::make_pair(x,v));//按照单向边处理
             ++degree[x];
             //++degree[y];
-            if (e->size() % 1000000 == 0) {
-                printf("%u edges loaded\n",e->size());
-                fflush(stdout);
-            }
+            // if (e->size() % 1000000 == 0) {
+            //     printf("%u edges loaded\n",e->size());
+            //     fflush(stdout);
+            // }
         }
     }
     g->l_cnt = tmp_l;

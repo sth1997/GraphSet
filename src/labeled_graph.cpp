@@ -442,14 +442,14 @@ void LabeledGraph::get_fsm_necessary_info(std::vector<Pattern>& patterns, int ma
         bool is_pattern_valid;
         // printf("before generate schedule %d\n", i);
         // printf("v_cnt: %d e_cnt: %d tri_cnt: %lld\n", this->v_cnt, this->e_cnt, this->tri_cnt);
-        p.print();
-        fflush(stdout);
+        // p.print();
+        // fflush(stdout);
         new (&schedules[i]) Schedule_IEP(p, is_pattern_valid, 1, 1, 1, this->v_cnt, this->e_cnt, this->tri_cnt);
         schedules[i].print_schedule();
-        fflush(stdout);
+        // fflush(stdout);
     }
-    printf("after generate schedules\n");
-    fflush(stdout);
+    // printf("after generate schedules\n");
+    // fflush(stdout);
 
     printf("pattern num = %ld\n", patterns.size());
     schedules_num = patterns.size();
@@ -467,8 +467,8 @@ void LabeledGraph::get_fsm_necessary_info(std::vector<Pattern>& patterns, int ma
     mapping_start_idx[mapping_start_idx_pos] = mappings_vec.size();
 
 
-    printf("mapping_start_idx_pos = %d   mappings_vec.size() = %lld\n", mapping_start_idx_pos, mappings_vec.size());
-    fflush(stdout);
+    // printf("mapping_start_idx_pos = %d   mappings_vec.size() = %lld\n", mapping_start_idx_pos, mappings_vec.size());
+    // fflush(stdout);
 
     mappings = new int[mappings_vec.size()];
     memcpy(mappings, &mappings_vec[0], mappings_vec.size() * sizeof(int));
@@ -498,8 +498,8 @@ void LabeledGraph::get_fsm_necessary_info(std::vector<Pattern>& patterns, int ma
                         }
                     }
                 }
-                for (int j = mapping_idx; j < mapping_idx + s.get_size() + 1; ++j)
-                    printf("%d ", mappings[j]);
+                // for (int j = mapping_idx; j < mapping_idx + s.get_size() + 1; ++j)
+                //     printf("%d ", mappings[j]);
                 if (flag && additional_edge_num <= 1) {
                     // printf("correct!\n");
                 }
@@ -570,7 +570,7 @@ int LabeledGraph::fsm(int max_edge, long long min_support, int thread_count, dou
         automorphisms.clear();
         schedules[i].GraphZero_get_automorphisms(automorphisms);
         schedules[i].update_loop_invariant_for_fsm();
-        schedules[i].print_schedule();
+        // schedules[i].print_schedule();
         size_t all_p_label_idx = 0;
         traverse_all_labeled_patterns(schedules, all_p_label, tmp_p_label, mapping_start_idx, mappings, pattern_is_frequent_index, is_frequent, i, 0, mapping_start_idx_pos, all_p_label_idx);
         size_t job_num = all_p_label_idx / schedules[i].get_size();

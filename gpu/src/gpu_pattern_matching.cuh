@@ -24,6 +24,8 @@ __global__ void gpu_pattern_matching(e_index_t edge_num, uint32_t buffer_size, P
 
     int num_prefixes = schedule->get_total_prefix_num();
     int num_vertex_sets_per_warp = num_prefixes + 2;
+    // extra n-2 vertex_sets for vertex_induced (motif counting)
+    if(schedule->is_vertex_induced) num_vertex_sets_per_warp += schedule->get_size() - 2;
 
     int wid = threadIdx.x / THREADS_PER_WARP;            // warp id within the block
     int lid = threadIdx.x % THREADS_PER_WARP;            // lane id

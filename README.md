@@ -13,25 +13,27 @@ GraphIndor is being refactored.
 
 System: Linux
 
-Compilers: gcc@10.2.1 / cuda@11.0.2
+Compilers: gcc@10.2.1 / cuda@11+
 
 Hardware:
 
-+ GPU: Nvidia Volta Architecture or newer (`sm_70` is used now)
++ GPU: Nvidia Volta Architecture or newer (`sm_70` is used now), 32GB memory
 
 Other dependencies:
 
-+ openmpi
-+ cmake ( > 3.21.4 )
++ openmpi (> 4.1.1)
++ cmake (> 3.21)
 
 ### Use `spack` as package manager
 
 In `env.sh` ( this file should be modified according to specified machines):
 
+Example:
+
 ```bash
-spack load cuda@11.0.2
-spack load --first cmake@3.21.4
-spack load openmpi
+spack load cuda@11.8
+spack load cmake@3.24.3
+spack load openmpi@4.1.1
 ```
 
 ### Submodules
@@ -80,8 +82,23 @@ CPU:
 
 #### Code Generation
 
+Although it is convenient to use **end-to-end** pattern matching directly, its performance will be worse than that of **code generation**. Code generation is only available for GPU code now.
 
-Although it is convenient to use **end-to-end** pattern matching directly, its performance will be worse than that of **code generation**. We are refactoring the code generation method and will update them later.
+Following steps are need for generate code for specific graph and pattern:
+
+1. build the `code_gen/final_generator.cu` by cmake.
+2. provide graphs and patterns in `scripts/gen_code.py` (and note that the `data_path` and `command_prefix` should be changed according to environment)
+3. run `scripts/gen_code.py`
+4. modify the pattern number and graph name in `auto/CMakeLists.txt`
+5. rebuild the project by cmake
+
+Run generated code:
+
+```bash
+`./bin/patents_p1 <graph_file> <pattern_size> <pattern_matrix_string>`
+```
+
+(The pattern and graph should match the input of code generation)
 
 ### Clique Counting
 
@@ -141,3 +158,13 @@ We suppose these graphs are undirected. To speed up graph reading, we use a bina
 
 If you want to input other graphs in text format, you can read `src/dataloader.cpp` for how to change the input method.
  
+## Reproduce Scripts
+
+We provide one-step reproduce scripts. 
+
+After building the project, run `reproduce/reproduce_main.py`. Results will be in `reproduce_result`, and logs will be in `reproduce_log`. The reproduce process will take several hours.
+
+Also not that `data_path` and `command_prefix` in the script should be modified according to the environment of the machine.
+
+
+

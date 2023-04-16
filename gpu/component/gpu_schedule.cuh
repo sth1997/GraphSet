@@ -1,6 +1,6 @@
 #pragma once
-
 #include <cstdint>
+
 #include "utils.cuh"
 
 class GPUSchedule {
@@ -33,20 +33,20 @@ public:
     }
     */
 
-    inline __device__ int get_total_prefix_num() const { return total_prefix_num;}
-    inline __device__ int get_basic_prefix_num() const { return basic_prefix_num;}
-    inline __device__ int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
-    inline __device__ int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
-    inline __device__ int get_size() const { return size;}
-    inline __device__ int get_last(int i) const { return last[i];}
-    inline __device__ int get_next(int i) const { return next[i];}
-    inline __device__ int get_prefix_target(int i) const {return prefix_target[i];}
-    inline __device__ int get_break_size(int i) const { return break_size[i];}
-    inline __device__ int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
-    inline __device__ int get_total_restrict_num() const { return total_restrict_num;}
-    inline __device__ int get_restrict_last(int i) const { return restrict_last[i];}
-    inline __device__ int get_restrict_next(int i) const { return restrict_next[i];}
-    inline __device__ int get_restrict_index(int i) const { return restrict_index[i];}
+    inline __host__ __device__ int get_total_prefix_num() const { return total_prefix_num;}
+    inline __host__ __device__ int get_basic_prefix_num() const { return basic_prefix_num;}
+    inline __host__ __device__ int get_father_prefix_id(int prefix_id) const { return father_prefix_id[prefix_id];}
+    inline __host__ __device__ int get_loop_set_prefix_id(int loop) const { return loop_set_prefix_id[loop];}
+    inline __host__ __device__ int get_size() const { return size;}
+    inline __host__ __device__ int get_last(int i) const { return last[i];}
+    inline __host__ __device__ int get_next(int i) const { return next[i];}
+    inline __host__ __device__ int get_prefix_target(int i) const {return prefix_target[i];}
+    inline __host__ __device__ int get_break_size(int i) const { return break_size[i];}
+    inline __host__ __device__ int get_in_exclusion_optimize_num() const { return in_exclusion_optimize_num;}
+    inline __host__ __device__ int get_total_restrict_num() const { return total_restrict_num;}
+    inline __host__ __device__ int get_restrict_last(int i) const { return restrict_last[i];}
+    inline __host__ __device__ int get_restrict_next(int i) const { return restrict_next[i];}
+    inline __host__ __device__ int get_restrict_index(int i) const { return restrict_index[i];}
     //inline __device__ int get_k_val() const { return k_val;} // see below (the k_val's definition line) before using this function
 
     int* adj_mat;

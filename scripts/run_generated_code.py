@@ -9,7 +9,6 @@ patterns.append("0111111101111111011101110100111100011100001100000")
 patterns.append("0111111101111111011001110100111100011000001100000")
 pattern_sizes = [5, 6, 6, 6, 7, 7]
 graphs = []
-graphs.append("wiki-vote.g")
 graphs.append("patents.g")
 graphs.append("mico.g")
 graphs.append("livejournal.g")
@@ -25,4 +24,4 @@ for g_idx, graph in enumerate(graphs):
         bin_name = g[g_idx] + "_p" + str(p + 1)
         log_name = graph + "_" + "p" + str(p + 1) + ".log"
         #log_name = "../auto/" + g[g_idx] + "_p" + str(p + 1) + "_inject.cu" 
-        os.system("srun -N 1 ./bin/" + bin_name + " /home/hzx/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name + " &")
+        os.system("./bin/" + bin_name + " /home/cqq/data/" + graph + " " + str(pattern_sizes[p]) + " " + str(patterns[p]) + " > " + log_name + " ")

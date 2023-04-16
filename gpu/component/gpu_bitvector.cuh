@@ -1,10 +1,10 @@
 #pragma once
-#include "gpu_const.cuh"
-#include "utils.cuh"
-
 #include <cstdint>
+
 #include <cub/cub.cuh>
 
+#include "gpu_const.cuh"
+#include "utils.cuh"
 
 class GPUBitVector {
   public:

@@ -1,28 +1,26 @@
-#include <common.h>
-#include <dataloader.h>
-#include <graph.h>
-#include <motif_generator.h>
-#include <schedule_IEP.h>
-#include <vertex_set.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <string>
 
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
+#include "common.h"
+#include "dataloader.h"
+#include "graph.h"
+#include "motif_generator.h"
+#include "schedule_IEP.h"
+#include "vertex_set.h"
+#include "timeinterval.h"
 
 #include "component/gpu_device_detect.cuh"
 #include "src/gpu_pattern_matching.cuh"
 
-#include <timeinterval.h>
 
 TimeInterval allTime;
 TimeInterval tmpTime;
 
 void pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
+    tmpTime.check();
     PatternMatchingDeviceContext *context;
     gpuErrchk(cudaMallocManaged((void **)&context, sizeof(PatternMatchingDeviceContext)));
     context->init(g, schedule_iep);
@@ -30,7 +28,7 @@ void pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
     uint32_t buffer_size = VertexSet::max_intersection_size;
     int max_active_blocks_per_sm;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks_per_sm, gpu_pattern_matching, THREADS_PER_BLOCK, context->block_shmem_size);
-    printf("max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
+    fprintf(stderr, "max number of active warps per SM: %d\n", max_active_blocks_per_sm * WARPS_PER_BLOCK);
 
     tmpTime.print("Prepare time cost");
     tmpTime.check();
@@ -45,7 +43,7 @@ void pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
 
     sum /= schedule_iep.get_in_exclusion_optimize_redundancy();
 
-    printf("count %llu\n", sum);
+    printf("Pattern count: %llu\n", sum);
     tmpTime.print("Counting time cost");
 
     context->destroy();
@@ -53,13 +51,13 @@ void pattern_matching(Graph *g, const Schedule_IEP &schedule_iep) {
 }
 
 int main(int argc, char *argv[]) {
-    print_device_information();
+    get_device_information();
     Graph *g;
     DataLoader D;
 
-    if (argc < 2) {
+    if (argc < 4) {
         fprintf(stderr, "Usage: %s graph_file pattern_size pattern_string\n", argv[0]);
-        return 0;
+        return 1;
     }
 
     using std::chrono::system_clock;
@@ -73,7 +71,7 @@ int main(int argc, char *argv[]) {
 
     auto t2 = system_clock::now();
     auto load_time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    printf("Load data success! time: %g seconds\n", load_time.count() / 1.0e6);
+    fprintf(stderr, "Load data success! time: %g seconds\n", load_time.count() / 1.0e6);
 
     allTime.check();
 
@@ -82,16 +80,16 @@ int main(int argc, char *argv[]) {
 
     Pattern p(pattern_size, pattern_str);
 
-    printf("pattern = \n");
+    printf("pattern = ");
     p.print();
 
-    printf("Max intersection size %d\n", VertexSet::max_intersection_size);
+    fprintf(stderr, "Max intersection size %d\n", VertexSet::max_intersection_size);
 
     bool is_pattern_valid;
     Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
     if (!is_pattern_valid) {
-        printf("pattern is invalid!\n");
-        return 0;
+        fprintf(stderr, "pattern is invalid!\n");
+        return 1;
     }
 
     pattern_matching(g, schedule_iep);

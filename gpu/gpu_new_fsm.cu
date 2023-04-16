@@ -1,11 +1,7 @@
 // 第一种尝试，每个 labeled pattern 用一个 kernel
 #define THRUST_IGNORE_CUB_VERSION_CHECK
 #undef NDEBUG
-#include <graph.h>
-#include <dataloader.h>
-#include <vertex_set.h>
-#include <common.h>
-#include <schedule_IEP.h>
+#include <sys/time.h>
 
 #include <cassert>
 #include <cstring>
@@ -13,10 +9,15 @@
 #include <string>
 #include <algorithm>
 
-#include <sys/time.h>
 #include <cub/cub.cuh>
 
-#include <timeinterval.h>
+#include "graph.h"
+#include "dataloader.h"
+#include "vertex_set.h"
+#include "common.h"
+#include "schedule_IEP.h"
+#include "timeinterval.h"
+
 #include "component/utils.cuh"
 #include "component/gpu_schedule.cuh"
 #include "component/gpu_vertex_set.cuh"
@@ -470,6 +471,8 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
         timersub(&end, &start, &total_time);
         printf("time = %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
     }
+
+    printf("Counting time cost: %ld.%06ld s.\n", total_time.tv_sec, total_time.tv_usec);
 
     gpuErrchk(cudaFree(dev_edge));
     //gpuErrchk(cudaFree(dev_edge_from));

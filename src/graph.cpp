@@ -947,8 +947,8 @@ void degeneracy_orientation_init(Graph *original_g, Graph *&g) {
 
 void Graph::motif_counting(int pattern_size, int thread_count) {
 
-    TimeInterval allTime;
-
+    double total_counting_time = 0;
+    TimeInterval allTime, tmpTime;
     allTime.check();
 
     MotifGenerator mg(pattern_size);
@@ -965,19 +965,23 @@ void Graph::motif_counting(int pattern_size, int thread_count) {
 
         Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1,
                                   use_in_exclusion_optimize, v_cnt, e_cnt,
-                                  tri_cnt, true);
+                                  tri_cnt);
 
         if (!is_pattern_valid) {
             printf("pattern is invalid!\n");
             continue;
         }
 
+        tmpTime.check();
         long long ans = this->pattern_matching(schedule_iep, thread_count);
+        total_counting_time += tmpTime.print("Pattern counting time: ");
 
         printf("ans: %lld\n", ans);
 
-        allTime.print("Total time cost");
     }
+
+    printf("Counting time cost: %.6lf s\n", total_counting_time);
+    allTime.print("Total time cost");
 }
 
 int32_t get_intersection_size(const v_index_t *a, int32_t na,

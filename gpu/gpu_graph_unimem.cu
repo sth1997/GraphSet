@@ -1,8 +1,4 @@
-#include <dataloader.h>
-#include <graph.h>
-#include <mpi.h>
-#include <omp.h>
-#include <schedule_IEP.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <cassert>
@@ -12,8 +8,14 @@
 #include <cstdlib>
 #include <string>
 #include <tuple>
-#include <unistd.h>
 #include <utility>
+
+#include <mpi.h>
+#include <omp.h>
+
+#include "dataloader.h"
+#include "graph.h"
+#include "schedule_IEP.h"
 
 #include "component/gpu_const.cuh"
 #include "component/gpu_device_context.cuh"
