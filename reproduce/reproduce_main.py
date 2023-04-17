@@ -18,15 +18,12 @@ patterns.append("0111111101111111011101110100111100011100001100000") # p5
 patterns.append("0111111101111111011001110100111100011000001100000") # p6
 pattern_sizes = [5, 6, 6, 6, 7, 7]
 
-graphs = []
-graphs.append("patents")
-graphs.append("mico")
-graphs.append("livejournal")
-graphs.append("orkut")
+graphs = ["patents", "mico", "livejournal", "orkut"]
 
 
 motif_sizes = [4]
 
+clique_graphs = ["patents", "mico", "livejournal", "orkut", "friendster"]
 clique_sizes = [4, 5]
 
 fsm_graphs = ['mico', 'patents', 'youtube']
@@ -148,7 +145,7 @@ def clique_counting(is_gpu : bool = False, log_path : str = "/../reproduce_log/c
 
     for size in clique_sizes:
         tmp = [size]
-        for graph in graphs:
+        for graph in clique_graphs:
             log_name = f"{log_path}/{graph}_cc{size}.log"
             command = f"{file_dir}/../build/bin/{execute_name} {data_path}/{graph}.g {size} 1>{log_name}"
             print(command, flush=True)
