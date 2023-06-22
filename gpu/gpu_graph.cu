@@ -85,12 +85,16 @@ int main(int argc, char *argv[]) {
 
     fprintf(stderr, "Max intersection size %d\n", VertexSet::max_intersection_size);
 
+    tmpTime.check();
+    
     bool is_pattern_valid;
     Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
     if (!is_pattern_valid) {
         fprintf(stderr, "pattern is invalid!\n");
         return 1;
     }
+
+    tmpTime.print("Schedule time cost");
 
     pattern_matching(g, schedule_iep);
 

@@ -41,7 +41,9 @@ struct PatternMatchingDeviceContext : public GraphDeviceContext {
         
         if(no_devices == 0) {
             log("Memory Usage:\n");
-            log("  Global memory usage (GB): %.3lf \n", (size_new_order + size_edge + size_edge + size_vertex + size_tmp) / (1024.0 * 1024 * 1024));
+            log("  Graph (GB): %.3lf \n", (size_edge + size_vertex) / (1024.0 * 1024 * 1024));
+            log("  Global memory usage (GB): %.3lf \n", (size_new_order + size_edge + size_tmp) / (1024.0 * 1024 * 1024));
+            log("  Total memory usage (GB): %.3lf \n", (size_edge + size_vertex + size_new_order + size_edge + size_tmp) / (1024.0 * 1024 * 1024) * total_devices);
             log("  Shared memory for vertex set per block: %ld bytes\n",
                 num_vertex_sets_per_warp * WARPS_PER_BLOCK * sizeof(GPUVertexSet) +
                     schedule.in_exclusion_optimize_vertex_id.size() * WARPS_PER_BLOCK * sizeof(int));
