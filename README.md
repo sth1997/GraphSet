@@ -1,6 +1,4 @@
-# GraphIndor
-
-GraphIndor is being refactored.
+# GraphSet
 
 > The cpu codes and gpu codes are in `cpu/` and `gpu/`, respectively.
 >
@@ -40,7 +38,7 @@ spack load openmpi@4.1.1
 
 We add GoogleTest as submodule to perform unit tests:
 
-+ please add `--recursive` while cloning `git clone https://github.com/sth1997/GraphIndor.git --recursive`,
++ please add `--recursive` while cloning `git clone https://github.com/sth1997/GraphSet.git --recursive`,
 
 + or use `git submodule init`, `git submodule update` after clone.
 
@@ -137,7 +135,7 @@ GPU:
 
 ## Input Graph
 
-Two types of graphs are used in GraphIndor:
+Two types of graphs are used in our system:
 
 ### Labelled Graph
 
