@@ -158,11 +158,23 @@ If you want to input other graphs in text format, you can read `src/dataloader.c
  
 ## Reproduce Scripts
 
-We provide one-step reproduce scripts. 
+We provide one-step reproduce scripts. Results (tables and figures) will be in `reproduce_result`, and logs will be in `reproduce_log`. The reproduce process will take several hours.
 
-After building the project, run `reproduce/reproduce_main.py`. Results will be in `reproduce_result`, and logs will be in `reproduce_log`. The reproduce process will take several hours.
+After building the project, in `reproduce/` directory:
 
-Also not that `data_path` and `command_prefix` in the script should be modified according to the environment of the machine.
+* run `python ./pattern_matching.py` to reproduce pattern matching results.
+    * it will generate graph for Figure [TODO] as `pattern_matching_gpu.png` and `pattern_matching_cpu.png`
+* run `python ./clique_counting.py` to reproduce clique counting results.
+    * it will generate graph for Table [TODO] as `clique_counting_gpu.csv` and `clique_counting_cpu.csv`
+* run `python ./frequent_subgraph_mining.py` to reproduce frequent subgraph mining results.
+    * it will generate graph for Table [TODO] as `frequent_subgraph_mining_gpu.csv` and `frequent_subgraph_mining_cpu.csv`
+* run `python ./motif_counting.py` to reproduce motif counting results.
+    * it will generate graph for Table [TODO] as `motif_counting_gpu.csv` and `motif_counting_cpu.csv`
+* run `python ./scalability.py` to reproduce scalability results.
+    * it will generate graph for Figure [TODO] as `pattern_matching_scalability.png`
 
-Full dataset can be downloaded through this [link](https://1drv.ms/f/s!Agc-P1eh9RVug-IM6eVlnMCpYCGCpQ?e=LlMueg). 
+
+Also please note that `DATA_PATH` and `COMMAND_PREFIX, MULTI_CARD_COMMAND_PREFIX` in the `reproduce/settings.py` should be modified according to the environment of the machine.
+
+Full dataset can be downloaded through this [link](https://1drv.ms/f/s!Agc-P1eh9RVug-IM6eVlnMCpYCGCpQ?e=LlMueg). You can also choose to preprocess it from the original Stanford Large Network Dataset Collection [link](https://snap.stanford.edu/data/).
 

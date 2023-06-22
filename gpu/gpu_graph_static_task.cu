@@ -62,18 +62,19 @@ void launch_pattern_matching_kernel(PatternMatchingDeviceContext *context, e_ind
 
 
 
-void collect_devices_number(int comm_sz, int node, int *recv_buf) {
+int collect_devices_number(int comm_sz, int node, int *recv_buf, int max_devices_per_node = DEVICE_PER_NODE) {
     int node_devices; 
     gpuErrchk( cudaGetDeviceCount(&node_devices)); 
-    node_devices = std::min(node_devices, DEVICE_PER_NODE);
+    node_devices = std::min(node_devices, max_devices_per_node);
     int *send_buf = new int;
     *send_buf = node_devices;
     MPI_Allgather(send_buf, 1, MPI_INT32_T, recv_buf, 1, MPI_INT32_T, MPI_COMM_WORLD);
+    return node_devices;
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 4) {
-        fprintf(stderr, "Usage: %s graph_file [ignored] pattern_string\n", argv[0]);
+    if (argc < 5) {
+        fprintf(stderr, "Usage: %s graph_file [ignored] pattern_string cards_per_node\n", argv[0]);
         return 0;
     }
 
@@ -95,6 +96,8 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    int max_devices_per_node = std::stoi(argv[4]);
+
     // MPI initialization
     int comm_sz, node;
     MPI_Init(&argc, &argv);
@@ -104,16 +107,12 @@ int main(int argc, char *argv[]) {
 
     // count the total devices for the static task distribution
     int *devices_number = new int[comm_sz];
-    collect_devices_number(comm_sz, node, devices_number);
+    int node_devices = collect_devices_number(comm_sz, node, devices_number, max_devices_per_node);
     int total_devices_number = 0, base_device_number = 0;
     for(int i = 0; i < comm_sz; i++) total_devices_number += devices_number[i];
     for(int i = 0; i < node; i++) base_device_number += devices_number[i];
 
-    int node_devices;
-    gpuErrchk(cudaGetDeviceCount(&node_devices));
-    node_devices = std::min(node_devices, DEVICE_PER_NODE);
-
-    log("Devices count got.\n");
+    log("Devices count got. Total: %d\n", total_devices_number);
 
     #pragma omp parallel for
     ForallDevice(i, node_devices,
@@ -196,7 +195,7 @@ int main(int argc, char *argv[]) {
 
     if (node == 0) {
         auto final_ans = (global_ans) / schedule.get_in_exclusion_optimize_redundancy();
-        printf("final answer = %ld , final_time = %.6lf s\n", final_ans, global_time / 1e6);
+        printf("Final answer = %ld , Counting time cost: %.6lf s\n", final_ans, global_time / 1e6);
     }
     MPI_Finalize();
     return 0;
