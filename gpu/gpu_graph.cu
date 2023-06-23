@@ -56,8 +56,19 @@ int main(int argc, char *argv[]) {
     DataLoader D;
 
     if (argc < 4) {
-        fprintf(stderr, "Usage: %s graph_file pattern_size pattern_string\n", argv[0]);
+        fprintf(stderr, "Usage: %s graph_file pattern_size pattern_string <1/0 for enable iep or not>\n", argv[0]);
         return 1;
+    }
+
+    int enable_iep = 1;
+    if(argc >= 5) {
+        enable_iep = atoi(argv[4]);
+        if(enable_iep != 0 && enable_iep != 1) {
+            fprintf(stderr, "Usage: %s graph_file pattern_size pattern_string <1/0 for enable iep or not>\n", argv[0]);
+            return 1;
+        } else {
+            fprintf(stderr, "Enable iep: %d\n", enable_iep);
+        }
     }
 
     using std::chrono::system_clock;
@@ -88,7 +99,7 @@ int main(int argc, char *argv[]) {
     tmpTime.check();
     
     bool is_pattern_valid;
-    Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, true, g->v_cnt, g->e_cnt, g->tri_cnt);
+    Schedule_IEP schedule_iep(p, is_pattern_valid, 1, 1, enable_iep, g->v_cnt, g->e_cnt, g->tri_cnt);
     if (!is_pattern_valid) {
         fprintf(stderr, "pattern is invalid!\n");
         return 1;
