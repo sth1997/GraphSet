@@ -45,5 +45,9 @@ def motif_counting(
     return 0
 
 if __name__ == "__main__":
+    print("Reproducing motif counting results. (Time: 6 hours)")
+    print("Reproducing motif counting results on CPU...")
     assert motif_counting(is_gpu=False) == 0
+    print("Reproducing motif counting results on GPU...")
     assert motif_counting(is_gpu=True) == 0
+    print("Reproducing motif counting results done.")

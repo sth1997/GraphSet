@@ -83,5 +83,9 @@ def frequent_subgraph_mining(
 
 
 if __name__ == "__main__":
+    print("Reproducing frequent subgraph mining results. (Time: 7 hours)")
+    print("Reproducing frequent subgraph mining results on CPU...")
     assert frequent_subgraph_mining(is_gpu=False) == 0
+    print("Reproducing frequent subgraph mining results on GPU...")
     assert frequent_subgraph_mining(is_gpu=True) == 0
+    print("Reproducing frequent subgraph mining results done.")

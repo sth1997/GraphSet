@@ -101,6 +101,7 @@ def draw_pattern_matching_scalability(is_gpu: bool = False, result_path: str = "
 
 
 if __name__ == "__main__":
-    print("Reproducing pattern matching scalability on GPU... (Expected time cost: TODO) ")
-    # assert pattern_matching_scalability(is_gpu=True) == 0
+    print("Reproducing pattern matching scalability on GPU... (Expected time cost: 1 hour) ")
+    assert pattern_matching_scalability(is_gpu=True) == 0
     draw_pattern_matching_scalability(is_gpu=True)
+    print("Finished.")

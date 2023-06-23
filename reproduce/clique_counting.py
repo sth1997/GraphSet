@@ -44,5 +44,9 @@ def clique_counting(
     return 0
 
 if __name__ == "__main__":
+    print("Reproducing clique counting results. (Time: 20 minutes)")
+    print("Reproducing clique counting results on CPU...")
     assert clique_counting(is_gpu=False) == 0
+    print("Reproducing clique counting results on GPU...")
     assert clique_counting(is_gpu=True) == 0
+    print("Reproducing clique counting results done.")

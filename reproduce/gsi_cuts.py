@@ -85,4 +85,6 @@ def pattern_matching_gsi_cuts(
 
 
 if __name__ == "__main__":
+    print("Pattern Matching comparing GSI cuTS with GPU (Time: 5 hour)")
     pattern_matching_gsi_cuts(is_gpu=True)
+    print("Done!")

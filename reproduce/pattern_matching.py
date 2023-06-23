@@ -97,11 +97,11 @@ def draw_pattern_matching(is_gpu: bool = False, result_path: str = "../reproduce
 
 
 if __name__ == "__main__":
-    print("Start reproducing pattern matching...(Total Estimated Time Cost: TODO)")
-    print("Reproducing pattern matching on GPU... (Expected time cost: TODO) ")
+    print("Start reproducing pattern matching...(Total Estimated Time Cost: 7 hours)")
+    print("Reproducing pattern matching on GPU...")
     assert pattern_matching(is_gpu=True, is_generated_code=True) == 0
     draw_pattern_matching(is_gpu=True)
-    print("Reproducing pattern matching on CPU... (Expected time cost: TODO) ")
+    print("Reproducing pattern matching on CPU...")
     assert pattern_matching(is_gpu=False) == 0
     draw_pattern_matching(is_gpu=False)
     print("Finish reproducing pattern matching!")
