@@ -307,6 +307,8 @@ long long Graph::pattern_matching(const Schedule_IEP &schedule,
     //    intersection_times_low = intersection_times_high = 0;
     //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
     long long global_ans = 0;
+    // printf("pattern_matching extra memory: %.3lf MB\n", thread_count * (schedule.get_total_prefix_num() + 10) * sizeof(int) * (VertexSet::max_intersection_size * 2) / 1024.0 / 1024.0);
+    // fflush(stdout);
 #pragma omp parallel num_threads(thread_count) reduction(+ : global_ans)
     {
         //   double start_time = get_wall_time();

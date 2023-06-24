@@ -17,6 +17,7 @@ public:
         gettimeofday(&tp_end, NULL);
         timersub(&tp_end, &tp, &tp_res);
         printf("%s: %ld.%06ld s.\n", title, tp_res.tv_sec, tp_res.tv_usec);
+        fflush(stdout);
         return tp_res.tv_sec + tp_res.tv_usec / 1e6;
     }
     double get_time() {
