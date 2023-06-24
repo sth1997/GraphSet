@@ -1,3 +1,44 @@
+# AE of SC23
+
+**For AE reviewers, we have prepared a server containing all the datasets and codes. Please contact sth19@mails.tsinghua.edu.cn to access the server.**
+
+## Reproduce
+
+(i) To begin, ensure that you have a machine with a performance configuration similar to the following: Intel Xeon Platinum 8259CL CPU @ 2.50GHz, 1 socket (16 cores, hyper-threading disabled), 256 GB memory, and at least 8 NVIDIA Tesla V100 (32GB memory) GPUs for PCIe.
+
+Our open-source project can be found at https://github.com/sth1997/GraphSet, and the steps to reproduce our work are as follows:
+
+1. Download the repository code via git. Be sure to add --recursive while cloning since we use googletest as a submodule.
+
+2. The full dataset can be accessed via https://1drv.ms/f/s!Agc-P1eh9RVug-IM6eVlnMCpYCGCpQ?e=LlMueg. Alternatively(and not recommended), you can opt to preprocess the dataset from the original Stanford Large Network Dataset Collection, which can be found at https://snap.stanford.edu/data/.
+
+3. Install the necessary dependencies: gcc@10.2.1, CUDA@11.8, cmake@3.24, openmpi@4.1.1, and python@3.
+
+4. Build the project by executing `mkdir build; cd build; cmake ..; make -j` in the project's root folder.
+
+5. Please note that `DATA_PATH` and `COMMAND_PREFIX, MULTI_CARD_COMMAND_PREFIX` in the `reproduce/settings.py` should be modified according to the environment of the machine.
+
+(ii) The reproduction process:
+
+After building the project, in `reproduce/` directory:
+
+* run `python ./pattern_matching.py` to reproduce pattern matching results. (Time cost: 7 hours)
+    * it will generate graph for Figure [TODO] as `pattern_matching_gpu.png` and `pattern_matching_cpu.png`
+* run `python ./clique_counting.py` to reproduce clique counting results. (Time cost: 20 minutes)
+    * it will generate file for Table [TODO] as `clique_counting_gpu.csv` and `clique_counting_cpu.csv`
+* run `python ./frequent_subgraph_mining.py` to reproduce frequent subgraph mining results. (Time cost: 7 hours)
+    * it will generate file for Table [TODO] as `frequent_subgraph_mining_gpu.csv` and `frequent_subgraph_mining_cpu.csv`
+* run `python ./motif_counting.py` to reproduce motif counting results. (Time cost: 6 hours)
+    * it will generate file for Table [TODO] as `motif_counting_gpu.csv` and `motif_counting_cpu.csv`
+* run `python ./scalability.py` to reproduce scalability results (Time cost: 1 hour)
+    * it will generate graph for Figure [TODO] as `pattern_matching_scalability.png`
+* run `python ./gsi_cuts.py` to reproduce our results compared with GSI and cuTS. (Time cost: 5 hours)
+    * it will generate file for Table [TODO] as `attern_matching_gsi_cuts_gpu.csv`
+
+(iii) Upon completion, results (tables and figures) will be located in the `reproduce_result` folder, and the logs will be in the `reproduce_log` folder. The csv files within the `reproduce_result` folder will display the application time of our system. We expect the counting results to be consistent with those of other systems and previously provided logs/results in our repository.
+
+(iv) The experimental running times obtained should closely match those reported in our article, thereby validating the work presented therein.
+
 # GraphSet
 
 > The cpu codes and gpu codes are in `cpu/` and `gpu/`, respectively.
@@ -156,39 +197,4 @@ We suppose these graphs are undirected. To speed up graph reading, we use a bina
 
 If you want to input other graphs in text format, you can read `src/dataloader.cpp` for how to change the input method.
  
-## Reproduce
 
-(i) To begin, ensure that you have a machine with a performance configuration similar to the following: Intel Xeon Platinum 8259CL CPU @ 2.50GHz, 1 socket (16 cores, hyper-threading disabled), 256 GB memory, and at least 8 NVIDIA Tesla V100 (32GB memory) GPUs for PCIe.
-
-Our open-source project can be found at https://github.com/sth1997/GraphSet, and the steps to reproduce our work are as follows:
-
-1. Download the repository code via git. Be sure to add --recursive while cloning since we use googletest as a submodule.
-
-2. The full dataset can be accessed via https://1drv.ms/f/s!Agc-P1eh9RVug-IM6eVlnMCpYCGCpQ?e=LlMueg. Alternatively(and not recommended), you can opt to preprocess the dataset from the original Stanford Large Network Dataset Collection, which can be found at https://snap.stanford.edu/data/.
-
-3. Install the necessary dependencies: gcc@10.2.1, CUDA@11.8, cmake@3.24, openmpi@4.1.1, and python@3.
-
-4. Build the project by executing `mkdir build; cd build; cmake ..; make -j` in the project's root folder.
-
-5. Please note that `DATA_PATH` and `COMMAND_PREFIX, MULTI_CARD_COMMAND_PREFIX` in the `reproduce/settings.py` should be modified according to the environment of the machine.
-
-(ii) The reproduction process:
-
-After building the project, in `reproduce/` directory:
-
-* run `python ./pattern_matching.py` to reproduce pattern matching results. (Time cost: 7 hours)
-    * it will generate graph for Figure [TODO] as `pattern_matching_gpu.png` and `pattern_matching_cpu.png`
-* run `python ./clique_counting.py` to reproduce clique counting results. (Time cost: 20 minutes)
-    * it will generate file for Table [TODO] as `clique_counting_gpu.csv` and `clique_counting_cpu.csv`
-* run `python ./frequent_subgraph_mining.py` to reproduce frequent subgraph mining results. (Time cost: 7 hours)
-    * it will generate file for Table [TODO] as `frequent_subgraph_mining_gpu.csv` and `frequent_subgraph_mining_cpu.csv`
-* run `python ./motif_counting.py` to reproduce motif counting results. (Time cost: 6 hours)
-    * it will generate file for Table [TODO] as `motif_counting_gpu.csv` and `motif_counting_cpu.csv`
-* run `python ./scalability.py` to reproduce scalability results (Time cost: 1 hour)
-    * it will generate graph for Figure [TODO] as `pattern_matching_scalability.png`
-* run `python ./gsi_cuts.py` to reproduce our results compared with GSI and cuTS. (Time cost: 5 hours)
-    * it will generate file for Table [TODO] as `attern_matching_gsi_cuts_gpu.csv`
-
-(iii) Upon completion, results (tables and figures) will be located in the `reproduce_result` folder, and the logs will be in the `reproduce_log` folder. The csv files within the `reproduce_result` folder will display the application time of our system. We expect the counting results to be consistent with those of other systems and previously provided logs/results in our repository.
-
-(iv) The experimental running times obtained should closely match those reported in our article, thereby validating the work presented therein.
