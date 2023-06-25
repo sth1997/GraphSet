@@ -88,14 +88,6 @@ cmake ..
 make -j
 ```
 
-## test 
-
-After build stage, in the root directory of the project:
-
-```bash
-cd build/test && ctest
-```
-
 ## Usage
 
 in `build/` directory:
