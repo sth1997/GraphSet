@@ -8,11 +8,14 @@
 
 Our open-source project can be found at https://github.com/sth1997/GraphSet, and the steps to reproduce our work are as follows:
 
-1. Download the repository code via git. Be sure to add --recursive while cloning since we use googletest as a submodule.
+1. Download the repository code via git.
 
 2. The full dataset can be accessed via https://1drv.ms/f/s!Agc-P1eh9RVug-IM6eVlnMCpYCGCpQ?e=LlMueg. Alternatively(and not recommended), you can opt to preprocess the dataset from the original Stanford Large Network Dataset Collection, which can be found at https://snap.stanford.edu/data/.
 
-3. Install the necessary dependencies: gcc@10.2.1, CUDA@11.8, cmake@3.24, openmpi@4.1.1, and python@3.
+3. Install the necessary dependencies: gcc@12, CUDA@12, cmake@3.26, openmpi@4.1.5, and python@3 (preinstalled on our clusters, so you only need to load it.). Examples by using module load command:
+    * `module load cuda-12.0.1-gcc-12.2.0-34tfuhe`
+    * `module load openmpi-4.1.5-gcc-12.2.0-awa3vt5`
+    * `module load cmake-3.26.3-gcc-12.2.0-caw7voo`
 
 4. Build the project by executing `mkdir build; cd build; cmake ..; make -j` in the project's root folder.
 

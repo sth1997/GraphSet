@@ -34,9 +34,9 @@ if(OPENMP_FOUND)
 endif()
 
 
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-add_subdirectory(modules/googletest)
-MESSAGE("ADD GOOGLE TEST")
+# set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+# add_subdirectory(modules/googletest)
+# MESSAGE("ADD GOOGLE TEST")
 
 find_package(MPI REQUIRED)
 if(MPI_FOUND)
@@ -45,7 +45,7 @@ if(MPI_FOUND)
 endif()
 
 ADD_SUBDIRECTORY(src)
-ADD_SUBDIRECTORY(test)
+# ADD_SUBDIRECTORY(test)
 ADD_SUBDIRECTORY(tianhe)
 ADD_SUBDIRECTORY(gpu)
 ADD_SUBDIRECTORY(code_gen)
