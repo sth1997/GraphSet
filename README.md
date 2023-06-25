@@ -55,7 +55,7 @@ After building the project, in `reproduce/` directory:
 
 System: Linux
 
-Compilers: gcc@10.2.1 / cuda@11+
+Compilers: gcc@12(minimum 10) / cuda@12(minimum 11)
 
 Hardware:
 
@@ -63,7 +63,7 @@ Hardware:
 
 Other dependencies:
 
-+ openmpi (> 4.1.1)
++ openmpi (> 4.1)
 + cmake (> 3.21)
 
 ### Use `spack` as package manager
@@ -73,19 +73,10 @@ In `env.sh` ( this file should be modified according to specified machines):
 Example:
 
 ```bash
-spack load cuda@11.8
-spack load cmake@3.24.3
-spack load openmpi@4.1.1
+spack load cuda@12.0
+spack load cmake@3.26
+spack load openmpi@4.1.5
 ```
-
-### Submodules
-
-We add GoogleTest as submodule to perform unit tests:
-
-+ please add `--recursive` while cloning `git clone https://github.com/sth1997/GraphSet.git --recursive`,
-
-+ or use `git submodule init`, `git submodule update` after clone.
-
 
 ## Build
 
