@@ -26,17 +26,17 @@ Our open-source project can be found at https://github.com/sth1997/GraphSet, and
 After building the project, in `reproduce/` directory:
 
 * run `python ./pattern_matching.py` to reproduce pattern matching results. (Time cost: 7 hours)
-    * it will generate graph for Figure [TODO] as `pattern_matching_gpu.png` and `pattern_matching_cpu.png`
+    * it will generate graph for "Figure 9: overall performance of pattern matching" as `pattern_matching_gpu.png` and `pattern_matching_cpu.png`
 * run `python ./clique_counting.py` to reproduce clique counting results. (Time cost: 20 minutes)
-    * it will generate file for Table [TODO] as `clique_counting_gpu.csv` and `clique_counting_cpu.csv`
+    * it will generate file for "Table 5: kClique execution time" as `clique_counting_gpu.csv` and `clique_counting_cpu.csv`
 * run `python ./frequent_subgraph_mining.py` to reproduce frequent subgraph mining results. (Time cost: 7 hours)
-    * it will generate file for Table [TODO] as `frequent_subgraph_mining_gpu.csv` and `frequent_subgraph_mining_cpu.csv`
+    * it will generate file for "Table 6: k-FSM execution time" as `frequent_subgraph_mining_gpu.csv` and `frequent_subgraph_mining_cpu.csv`
 * run `python ./motif_counting.py` to reproduce motif counting results. (Time cost: 6 hours)
-    * it will generate file for Table [TODO] as `motif_counting_gpu.csv` and `motif_counting_cpu.csv`
+    * it will generate file for "Table 4: k-Motif Counting execution time" as `motif_counting_gpu.csv` and `motif_counting_cpu.csv`
 * run `python ./scalability.py` to reproduce scalability results (Time cost: 1 hour)
-    * it will generate graph for Figure [TODO] as `pattern_matching_scalability.png`
+    * it will generate graph for ""Figure 11: Scalability of GraphSet" as `pattern_matching_scalability.png`
 * run `python ./gsi_cuts.py` to reproduce our results compared with GSI and cuTS. (Time cost: 5 hours)
-    * it will generate file for Table [TODO] as `attern_matching_gsi_cuts_gpu.csv`
+    * it will generate file for "Table 4: execution time of pattern matching on 33 queries" as `attern_matching_gsi_cuts_gpu.csv`
 
 (iii) Upon completion, results (tables and figures) will be located in the `reproduce_result` folder, and the logs will be in the `reproduce_log` folder. The csv files within the `reproduce_result` folder will display the application time of our system. We expect the counting results to be consistent with those of other systems and previously provided logs/results in our repository.
 
