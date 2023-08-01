@@ -47,22 +47,22 @@ public:
     long long triangle_counting();
     
     //multi thread triangle counting
-    long long triangle_counting_mt(int thread_count);
+    long long triangle_counting_mt();
 
     //multi thread triangle counting with mpi
-    long long triangle_counting_mpi(int thread_count);
+    long long triangle_counting_mpi();
 
     //general pattern matching algorithm with multi thread
-    long long pattern_matching(const Schedule_IEP& schedule, int thread_count, bool clique = false);
+    long long pattern_matching(const Schedule_IEP& schedule, bool clique = false);
 
     //general pattern matching algorithm with multi thread ans multi process
     long long pattern_matching_mpi(const Schedule_IEP& schedule, int thread_count, bool clique = false);
 
     // naive motif counting
-    void motif_counting(int pattern_size, int thread_count);
+    void motif_counting(int pattern_size);
 
     // hand optimized 3-motif counting
-    void motif_counting_3(int thread_count);
+    void motif_counting_3();
 
     // internal use only
     long long pattern_matching_edge_task(const Schedule_IEP& schedule, int edge_id,

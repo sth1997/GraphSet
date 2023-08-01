@@ -4,6 +4,7 @@
 #include "../include/schedule.h"
 #include "../include/common.h"
 #include "../include/motif_generator.h"
+#include "omp.h"
 
 #include <assert.h>
 #include <iostream>
@@ -11,7 +12,6 @@
 #include <algorithm>
 
 double test_pattern(Graph* g, Pattern &pattern) {
-    int thread_num = 16;
 
     bool is_pattern_valid;
     int performance_modeling_type;
@@ -27,9 +27,11 @@ double test_pattern(Graph* g, Pattern &pattern) {
 
     int times = 1;
 
+    printf("thread num: %d\n", omp_get_max_threads());
+
     for(int i = 0; i < times; ++i) {
         t1 = get_wall_time();
-        long long ans_our = g->pattern_matching(schedule_our, thread_num, true);
+        long long ans_our = g->pattern_matching(schedule_our, true);
         t2 = get_wall_time();
 
         printf("ans: %lld time: %.6lf\n", ans_our, t2 - t1);

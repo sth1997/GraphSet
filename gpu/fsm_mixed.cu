@@ -443,7 +443,7 @@ void fsm_init(const LabeledGraph* g, int max_edge, int min_support) {
                 }
             }
             else {
-                int64_t ans = g->fsm_pattern_matching(0, cpu_jobs, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support, 16);
+                int64_t ans = g->fsm_pattern_matching(0, cpu_jobs, schedules[i], all_p_label, automorphisms, is_frequent, pattern_is_frequent_index[i], max_edge, min_support);
                 #pragma omp critical
                 {
                     fsm_cnt += ans;

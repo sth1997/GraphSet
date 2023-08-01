@@ -4,6 +4,7 @@
 #include "../include/schedule.h"
 #include "../include/common.h"
 #include "../include/motif_generator.h"
+#include "omp.h"
 
 #include <assert.h>
 #include <iostream>
@@ -26,11 +27,12 @@ int main(int argc,char *argv[]) {
     fflush(stdout);
     int size = atoi(argv[2]);
 
-    int thread_count = 16;
+    printf("thread num: %d\n", omp_get_max_threads());
+
     if(size == 3)
-        g->motif_counting_3(thread_count);
+        g->motif_counting_3();
     else
-        g->motif_counting(size, thread_count);
+        g->motif_counting(size);
     delete g;
     return 0;
 }

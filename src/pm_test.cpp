@@ -9,9 +9,9 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <omp.h>
 
 double test_pattern(Graph* g, Pattern &pattern) {
-    int thread_num = 16;
 
     bool is_pattern_valid;
     int performance_modeling_type;
@@ -25,10 +25,13 @@ double test_pattern(Graph* g, Pattern &pattern) {
     double t1,t2;
     double total_time = 0;
 
+    printf("thread count: %d\n", omp_get_max_threads());
+
+
     int times = 1;
     for(int i = 0; i < times; ++i) {
         t1 = get_wall_time();
-        long long ans_our = g->pattern_matching(schedule_our, thread_num);
+        long long ans_our = g->pattern_matching(schedule_our);
         t2 = get_wall_time();
 
         printf("Ans: %lld time: %.6lf\n", ans_our, t2 - t1);

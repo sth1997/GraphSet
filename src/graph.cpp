@@ -112,9 +112,9 @@ long long Graph::triangle_counting() {
     return ans;
 }
 
-long long Graph::triangle_counting_mt(int thread_count) {
+long long Graph::triangle_counting_mt() {
     long long ans = 0;
-#pragma omp parallel num_threads(thread_count)
+#pragma omp parallel
     { tc_mt(&ans); }
     return ans;
 }
@@ -137,11 +137,11 @@ void Graph::tc_mt(long long *global_ans) {
     { *global_ans += my_ans; }
 }
 
-long long Graph::triangle_counting_mpi(int thread_count) {
+long long Graph::triangle_counting_mpi() {
     /*int mynodel, mynoder;
     long long tot_ans;
     Graphmpi &gm = Graphmpi::getinstance();
-#pragma omp parallel num_threads(thread_count)
+#pragma omp parallel
     {
 #pragma omp master
         {
@@ -302,14 +302,13 @@ void Graph::pattern_matching_func(const Schedule_IEP &schedule,
     }
 }
 
-long long Graph::pattern_matching(const Schedule_IEP &schedule,
-                                  int thread_count, bool clique) {
+long long Graph::pattern_matching(const Schedule_IEP &schedule, bool clique) {
     //    intersection_times_low = intersection_times_high = 0;
     //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
     long long global_ans = 0;
     // printf("pattern_matching extra memory: %.3lf MB\n", thread_count * (schedule.get_total_prefix_num() + 10) * sizeof(int) * (VertexSet::max_intersection_size * 2) / 1024.0 / 1024.0);
     // fflush(stdout);
-#pragma omp parallel num_threads(thread_count) reduction(+ : global_ans)
+#pragma omp parallel reduction(+ : global_ans)
     {
         //   double start_time = get_wall_time();
         //   double current_time;
@@ -736,14 +735,13 @@ void reduce_edges_for_clique(Graph &g) {
 }
 
 void Graph::get_third_layer_size(const Schedule_IEP& schedule, int *count) const {
-    const int thread_count = 64;
     //    intersection_times_low = intersection_times_high = 0;
     //    dep1_cnt = dep2_cnt = dep3_cnt = 0;
     uint32_t *edge_from = new uint32_t[e_cnt];
     for (uint32_t i = 0; i < v_cnt; ++i)
         for (e_index_t j = vertex[i]; j < vertex[i + 1]; ++j)
             edge_from[j] = i;
-    #pragma omp parallel num_threads(thread_count)
+    #pragma omp parallel num_threads(64)
     {
         VertexSet *vertex_set = new VertexSet[schedule.get_total_prefix_num()];
         #pragma omp for schedule(dynamic) nowait
@@ -947,7 +945,7 @@ void degeneracy_orientation_init(Graph *original_g, Graph *&g) {
     delete[] vector_ptr;
 }
 
-void Graph::motif_counting(int pattern_size, int thread_count) {
+void Graph::motif_counting(int pattern_size) {
 
     double total_counting_time = 0;
     TimeInterval allTime, tmpTime;
@@ -975,7 +973,7 @@ void Graph::motif_counting(int pattern_size, int thread_count) {
         }
 
         tmpTime.check();
-        long long ans = this->pattern_matching(schedule_iep, thread_count);
+        long long ans = this->pattern_matching(schedule_iep);
         total_counting_time += tmpTime.print("Pattern counting time: ");
 
         printf("ans: %lld\n", ans);
@@ -1005,7 +1003,7 @@ int32_t get_intersection_size(const v_index_t *a, int32_t na,
     return ans;
 }
 
-void Graph::motif_counting_3(int thread_count) {
+void Graph::motif_counting_3() {
     int64_t tri_cnt = 0, wedge_cnt = 0;
 
     uint32_t *edge_from = new uint32_t[e_cnt];
@@ -1015,7 +1013,7 @@ void Graph::motif_counting_3(int thread_count) {
 
     auto t1 = std::chrono::system_clock::now();
 
-#pragma omp parallel for schedule(dynamic) num_threads(thread_count) reduction(+:tri_cnt) reduction(+:wedge_cnt)
+#pragma omp parallel for schedule(dynamic) reduction(+:tri_cnt) reduction(+:wedge_cnt)
     for (e_index_t i = 0; i < e_cnt; i++) {
         v_index_t v0 = edge_from[i], v1 = edge[i];
         e_index_t l0 = vertex[v0], r0 = vertex[v0 + 1];
