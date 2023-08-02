@@ -10,7 +10,7 @@ Our open-source project can be found at https://github.com/sth1997/GraphSet, and
 
 1. Download the repository code via git.
 
-2. The full dataset can be accessed via https://1drv.ms/f/s!Agc-P1eh9RVug-IM6eVlnMCpYCGCpQ?e=LlMueg. Alternatively(and not recommended), you can opt to preprocess the dataset from the original Stanford Large Network Dataset Collection, which can be found at https://snap.stanford.edu/data/.
+2. The full dataset can be accessed via https://1drv.ms/f/s!Agc-P1eh9RVug-IM6eVlnMCpYCGCpQ?e=LlMueg. We also provide a DOI to the full dataset: https://zenodo.org/record/8200447. Alternatively(and not recommended), you can opt to preprocess the dataset from the original Stanford Large Network Dataset Collection, which can be found at https://snap.stanford.edu/data/.
 
 3. Install the necessary dependencies: gcc@12, CUDA@12, cmake@3.26, openmpi@4.1.5, and python@3 (preinstalled on our clusters, so you only need to load it.). Examples by using module load command:
     * `module load cuda-12.0.1-gcc-12.2.0-34tfuhe`
