@@ -172,9 +172,9 @@ The number `n` on the first line is the number of vertices in the graph.
 
 The following `n` lines, with
 
-+ the no. of the vertex
-+ the label no. of the vertex
-+ vertices that had a edge to this vertex
++ the ID of the vertex
++ the label ID of the vertex
++ the IDs of vertices that had a edge to this vertex
 
 
 ### Unlabelled Graph
